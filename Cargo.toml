@@ -5,3 +5,6 @@ authors = ["Collin Valley <collin.valley@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+tokio = "*"
+futures = "*"
+crossbeam = "*"
