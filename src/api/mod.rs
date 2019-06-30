@@ -1,5 +1,5 @@
 use futures::{Stream, Async, Poll};
-use crossbeam::{Receiver, Sender};
+use crossbeam::crossbeam_channel::{bounded, Sender, Receiver, TryRecvError};
 
 pub type ElementStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
 
@@ -12,14 +12,14 @@ pub trait Element {
 
 pub struct ElementLink<E: Element> {
     input_stream: ElementStream<E::Input>,
-    core: E
+    element: E
 }
 
 impl<E: Element> ElementLink<E> {
-    pub fn new(input_stream: ElementStream<E::Input>, core: E) -> Self {
+    pub fn new(input_stream: ElementStream<E::Input>, element: E) -> Self {
         ElementLink {
             input_stream,
-            core
+            element
         }
     }
 }
@@ -52,7 +52,7 @@ impl<E: Element> Stream for ElementLink<E> {
         match input_packet_option {
             None => Ok(Async::Ready(None)),
             Some(input_packet) => {
-                let output_packet: E::Output = self.core.process(input_packet);
+                let output_packet: E::Output = self.element.process(input_packet);
                 Ok(Async::Ready(Some(output_packet)))
             },
         }
@@ -63,10 +63,97 @@ pub trait AsyncElement {
     type Input: Sized;
     type Output: Sized;
 
-    fn process(&mut self, packet: Self::Input) -> ElementStream<Self::Output>;
+    fn process(&mut self, packet: Self::Input) -> Self::Output;
 }
 
-pub struct AsyncElementLink<E: AsyncElement> {
-    input_channel: Receiver<E::Input>,
-    output_channel: Sender<E::Output>
+pub struct AsyncElementFrontend<E: AsyncElement> {
+    input_stream: ElementStream<E::Input>,
+    channel: Sender<E::Output>,
+    element: E
+}
+
+pub struct AsyncElementBackend<E: AsyncElement> {
+    channel: Receiver<E::Output>
+}
+
+pub struct AsyncElementLink< E: AsyncElement> {
+    pub frontend: AsyncElementFrontend<E>,
+    pub backend: AsyncElementBackend<E>
+}
+
+impl<E: AsyncElement> AsyncElementFrontend<E> {
+    fn new(input_stream: ElementStream<E::Input>, channel: Sender<E::Output>, element: E) -> Self {
+        AsyncElementFrontend {
+            input_stream,
+            channel,
+            element
+        }
+    }
+}
+
+impl<E: AsyncElement> AsyncElementBackend<E> {
+    fn new(channel: Receiver<E::Output>) -> Self {
+        AsyncElementBackend {
+            channel
+        }
+    }
+}
+
+impl<E: AsyncElement> AsyncElementLink<E> {
+    pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
+        let (sender, receiver) = bounded::<E::Output>(queue_capacity); 
+        AsyncElementLink {
+            frontend: AsyncElementFrontend::new(input_stream, sender, element),
+            backend: AsyncElementBackend::new(receiver)
+        }
+    }
+}
+
+/*
+*/
+impl<E: AsyncElement> Stream for AsyncElementFrontend<E> {
+    type Item = ();
+    type Error = ();
+
+    /*
+    //Documentation
+    */
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        if self.channel.is_full() {
+            return Ok(Async::NotReady)
+        }
+        let input_packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
+        match input_packet_option {
+            None => {
+                println!("packet option was none");
+                Ok(Async::Ready(None))
+            }
+            Some(input_packet) => {
+                let output_packet: E::Output = self.element.process(input_packet);
+                //Assume that channel cannot be filled since we checked
+                if let Err(err) = self.channel.send(output_packet) {
+                    println!("{:?}", err);
+                    return Ok(Async::Ready(None))
+                }
+                Ok(Async::Ready(Some(())))
+            },
+        }
+    }
+}
+
+impl<E: AsyncElement> Stream for AsyncElementBackend<E> {
+    type Item = E::Output;
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        // Check associated channel receiver to see if we have any packets available to send along
+        match self.channel.try_recv() {
+            Ok(packet) => Ok(Async::Ready(Some(packet))),
+            Err(TryRecvError::Empty) => Ok(Async::NotReady),
+            Err(TryRecvError::Disconnected) => {
+                println!("receiving channel disconnected");
+                Ok(Async::Ready(None))
+            }
+        }
+    }
 }
