@@ -10,7 +10,7 @@ mod utils;
 mod tests {
     use super::*;
     use crate::api::{ElementLink, Element, AsyncElementLink, AsyncElement};
-    use crate::utils::{LinearIntervalGenerator, ExhaustiveDrain, ForeverDrain};
+    use crate::utils::{LinearIntervalGenerator, ExhaustiveDrain};
     use core::time;
     use futures::stream::iter_ok;
     use futures::future::lazy;
