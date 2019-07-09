@@ -70,14 +70,14 @@ mod tests {
     #[test]
     fn one_async_element_immediate_yield() {
         let default_channel_size = 10;
-        let packet_generator = iter_ok::<_, ()>(0..20);
+        let packet_generator = iter_ok::<_, ()>(0..21);
 
         let elem0 = AsyncTrivialElement { id: 0 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
-        let elem0_drain = elem0_link.frontend;
-        let elem0_consumer = ExhaustiveDrain::new(0, Box::new(elem0_link.backend));
+        let elem0_drain = elem0_link.consumer;
+        let elem0_consumer = ExhaustiveDrain::new(1, Box::new(elem0_link.provider));
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
@@ -95,12 +95,12 @@ mod tests {
         let elem1 = AsyncTrivialElement { id: 1 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
-        let elem1_link = AsyncElementLink::new(Box::new(elem0_link.backend), elem1, default_channel_size);
+        let elem1_link = AsyncElementLink::new(Box::new(elem0_link.provider), elem1, default_channel_size);
 
-        let elem0_drain = elem0_link.frontend;
-        let elem1_drain = elem1_link.frontend;
+        let elem0_drain = elem0_link.consumer;
+        let elem1_drain = elem1_link.consumer;
 
-        let elem1_consumer = ExhaustiveDrain::new(0, Box::new(elem1_link.backend));
+        let elem1_consumer = ExhaustiveDrain::new(1, Box::new(elem1_link.provider));
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
@@ -122,13 +122,13 @@ mod tests {
 
         let elem0_link = ElementLink::new(Box::new(packet_generator), elem0);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link), elem1, default_channel_size);
-        let elem2_link = ElementLink::new(Box::new(elem1_link.backend), elem2);
+        let elem2_link = ElementLink::new(Box::new(elem1_link.provider), elem2);
         let elem3_link = AsyncElementLink::new(Box::new(elem2_link), elem3, default_channel_size);
 
-        let elem1_drain = elem1_link.frontend;
-        let elem3_drain = elem3_link.frontend;
+        let elem1_drain = elem1_link.consumer;
+        let elem3_drain = elem3_link.consumer;
 
-        let elem3_consumer = ExhaustiveDrain::new(0, Box::new(elem3_link.backend));
+        let elem3_consumer = ExhaustiveDrain::new(0, Box::new(elem3_link.provider));
 
         tokio::run(lazy (|| {
             tokio::spawn(elem1_drain);
@@ -147,8 +147,8 @@ mod tests {
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
-        let elem0_drain = elem0_link.frontend;
-        let elem0_consumer = ExhaustiveDrain::new(0, Box::new(elem0_link.backend));
+        let elem0_drain = elem0_link.consumer;
+        let elem0_consumer = ExhaustiveDrain::new(0, Box::new(elem0_link.provider));
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
@@ -166,12 +166,12 @@ mod tests {
         let elem1 = AsyncTrivialElement { id: 1 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
-        let elem1_link = AsyncElementLink::new(Box::new(elem0_link.backend), elem1, default_channel_size);
+        let elem1_link = AsyncElementLink::new(Box::new(elem0_link.provider), elem1, default_channel_size);
 
-        let elem0_drain = elem0_link.frontend;
-        let elem1_drain = elem1_link.frontend;
+        let elem0_drain = elem0_link.consumer;
+        let elem1_drain = elem1_link.consumer;
 
-        let elem1_consumer = ExhaustiveDrain::new(0, Box::new(elem1_link.backend));
+        let elem1_consumer = ExhaustiveDrain::new(0, Box::new(elem1_link.provider));
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
@@ -193,13 +193,13 @@ mod tests {
 
         let elem0_link = ElementLink::new(Box::new(packet_generator), elem0);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link), elem1, default_channel_size);
-        let elem2_link = ElementLink::new(Box::new(elem1_link.backend), elem2);
+        let elem2_link = ElementLink::new(Box::new(elem1_link.provider), elem2);
         let elem3_link = AsyncElementLink::new(Box::new(elem2_link), elem3, default_channel_size);
 
-        let elem1_drain = elem1_link.frontend;
-        let elem3_drain = elem3_link.frontend;
+        let elem1_drain = elem1_link.consumer;
+        let elem3_drain = elem3_link.consumer;
 
-        let elem3_consumer = ExhaustiveDrain::new(0, Box::new(elem3_link.backend));
+        let elem3_consumer = ExhaustiveDrain::new(2, Box::new(elem3_link.provider));
 
         tokio::run(lazy (|| {
             tokio::spawn(elem1_drain);
