@@ -1,4 +1,4 @@
-use futures::{Stream, Async, Poll};
+use futures::{Stream, Async, Poll, task};
 use crossbeam::crossbeam_channel::{bounded, Sender, Receiver, TryRecvError};
 
 pub type ElementStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
@@ -120,6 +120,8 @@ impl<E: AsyncElement> Stream for AsyncElementFrontend<E> {
     */
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         if self.channel.is_full() {
+            //Queue is full, immediately reschedule task.
+            task::current().notify();
             return Ok(Async::NotReady)
         }
         let input_packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
@@ -149,7 +151,11 @@ impl<E: AsyncElement> Stream for AsyncElementBackend<E> {
         // Check associated channel receiver to see if we have any packets available to send along
         match self.channel.try_recv() {
             Ok(packet) => Ok(Async::Ready(Some(packet))),
-            Err(TryRecvError::Empty) => Ok(Async::NotReady),
+            Err(TryRecvError::Empty) => {
+                //Nothing in queue, immediately tell Tokio to reschedule this task.
+                task::current().notify();
+                Ok(Async::NotReady)
+                },
             Err(TryRecvError::Disconnected) => {
                 println!("receiving channel disconnected");
                 Ok(Async::Ready(None))
