@@ -1,4 +1,4 @@
-use futures::{Stream, Async, Poll, task};
+use futures::{Future, Stream, Async, Poll, task};
 use crossbeam::crossbeam_channel::{bounded, Sender, Receiver, TryRecvError};
 
 pub type ElementStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
@@ -111,34 +111,37 @@ impl<E: AsyncElement> AsyncElementLink<E> {
 
 /*
 */
-impl<E: AsyncElement> Stream for AsyncElementFrontend<E> {
+impl<E: AsyncElement> Future for AsyncElementFrontend<E> {
     type Item = ();
     type Error = ();
 
     /*
     //Documentation
     */
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.channel.is_full() {
             //Queue is full, immediately reschedule task.
             task::current().notify();
-            return Ok(Async::NotReady)
+            return Ok(Async::NotReady);
         }
-        let input_packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
-        match input_packet_option {
-            None => {
-                println!("packet option was none");
-                Ok(Async::Ready(None))
-            }
-            Some(input_packet) => {
-                let output_packet: E::Output = self.element.process(input_packet);
-                //Assume that channel cannot be filled since we checked
-                if let Err(err) = self.channel.send(output_packet) {
-                    println!("{:?}", err);
-                    return Ok(Async::Ready(None))
+        //Pull packets off input stream unti we run out of packets
+        loop {
+            //try_ready! will bubble up the Async::NotReady if receives one
+            let input_packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
+            match input_packet_option {
+                None => {
+                    println!("packet option was none");
+                    return Ok(Async::Ready(()));
                 }
-                Ok(Async::Ready(Some(())))
-            },
+                Some(input_packet) => {
+                    let output_packet: E::Output = self.element.process(input_packet);
+                    //Assume that channel cannot be filled since we checked
+                    if let Err(err) = self.channel.send(output_packet) {
+                        println!("{:?}", err);
+                        return Ok(Async::Ready(()));
+                    }
+                },
+            }
         }
     }
 }
