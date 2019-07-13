@@ -15,11 +15,11 @@ mod tests {
     use futures::stream::iter_ok;
     use futures::future::lazy;
 
-    struct TrivialElement {
+    struct IdentityElement {
         id: i32
     }
 
-    impl Element for TrivialElement {
+    impl Element for IdentityElement {
         type Input = i32;
         type Output = i32;
 
@@ -38,8 +38,8 @@ mod tests {
     fn one_sync_element_interval_yield() {
         let packet_generator = LinearIntervalGenerator::new(time::Duration::from_millis(100), 10);
 
-        let elem1 = TrivialElement { id: 0 };
-        let elem2 = TrivialElement { id: 1 };
+        let elem1 = IdentityElement { id: 0 };
+        let elem2 = IdentityElement { id: 1 };
 
         // core_elem1 to! core_elem2
 
@@ -52,11 +52,11 @@ mod tests {
     }
 
 
-    struct AsyncTrivialElement {
+    struct AsyncIdentityElement {
         id: i32
     }
 
-    impl AsyncElement for AsyncTrivialElement {
+    impl AsyncElement for AsyncIdentityElement {
         type Input = i32;
         type Output = i32;
 
@@ -72,7 +72,7 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = iter_ok::<_, ()>(0..21);
 
-        let elem0 = AsyncTrivialElement { id: 0 };
+        let elem0 = AsyncIdentityElement { id: 0 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
@@ -91,8 +91,8 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = iter_ok::<_, ()>(0..20);
 
-        let elem0 = AsyncTrivialElement { id: 0 };
-        let elem1 = AsyncTrivialElement { id: 1 };
+        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem1 = AsyncIdentityElement { id: 1 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link.provider), elem1, default_channel_size);
@@ -115,10 +115,10 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = iter_ok::<_, ()>(0..20);
 
-        let elem0 = TrivialElement { id: 0 };
-        let elem1 = AsyncTrivialElement { id: 1 };
-        let elem2 = TrivialElement { id: 2 };
-        let elem3 = AsyncTrivialElement { id: 3 };
+        let elem0 = IdentityElement { id: 0 };
+        let elem1 = AsyncIdentityElement { id: 1 };
+        let elem2 = IdentityElement { id: 2 };
+        let elem3 = AsyncIdentityElement { id: 3 };
 
         let elem0_link = ElementLink::new(Box::new(packet_generator), elem0);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link), elem1, default_channel_size);
@@ -143,7 +143,7 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = LinearIntervalGenerator::new(time::Duration::from_millis(100), 20);
 
-        let elem0 = AsyncTrivialElement { id: 0 };
+        let elem0 = AsyncIdentityElement { id: 0 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
@@ -162,8 +162,8 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = LinearIntervalGenerator::new(time::Duration::from_millis(100), 20);
 
-        let elem0 = AsyncTrivialElement { id: 0 };
-        let elem1 = AsyncTrivialElement { id: 1 };
+        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem1 = AsyncIdentityElement { id: 1 };
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link.provider), elem1, default_channel_size);
@@ -186,10 +186,10 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = LinearIntervalGenerator::new(time::Duration::from_millis(100), 20);
 
-        let elem0 = TrivialElement { id: 0 };
-        let elem1 = AsyncTrivialElement { id: 1 };
-        let elem2 = TrivialElement { id: 2 };
-        let elem3 = AsyncTrivialElement { id: 3 };
+        let elem0 = IdentityElement { id: 0 };
+        let elem1 = AsyncIdentityElement { id: 1 };
+        let elem2 = IdentityElement { id: 2 };
+        let elem3 = AsyncIdentityElement { id: 3 };
 
         let elem0_link = ElementLink::new(Box::new(packet_generator), elem0);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link), elem1, default_channel_size);
