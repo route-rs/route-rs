@@ -2,14 +2,12 @@ use futures::{Stream, Async, Poll};
 use tokio::timer::Interval;
 use std::time::Duration;
 
-#[allow(dead_code)]
 pub struct LinearIntervalGenerator {
     interval: Interval,
     iterations: usize,
     seq_num: i32
 }
 
-#[allow(dead_code)]
 impl LinearIntervalGenerator {
     pub fn new(duration: Duration, iterations: usize) -> Self {
         LinearIntervalGenerator {
@@ -20,7 +18,6 @@ impl LinearIntervalGenerator {
     }
 }
 
-#[allow(dead_code)]
 impl Stream for LinearIntervalGenerator {
     type Item = i32;
     type Error = ();
