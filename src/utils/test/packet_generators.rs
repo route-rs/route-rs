@@ -2,6 +2,14 @@ use futures::{Stream, Async, Poll};
 use tokio::timer::Interval;
 use std::time::Duration;
 
+/*
+    LinearIntervalGenerator
+
+    Generates a series of monotonically increasing integers, starting at 0.
+    `iterations` "packets" are generated in the stream. One is yielded every
+    `duration`.
+*/
+
 pub struct LinearIntervalGenerator {
     interval: Interval,
     iterations: usize,
@@ -27,8 +35,9 @@ impl Stream for LinearIntervalGenerator {
         if self.seq_num as usize > self.iterations {
             Ok(Async::Ready(None))
         } else {
+            let next_packet = Ok(Async::Ready(Some(self.seq_num)));
             self.seq_num += 1;
-            Ok(Async::Ready(Some(self.seq_num)))
+            next_packet
         }
     }
 }
