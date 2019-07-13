@@ -2,20 +2,17 @@ use crate::api::ElementStream;
 use futures::{Async, Poll, Future};
 use std::fmt::Debug;
 
-#[allow(dead_code)]
 pub struct ExhaustiveDrain<T: Debug> {
     id: usize,
     stream: ElementStream<T>
 }
 
-#[allow(dead_code)]
 impl<T: Debug> ExhaustiveDrain<T> {
     pub fn new(id: usize, stream: ElementStream<T>) -> Self {
         ExhaustiveDrain { id, stream }
     }
 }
 
-#[allow(dead_code)]
 impl<T: Debug> Future for ExhaustiveDrain<T> {
     type Item = ();
     type Error = ();
