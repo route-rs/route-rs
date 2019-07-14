@@ -2,6 +2,7 @@
 members = [
     # API Crates
     # These crates can actually be used by other people and might be published to crates.io
+    "route-rs-graphgen",
     "route-rs-runtime",
 
     # Example crates
