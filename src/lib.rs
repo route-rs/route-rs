@@ -10,10 +10,10 @@ mod utils;
 mod tests {
     use super::*;
     use crate::api::{ElementLink, Element, AsyncElementLink, AsyncElement};
-    use crate::utils::test::packet_generators::LinearIntervalGenerator;
+    use crate::utils::test::packet_generators::{ immediate_stream, LinearIntervalGenerator };
     use crate::utils::test::packet_collectors::ExhaustiveDrain;
     use core::time;
-    use futures::stream::iter_ok;
+
     use futures::future::lazy;
 
     struct IdentityElement {
@@ -71,7 +71,8 @@ mod tests {
     #[test]
     fn one_async_element_immediate_yield() {
         let default_channel_size = 10;
-        let packet_generator = iter_ok::<_, ()>(0..21);
+        let packet_generator = immediate_stream(0..=20);
+
 
         let elem0 = AsyncIdentityElement { id: 0 };
 
@@ -90,7 +91,7 @@ mod tests {
     #[test]
     fn two_async_elements_immediate_yield() {
         let default_channel_size = 10;
-        let packet_generator = iter_ok::<_, ()>(0..20);
+        let packet_generator = immediate_stream(0..=20);
 
         let elem0 = AsyncIdentityElement { id: 0 };
         let elem1 = AsyncIdentityElement { id: 1 };
@@ -114,7 +115,7 @@ mod tests {
     #[test]
     fn series_sync_and_async_immediate_yield() {
         let default_channel_size = 10;
-        let packet_generator = iter_ok::<_, ()>(0..20);
+        let packet_generator = immediate_stream(0..=20);
 
         let elem0 = IdentityElement { id: 0 };
         let elem1 = AsyncIdentityElement { id: 1 };

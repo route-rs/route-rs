@@ -1,6 +1,17 @@
-use futures::{Stream, Async, Poll};
+use crate::api::ElementStream;
+use futures::{stream, Stream, Async, Poll};
 use tokio::timer::Interval;
 use std::time::Duration;
+
+
+// Immediately yields a collection of packets to be poll'd.
+// Thin wrapper around iter_ok.
+pub fn immediate_stream<I>(collection: I) -> ElementStream<I::Item>
+    where I: IntoIterator,
+          I::IntoIter: Send + 'static
+{
+    Box::new(stream::iter_ok::<_, ()>(collection))
+}
 
 /*
     LinearIntervalGenerator
