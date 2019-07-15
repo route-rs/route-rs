@@ -52,3 +52,47 @@ impl Stream for LinearIntervalGenerator {
         }
     }
 }
+
+/// Packet Interval Generator procduces a Stream of packets on a defined interval.AsMut
+/// 
+/// Which packet is next sent is determined by the Iterator, provided during creation. This
+/// is intended to be a full fledged packet eventually, but the trait bound is only set to
+/// something that is Sized. The Iterator is polled until it runs out of values, at which
+/// point we close the Stream by sending a Ready(None). 
+pub struct PacketIntervalGenerator<Iterable, Packet>
+    where Iterable: Iterator<Item = Packet>,
+          Packet: Sized
+{
+    interval: Interval,
+    packets: Iterable
+}
+
+impl<Iterable, Packet> PacketIntervalGenerator<Iterable, Packet>
+    where Iterable: Iterator<Item = Packet>,
+          Packet: Sized
+{
+    pub fn new(duration: Duration, packets: Iterable) -> Self {
+        PacketIntervalGenerator {
+            interval: Interval::new_interval(duration),
+            packets
+        }
+    }
+}
+
+impl<Iterable, Packet> Stream for PacketIntervalGenerator<Iterable, Packet>
+    where Iterable: Iterator<Item = Packet>,
+          Packet: Sized 
+{
+    type Item = Packet;
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, ()> {
+        try_ready!(self.interval.poll().map_err(|_| ()));
+        match self.packets.next() {
+            Some(packet) => {
+                Ok(Async::Ready(Some(packet)))
+            },
+            None => Ok(Async::Ready(None))
+        }
+    }
+}
