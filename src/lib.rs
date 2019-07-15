@@ -16,6 +16,7 @@ mod tests {
 
     use futures::future::lazy;
 
+    #[allow(dead_code)]
     struct IdentityElement {
         id: i32
     }
@@ -25,7 +26,7 @@ mod tests {
         type Output = i32;
 
         fn process(&mut self, packet: Self::Input) -> Self::Output {
-            println!("Got packet {} in element {}", packet, self.id);
+            //println!("Got packet {} in element {}", packet, self.id);
             packet
         }
     }
@@ -41,8 +42,6 @@ mod tests {
 
         let elem1 = IdentityElement { id: 0 };
         let elem2 = IdentityElement { id: 1 };
-
-        // core_elem1 to! core_elem2
 
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
@@ -73,6 +72,7 @@ mod tests {
         assert_eq!(router_output, packets);
     }
 
+    #[allow(dead_code)]
     struct AsyncIdentityElement {
         id: i32
     }
@@ -82,7 +82,7 @@ mod tests {
         type Output = i32;
 
         fn process(&mut self, packet: Self::Input) -> Self::Output {
-            println!("AsyncElement #{} got packet {}", self.id, packet);
+            //println!("AsyncElement #{} got packet {}", self.id, packet);
             packet
         }
     }
