@@ -77,14 +77,15 @@ pub struct AsyncElementLink< E: AsyncElement> {
 
 impl<E: AsyncElement> AsyncElementLink<E> {
     pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
+        assert!( queue_capacity <= 1000, format!("Async Element queue_capacity: {} > 1000", queue_capacity));
 
         let (to_provider, from_consumer) = bounded::<Option<E::Output>>(queue_capacity);
-        let (await_provider, wake_provider) = bounded::<task::Task>(1);
-        let (await_consumer, wake_consumer) = bounded::<task::Task>(1);
+        let (await_consumer, wake_provider) = bounded::<task::Task>(1);
+        let (await_provider, wake_consumer) = bounded::<task::Task>(1);
 
         AsyncElementLink {
-            consumer: AsyncElementConsumer::new(input_stream, to_provider, element, await_consumer, wake_provider),
-            provider: AsyncElementProvider::new(from_consumer, await_provider, wake_consumer)
+            consumer: AsyncElementConsumer::new(input_stream, to_provider, element, await_provider, wake_provider),
+            provider: AsyncElementProvider::new(from_consumer, await_consumer, wake_consumer)
         }
     }
 }
@@ -167,10 +168,10 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
             match input_packet_option {
                 None => {
                     return Ok(Async::Ready(()))
-                }
+                },
                 Some(input_packet) => {
                     let output_packet: E::Output = self.element.process(input_packet);
-                    if let Err(err) = self.to_provider.send(Some(output_packet)) {
+                    if let Err(err) = self.to_provider.try_send(Some(output_packet)) {
                         panic!("Error in to_provider sender, have nowhere to put packet: {:?}", err);
                     }
                     if let Ok(task) = self.wake_provider.try_recv() {
