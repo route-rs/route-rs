@@ -1,5 +1,6 @@
 use futures::{Future, Stream, Async, Poll, task};
-use crossbeam::crossbeam_channel::{bounded, Sender, Receiver, TryRecvError};
+use crossbeam::crossbeam_channel::{Sender, Receiver, TryRecvError};
+use crossbeam::crossbeam_channel;
 
 pub type ElementStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
 
@@ -77,11 +78,9 @@ pub struct AsyncElementLink< E: AsyncElement> {
 
 impl<E: AsyncElement> AsyncElementLink<E> {
     pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
-        assert!( queue_capacity <= 1000, format!("Async Element queue_capacity: {} > 1000", queue_capacity));
-
-        let (to_provider, from_consumer) = bounded::<Option<E::Output>>(queue_capacity);
-        let (await_consumer, wake_provider) = bounded::<task::Task>(1);
-        let (await_provider, wake_consumer) = bounded::<task::Task>(1);
+        let (to_provider, from_consumer) = crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
+        let (await_consumer, wake_provider) = crossbeam_channel::bounded::<task::Task>(1);
+        let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
 
         AsyncElementLink {
             consumer: AsyncElementConsumer::new(input_stream, to_provider, element, await_provider, wake_provider),
