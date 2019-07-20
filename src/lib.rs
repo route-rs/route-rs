@@ -9,7 +9,8 @@ mod utils;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::{ElementLink, Element, AsyncElementLink, AsyncElement};
+    use crate::api::{AsyncElementLink, AsyncElement};
+    use crate::api::element::{ElementLink, Element};
     use crate::utils::test::packet_generators::{immediate_stream, LinearIntervalGenerator, PacketIntervalGenerator};
     use crate::utils::test::packet_collectors::{ExhaustiveDrain, ExhaustiveCollector};
     use core::time;
@@ -29,47 +30,6 @@ mod tests {
         fn process(&mut self, packet: Self::Input) -> Self::Output {
             packet
         }
-    }
-
-    /// One Synchronous Element, sourced with an interval yield
-    /// 
-    /// This test creates one Sync element, and uses the LinearIntervalGenerator to test whether
-    /// the element responds correctly to an upstream source providing a series of valid packets,
-    /// interleaved with Async::NotReady values, finalized by a Async::Ready(None)
-    #[test]
-    fn one_sync_element_interval_yield() {
-        let packet_generator = LinearIntervalGenerator::new(time::Duration::from_millis(100), 10);
-
-        let elem1 = IdentityElement { id: 0 };
-        let elem2 = IdentityElement { id: 1 };
-
-        let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
-        let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
-
-        let consumer = ExhaustiveDrain::new(1, Box::new(elem2_link));
-
-        tokio::run(consumer);
-    }
-
-    #[test]
-    fn one_sync_element_collected_yield() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7];
-        let packet_generator = PacketIntervalGenerator::new(time::Duration::from_millis(100), packets.clone().into_iter());
-
-        let elem1 = IdentityElement { id: 0 };
-        let elem2 = IdentityElement { id: 1 };
-
-        let (s, r) = crossbeam::crossbeam_channel::unbounded();
-
-        let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
-        let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
-
-        let consumer = ExhaustiveCollector::new(1, Box::new(elem2_link), s);
-
-        tokio::run(consumer);
-
-        let router_output: Vec<_> = r.iter().collect();
-        assert_eq!(router_output, packets);
     }
 
     #[allow(dead_code)]
