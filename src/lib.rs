@@ -13,6 +13,7 @@ mod tests {
     use crate::utils::test::packet_generators::{immediate_stream, LinearIntervalGenerator, PacketIntervalGenerator};
     use crate::utils::test::packet_collectors::{ExhaustiveDrain, ExhaustiveCollector};
     use core::time;
+    use crossbeam::crossbeam_channel;
 
     use futures::future::lazy;
 
@@ -26,7 +27,6 @@ mod tests {
         type Output = i32;
 
         fn process(&mut self, packet: Self::Input) -> Self::Output {
-            //println!("Got packet {} in element {}", packet, self.id);
             packet
         }
     }
@@ -82,7 +82,6 @@ mod tests {
         type Output = i32;
 
         fn process(&mut self, packet: Self::Input) -> Self::Output {
-            //println!("AsyncElement #{} got packet {}", self.id, packet);
             packet
         }
     }
@@ -241,7 +240,7 @@ mod tests {
 
         let elem0_link = AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
-        let (s, r) = crossbeam::crossbeam_channel::unbounded();
+        let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
 
@@ -270,7 +269,7 @@ mod tests {
         let elem0_drain = elem0_link.consumer;
         let elem1_drain = elem1_link.consumer;
 
-        let (s, r) = crossbeam::crossbeam_channel::unbounded();
+        let (s, r) = crossbeam_channel::unbounded();
         let elem1_collector = ExhaustiveCollector::new(0, Box::new(elem1_link.provider), s);
 
         tokio::run(lazy (|| {
@@ -303,7 +302,7 @@ mod tests {
         let elem1_drain = elem1_link.consumer;
         let elem3_drain = elem3_link.consumer;
 
-        let (s, r) = crossbeam::crossbeam_channel::unbounded();
+        let (s, r) = crossbeam_channel::unbounded();
         let elem3_collector = ExhaustiveCollector::new(0, Box::new(elem3_link.provider), s);
 
         tokio::run(lazy (|| {
