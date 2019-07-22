@@ -16,7 +16,8 @@ pub trait AsyncElement {
 /// packet.
 pub struct AsyncElementLink< E: AsyncElement> {
     pub consumer: AsyncElementConsumer<E>,
-    pub provider: AsyncElementProvider<E>
+    pub provider: AsyncElementProvider<E>,
+    pub overseer: AsyncElementOverseer<E>
 }
 
 impl<E: AsyncElement> AsyncElementLink<E> {
@@ -26,9 +27,68 @@ impl<E: AsyncElement> AsyncElementLink<E> {
         let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
 
         AsyncElementLink {
-            consumer: AsyncElementConsumer::new(input_stream, to_provider, element, await_provider, wake_provider),
-            provider: AsyncElementProvider::new(from_consumer, await_consumer, wake_consumer)
+            consumer: AsyncElementConsumer::new(input_stream, 
+                                                to_provider, 
+                                                element, 
+                                                await_provider.clone(), 
+                                                wake_provider.clone()),
+
+            provider: AsyncElementProvider::new(from_consumer.clone(),
+                                                await_consumer.clone(),
+                                                wake_consumer.clone()),
+
+            overseer: AsyncElementOverseer::new(from_consumer, 
+                                                wake_provider, 
+                                                wake_consumer)
         }
+    }
+}
+
+pub struct AsyncElementOverseer<E: AsyncElement> {
+    from_consumer: Receiver<Option<E::Output>>,
+    wake_provider: Receiver<task::Task>,
+    wake_consumer: Receiver<task::Task>
+}
+
+impl<E: AsyncElement> AsyncElementOverseer<E> {
+    fn new(
+        from_consumer: Receiver<Option<E::Output>>,
+        wake_provider: Receiver<task::Task>,
+        wake_consumer: Receiver<task::Task>        
+    ) -> Self {
+        AsyncElementOverseer {
+            from_consumer,
+            wake_provider,
+            wake_consumer
+        }
+    }
+}
+
+impl<E: AsyncElement> Future for AsyncElementOverseer<E> {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if self.from_consumer.is_empty(){
+            match self.wake_consumer.try_recv() {
+                Ok(task) => {
+                    task.notify(); 
+                },
+                Err(TryRecvError::Empty) => { },
+                Err(TryRecvError::Disconnected) => { 
+                    return Ok(Async::Ready(()));
+                }
+            }
+        } else {
+            match self.wake_provider.try_recv() {
+                Ok(task) => {
+                    task.notify(); 
+                },
+                Err(_) => { },         
+            }
+        }
+        task::current().notify();
+        Ok(Async::NotReady)
     }
 }
 
@@ -254,10 +314,12 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_overseer = elem0_link.overseer;
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_collector);
+            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -277,10 +339,12 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_overseer = elem0_link.overseer;
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_collector);
+            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -339,10 +403,15 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem3_collector = ExhaustiveCollector::new(0, Box::new(elem3_link.provider), s);
 
+        let elem1_overseer = elem1_link.overseer;
+        let elem3_overseer = elem3_link.overseer;
+
         tokio::run(lazy (|| {
             tokio::spawn(elem1_drain);
             tokio::spawn(elem3_drain); 
             tokio::spawn(elem3_collector);
+            tokio::spawn(elem1_overseer);
+            tokio::spawn(elem3_overseer);
             Ok(())
         }));
 
