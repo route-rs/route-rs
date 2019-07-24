@@ -12,6 +12,7 @@ pub trait ClassifyElement {
 pub struct ClassifyElementLink<E: ClassifyElement> {
     pub consumer: ClassifyElementConsumer<E>,
     pub providers: Vec<ClassifyElementProvider<E>>,
+    pub overseer: ClassifyElementOverseer<E>
 }
 
 impl<E: ClassifyElement> ClassifyElementLink<E> {
@@ -24,23 +25,96 @@ impl<E: ClassifyElement> ClassifyElementLink<E> {
         let mut wake_providers: Vec<Receiver<task::Task>> = Vec::new();
         let mut providers: Vec<ClassifyElementProvider<E>> = Vec::new();
 
+        let mut from_consumers: Vec<Receiver<Option<E::Packet>>> = Vec::new();
+        let mut wake_consumers: Vec<Receiver<task::Task>> = Vec::new();
+
         for _ in 0..branches {
             let (to_provider, from_consumer) = crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
             let (await_consumer, wake_provider) = crossbeam_channel::bounded::<task::Task>(1);
             let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
 
-            let provider = ClassifyElementProvider::new(from_consumer, await_consumer, wake_consumer);
+            let provider = ClassifyElementProvider::new(from_consumer.clone(), await_consumer, wake_consumer.clone());
 
             to_providers.push(to_provider);
             await_providers.push(await_provider);
             wake_providers.push(wake_provider);
             providers.push(provider);
+
+            from_consumers.push(from_consumer);
+            wake_consumers.push(wake_consumer);
         }
 
         ClassifyElementLink {
-            consumer: ClassifyElementConsumer::new(input_stream, to_providers, element, await_providers, wake_providers),
-            providers
+            consumer: ClassifyElementConsumer::new(input_stream, 
+                                                   to_providers, 
+                                                   element, 
+                                                   await_providers, 
+                                                   wake_providers.clone()),
+            providers,
+            overseer: ClassifyElementOverseer::new(from_consumers,
+                                                   wake_providers,
+                                                   wake_consumers,
+                                                   branches)
+
         }
+    }
+}
+pub struct ClassifyElementOverseer<E: ClassifyElement> {
+    from_consumers: Vec<Receiver<Option<E::Packet>>>,
+    wake_providers: Vec<Receiver<task::Task>>,
+    wake_consumers: Vec<Receiver<task::Task>>,
+    providers_alive: usize
+}
+
+impl<E: ClassifyElement> ClassifyElementOverseer<E> {
+    fn new(
+        from_consumers: Vec<Receiver<Option<E::Packet>>>,
+        wake_providers: Vec<Receiver<task::Task>>,
+        wake_consumers: Vec<Receiver<task::Task>>,
+        branches: usize        
+    ) -> Self {
+        ClassifyElementOverseer {
+            from_consumers,
+            wake_providers,
+            wake_consumers,
+            providers_alive: branches
+        }
+    }
+}
+
+impl<E: ClassifyElement> Future for ClassifyElementOverseer<E> {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        for (port, from_consumer) in self.from_consumers.iter().enumerate() {
+            if from_consumer.is_empty(){
+                // Name wake_consumers is a misnomer since there is only one consumer, however in this case we
+                // are looking for the handle the consumer handed out to a particular provider.
+                match self.wake_consumers[port].try_recv() {
+                    Ok(task) => {
+                        task.notify(); 
+                    },
+                    Err(TryRecvError::Empty) => { },
+                    Err(TryRecvError::Disconnected) => {
+                        // Only return once all the providers have had their queues emptied.
+                        self.providers_alive -= 1;
+                        if self.providers_alive == 0 {
+                            return Ok(Async::Ready(()));                   
+                        }
+                    }
+                }
+            } else {
+                match self.wake_providers[port].try_recv() {
+                    Ok(task) => {
+                        task.notify(); 
+                    },
+                    Err(_) => { }              
+                }
+            }
+        }
+        task::current().notify();
+        Ok(Async::NotReady)
     }
 }
 
@@ -260,6 +334,7 @@ mod tests {
 
         let mut elem0_link = ClassifyElementLink::new(Box::new(packet_generator), elem0, default_channel_size, number_branches);
         let elem0_drain = elem0_link.consumer;
+        let elem0_overseer = elem0_link.overseer;
 
         // Ordering is important since we are popping.   
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
@@ -272,6 +347,7 @@ mod tests {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
+            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -293,6 +369,7 @@ mod tests {
 
         let mut elem0_link = ClassifyElementLink::new(Box::new(packet_generator), elem0, default_channel_size, number_branches);
         let elem0_drain = elem0_link.consumer;
+        let elem0_overseer = elem0_link.overseer;
 
         // Ordering is important since we are popping.   
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
@@ -305,6 +382,7 @@ mod tests {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
+            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -325,6 +403,7 @@ mod tests {
 
         let mut elem0_link = ClassifyElementLink::new(Box::new(packet_generator), elem0, default_channel_size, number_branches);
         let elem0_drain = elem0_link.consumer;
+        let elem0_overseer = elem0_link.overseer;
 
         // Ordering is important since we are popping.   
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
@@ -337,6 +416,7 @@ mod tests {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
+            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
