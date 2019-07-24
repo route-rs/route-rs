@@ -200,7 +200,7 @@ pub struct JoinElementProvider<Packet: Sized> {
     await_consumers: Sender<task::Task>,
     wake_consumers: Vec<Receiver<task::Task>>,
     consumers_alive: usize,
-    next_consumer: usize
+    most_recent_consumer: usize
 }
 
 impl<Packet: Sized> JoinElementProvider<Packet> {
@@ -210,13 +210,13 @@ impl<Packet: Sized> JoinElementProvider<Packet> {
         wake_consumers: Vec<Receiver<task::Task>>,
         consumers_alive: usize
         ) -> Self {
-            let next_consumer = 0;
+            let most_recent_consumer = 0;
             JoinElementProvider {
                 from_consumers,
                 await_consumers,
                 wake_consumers,
                 consumers_alive,
-                next_consumer
+                most_recent_consumer
             }
     }
 }
@@ -239,12 +239,14 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
     /// this is unfair if we don't start from a new point each time. But it should
     /// work as a POC with the unfair version to start. The 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        for (port,from_consumer) in self.from_consumers.iter().enumerate() {
+        let (before_recent, after_recent) = self.from_consumers.split_at(self.most_recent_consumer);
+        for (port,from_consumer) in after_recent.iter().enumerate() {
             match from_consumer.try_recv() {
                 Ok(Some(packet)) => {
-                    if let Ok(task) = self.wake_consumers[port].try_recv() {
+                    if let Ok(task) = self.wake_consumers[port + self.most_recent_consumer].try_recv() {
                         task.notify();
                     }
+                    self.most_recent_consumer = self.most_recent_consumer + port;
                     return Ok(Async::Ready(Some(packet)));
                 },
                 Ok(None) => {
@@ -259,6 +261,29 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
                 }
             }
         }
+
+        for (port,from_consumer) in before_recent.iter().enumerate() {
+            match from_consumer.try_recv() {
+                Ok(Some(packet)) => {
+                    if let Ok(task) = self.wake_consumers[port].try_recv() {
+                        task.notify();
+                    }
+                    self.most_recent_consumer = port;
+                    return Ok(Async::Ready(Some(packet)));
+                },
+                Ok(None) => {
+                    //Got a none from a consumer that has shutdown
+                    self.consumers_alive -= 1;
+                    if self.consumers_alive == 0 {
+                        return Ok(Async::Ready(None));                   
+                    }
+                },
+                Err(_) => {
+                    //On an error go to next channel.
+                }
+            }
+        }
+
         let task = task::current();
         if let Err(_) = self.await_consumers.try_send(task) {
             task::current().notify();
@@ -340,5 +365,49 @@ mod tests {
 
         let join0_output: Vec<_> = join0_collector_output.iter().collect();
         assert_eq!(join0_output.len(), 4002);
+    }
+
+        #[test]
+    fn five_inputs_one_join_element() {
+        let default_channel_size = 10;
+        let packet_generator0 = immediate_stream(0..=2000);
+        let packet_generator1 = immediate_stream(0..=2000);
+        let packet_generator2 = immediate_stream(0..=2000);
+        let packet_generator3 = immediate_stream(0..=2000);
+        let packet_generator4 = immediate_stream(0..=2000);
+
+
+        let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
+        input_streams.push(Box::new(packet_generator0));
+        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(Box::new(packet_generator2));
+        input_streams.push(Box::new(packet_generator3));
+        input_streams.push(Box::new(packet_generator4));
+
+        let mut join0_link = JoinElementLink::new(input_streams, default_channel_size);
+        let join0_input4_drain = join0_link.consumers.pop().unwrap();
+        let join0_input3_drain = join0_link.consumers.pop().unwrap();
+        let join0_input2_drain = join0_link.consumers.pop().unwrap();
+        let join0_input1_drain = join0_link.consumers.pop().unwrap();
+        let join0_input0_drain = join0_link.consumers.pop().unwrap();
+ 
+        let (s, join0_collector_output) = crossbeam_channel::unbounded();
+        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.provider), s);
+
+        let join0_overseer = join0_link.overseer;
+
+        tokio::run(lazy (|| {
+            tokio::spawn(join0_input0_drain);
+            tokio::spawn(join0_input1_drain);
+            tokio::spawn(join0_input2_drain);
+            tokio::spawn(join0_input3_drain);
+            tokio::spawn(join0_input4_drain);
+            tokio::spawn(join0_collector);
+            tokio::spawn(join0_overseer);
+            Ok(())
+        }));
+
+        let join0_output: Vec<_> = join0_collector_output.iter().collect();
+        assert_eq!(join0_output.len(), 10005);
     }
 }
