@@ -1,0 +1,11 @@
+#!/bin/bash
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+echo $branch
+
+# Restrict pushing to master
+if [ "$branch" = "master" ]; then
+  echo "You can't commit directly to '"${branch}"' branch"
+  exit 1 # exit with error status to block push
+fi

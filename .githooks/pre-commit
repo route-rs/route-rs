@@ -1,0 +1,22 @@
+#!/bin/bash
+
+echo "Running pre-commit checks..."
+echo "Running \`cargo fmt\`..."
+rustfmt --check src/lib.rs > /dev/null
+RUSTFMT_EXIT_CODE=$?
+
+if [[ $RUSTFMT_EXIT_CODE = 0 ]]; then
+  echo "Project passes \`cargo fmt\`!"
+else
+  echo "Project isn't formatted correctly. Run \`cargo fmt\` please!"
+  exit 1
+fi
+
+echo "Running \`cargo clippy\`..."
+CLIPPY_ERR=$(cargo clippy --all-targets --all-features -- -D warnings 2>&1)
+if [[ $CLIPPY_ERR =~ "error" ]]; then
+  echo "Project isn't stylish enough. Run \`cargo clippy --all-targets --all-features -- -D warnings\` and either fix or mute the errors please!."
+  exit 1
+else
+  echo "Project is stylish!"
+fi
