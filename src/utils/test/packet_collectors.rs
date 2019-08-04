@@ -1,11 +1,11 @@
 use crate::api::ElementStream;
-use futures::{Async, Poll, Future};
-use std::fmt::Debug;
 use crossbeam::crossbeam_channel::Sender;
+use futures::{Async, Future, Poll};
+use std::fmt::Debug;
 
 pub struct ExhaustiveDrain<T: Debug> {
     id: usize,
-    stream: ElementStream<T>
+    stream: ElementStream<T>,
 }
 
 impl<T: Debug> ExhaustiveDrain<T> {
@@ -21,11 +21,8 @@ impl<T: Debug> Future for ExhaustiveDrain<T> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match try_ready!(self.stream.poll()) {
-                Some(_value) => {
-                },
-                None => {
-                    return Ok(Async::Ready(()))
-                }
+                Some(_value) => {}
+                None => return Ok(Async::Ready(())),
             }
         }
     }
@@ -37,12 +34,16 @@ impl<T: Debug> Future for ExhaustiveDrain<T> {
 pub struct ExhaustiveCollector<T: Debug> {
     id: usize,
     stream: ElementStream<T>,
-    packet_dump: Sender<T>
+    packet_dump: Sender<T>,
 }
 
 impl<T: Debug> ExhaustiveCollector<T> {
     pub fn new(id: usize, stream: ElementStream<T>, packet_dump: Sender<T>) -> Self {
-        ExhaustiveCollector { id, stream, packet_dump }
+        ExhaustiveCollector {
+            id,
+            stream,
+            packet_dump,
+        }
     }
 }
 
@@ -55,12 +56,13 @@ impl<T: Debug> Future for ExhaustiveCollector<T> {
             match try_ready!(self.stream.poll()) {
                 Some(value) => {
                     if let Err(err) = self.packet_dump.try_send(value) {
-                        panic!("Exhaustive Collector: Error sending to packet dump: {:?}", err);
+                        panic!(
+                            "Exhaustive Collector: Error sending to packet dump: {:?}",
+                            err
+                        );
                     };
-                },
-                None => {
-                    return Ok(Async::Ready(()))
                 }
+                None => return Ok(Async::Ready(())),
             }
         }
     }
