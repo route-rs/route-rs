@@ -82,13 +82,8 @@ impl<E: AsyncElement> Future for AsyncElementOverseer<E> {
                     return Ok(Async::Ready(()));
                 }
             }
-        } else {
-            match self.wake_provider.try_recv() {
-                Ok(task) => {
-                    task.notify();
-                }
-                Err(_) => {}
-            }
+        } else if let Ok(task) = self.wake_provider.try_recv() {
+            task.notify();
         }
         task::current().notify();
         Ok(Async::NotReady)
@@ -163,7 +158,7 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
         loop {
             if self.to_provider.is_full() {
                 let task = task::current();
-                if let Err(_) = self.await_provider.try_send(task) {
+                if self.await_provider.try_send(task).is_err() {
                     task::current().notify();
                 }
                 return Ok(Async::NotReady);
@@ -254,7 +249,7 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
             Ok(None) => Ok(Async::Ready(None)),
             Err(TryRecvError::Empty) => {
                 let task = task::current();
-                if let Err(_) = self.await_consumer.try_send(task) {
+                if self.await_consumer.try_send(task).is_err() {
                     task::current().notify();
                 }
                 Ok(Async::NotReady)
