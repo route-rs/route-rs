@@ -1,7 +1,14 @@
 use futures::{Future, Stream, Async, Poll, task};
 use crossbeam::crossbeam_channel::{Sender, Receiver, TryRecvError};
 use crossbeam::crossbeam_channel;
+use crossbeam::atomic::AtomicCell;
 use crate::api::ElementStream;
+use std::sync::Arc;
+
+enum FridgeStatus {
+    Dead,
+    Alive(Option<task::Task>)
+}
 
 pub trait AsyncElement {
     type Input: Sized;
@@ -17,78 +24,24 @@ pub trait AsyncElement {
 pub struct AsyncElementLink< E: AsyncElement> {
     pub consumer: AsyncElementConsumer<E>,
     pub provider: AsyncElementProvider<E>,
-    pub overseer: AsyncElementOverseer<E>
 }
 
 impl<E: AsyncElement> AsyncElementLink<E> {
     pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
         let (to_provider, from_consumer) = crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
-        let (await_consumer, wake_provider) = crossbeam_channel::bounded::<task::Task>(1);
-        let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
+        //let (await_consumer, wake_provider) = crossbeam_channel::bounded::<task::Task>(1);
+        //let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
+        let task_fridge: Arc<AtomicCell<FridgeStatus>> = Arc::new(AtomicCell::new(FridgeStatus::Alive(None)));
 
         AsyncElementLink {
             consumer: AsyncElementConsumer::new(input_stream, 
                                                 to_provider, 
-                                                element, 
-                                                await_provider.clone(), 
-                                                wake_provider.clone()),
+                                                element,
+                                                Arc::clone(&task_fridge)),
 
             provider: AsyncElementProvider::new(from_consumer.clone(),
-                                                await_consumer.clone(),
-                                                wake_consumer.clone()),
-
-            overseer: AsyncElementOverseer::new(from_consumer, 
-                                                wake_provider, 
-                                                wake_consumer)
+                                                Arc::clone(&task_fridge)),
         }
-    }
-}
-
-pub struct AsyncElementOverseer<E: AsyncElement> {
-    from_consumer: Receiver<Option<E::Output>>,
-    wake_provider: Receiver<task::Task>,
-    wake_consumer: Receiver<task::Task>
-}
-
-impl<E: AsyncElement> AsyncElementOverseer<E> {
-    fn new(
-        from_consumer: Receiver<Option<E::Output>>,
-        wake_provider: Receiver<task::Task>,
-        wake_consumer: Receiver<task::Task>        
-    ) -> Self {
-        AsyncElementOverseer {
-            from_consumer,
-            wake_provider,
-            wake_consumer
-        }
-    }
-}
-
-impl<E: AsyncElement> Future for AsyncElementOverseer<E> {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if self.from_consumer.is_empty(){
-            match self.wake_consumer.try_recv() {
-                Ok(task) => {
-                    task.notify(); 
-                },
-                Err(TryRecvError::Empty) => { },
-                Err(TryRecvError::Disconnected) => { 
-                    return Ok(Async::Ready(()));
-                }
-            }
-        } else {
-            match self.wake_provider.try_recv() {
-                Ok(task) => {
-                    task.notify(); 
-                },
-                Err(_) => { },         
-            }
-        }
-        task::current().notify();
-        Ok(Async::NotReady)
     }
 }
 
@@ -102,24 +55,21 @@ pub struct AsyncElementConsumer<E: AsyncElement> {
     input_stream: ElementStream<E::Input>,
     to_provider: Sender<Option<E::Output>>,
     element: E,
-    await_provider: Sender<task::Task>,
-    wake_provider: Receiver<task::Task>
+    task_fridge: Arc<AtomicCell<FridgeStatus>>
 }
 
-impl<E: AsyncElement> AsyncElementConsumer<E> {
+impl< E: AsyncElement> AsyncElementConsumer<E> {
     fn new(
         input_stream: ElementStream<E::Input>, 
-        to_provider: Sender<Option<E::Output>>, 
+        to_provider: Sender<Option<E::Output>>,
         element: E,
-        await_provider: Sender<task::Task>,
-        wake_provider: Receiver<task::Task>) 
+        task_fridge: Arc<AtomicCell<FridgeStatus>>) 
     -> Self {
         AsyncElementConsumer {
             input_stream,
             to_provider,
             element,
-            await_provider,
-            wake_provider
+            task_fridge
         }
     }
 }
@@ -129,9 +79,9 @@ impl<E: AsyncElement> Drop for AsyncElementConsumer<E> {
         if let Err(err) = self.to_provider.try_send(None) {
             panic!("Consumer: Drop: try_send to_provider, fail?: {:?}", err);
         }
-        if let Ok(task) = self.wake_provider.try_recv() {
+        if let FridgeStatus::Alive(Some(task)) = self.task_fridge.swap(FridgeStatus::Dead) {
             task.notify();
-        } 
+        }
     }
 }
 
@@ -159,9 +109,18 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop{
             if self.to_provider.is_full() {
-                let task = task::current();
-                if let Err(_) = self.await_provider.try_send(task) {
-                    task::current().notify();
+                let consumer_task = task::current();
+                match self.task_fridge.swap(FridgeStatus::Alive(Some(consumer_task))) {
+                    FridgeStatus::Alive(Some(task)) => {
+                        task.notify();
+                    },
+                    FridgeStatus::Dead => {
+                        //put the dead status back in the Fridge
+                        self.task_fridge.store(FridgeStatus::Dead);
+                        //the fridge is dead, self notify
+                        task::current().notify();
+                    },
+                    FridgeStatus::Alive(None) => { },
                 }
                 return Ok(Async::NotReady)
             }
@@ -176,7 +135,7 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
                     if let Err(err) = self.to_provider.try_send(Some(output_packet)) {
                         panic!("Error in to_provider sender, have nowhere to put packet: {:?}", err);
                     }
-                    if let Ok(task) = self.wake_provider.try_recv() {
+                    if let FridgeStatus::Alive(Some(task)) = self.task_fridge.swap(FridgeStatus::Alive(None)) {
                         task.notify();
                     }
                 }
@@ -191,27 +150,25 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
 /// element which is polling for packets. 
 pub struct AsyncElementProvider<E: AsyncElement> {
     from_consumer: Receiver<Option<E::Output>>,
-    await_consumer: Sender<task::Task>,
-    wake_consumer: Receiver<task::Task>
+    task_fridge: Arc<AtomicCell<FridgeStatus>>
 }
 
 impl<E: AsyncElement> AsyncElementProvider<E> {
     fn new(
         from_consumer: Receiver<Option<E::Output>>, 
-        await_consumer: Sender<task::Task>, 
-        wake_consumer: Receiver<task::Task>
+        task_fridge: Arc<AtomicCell<FridgeStatus>>
+
         ) -> Self {
             AsyncElementProvider {
                 from_consumer,
-                await_consumer,
-                wake_consumer
+                task_fridge
             }
     }
 }
 
 impl<E: AsyncElement> Drop for AsyncElementProvider<E> {
     fn drop(&mut self) {
-        if let Ok(task) = self.wake_consumer.try_recv() {
+        if let FridgeStatus::Alive(Some(task)) = self.task_fridge.swap(FridgeStatus::Dead) {
             task.notify();
         }
     }
@@ -242,8 +199,15 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.from_consumer.try_recv() {
             Ok(Some(packet)) => {
-                if let Ok(task) = self.wake_consumer.try_recv() {
+                match self.task_fridge.swap(FridgeStatus::Alive(None)) {
+                    FridgeStatus::Alive(Some(task)) => {
                         task.notify();
+                    },
+                    FridgeStatus::Dead => {
+                        //put the dead status back in the Fridge
+                        self.task_fridge.store(FridgeStatus::Dead);
+                    },
+                    FridgeStatus::Alive(None) => { },
                 }
                 Ok(Async::Ready(Some(packet)))
             },
@@ -251,9 +215,18 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
                 Ok(Async::Ready(None))
             },
             Err(TryRecvError::Empty) => {
-                let task = task::current();
-                if let Err(_) = self.await_consumer.try_send(task) {
-                    task::current().notify();
+                let provider_task = task::current();
+                match self.task_fridge.swap(FridgeStatus::Alive(Some(provider_task))) {
+                    FridgeStatus::Alive(Some(task)) => {
+                        task.notify();
+                    },
+                    FridgeStatus::Dead => {
+                        //put the dead status back in the Fridge
+                        self.task_fridge.store(FridgeStatus::Dead);
+                        //the fridge is dead, self notify
+                        task::current().notify();
+                    },
+                    FridgeStatus::Alive(None) => { },
                 }
                 Ok(Async::NotReady)
             },
@@ -302,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn one_async_element() {
+    fn one_async_element<'a>() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8 , 9];
         let packet_generator = PacketIntervalGenerator::new(time::Duration::from_millis(100), packets.clone().into_iter());
@@ -314,12 +287,10 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
-        let elem0_overseer = elem0_link.overseer;
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -339,12 +310,10 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
-        let elem0_overseer = elem0_link.overseer;
 
         tokio::run(lazy (|| {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -403,15 +372,10 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem3_collector = ExhaustiveCollector::new(0, Box::new(elem3_link.provider), s);
 
-        let elem1_overseer = elem1_link.overseer;
-        let elem3_overseer = elem3_link.overseer;
-
         tokio::run(lazy (|| {
             tokio::spawn(elem1_drain);
             tokio::spawn(elem3_drain); 
             tokio::spawn(elem3_collector);
-            tokio::spawn(elem1_overseer);
-            tokio::spawn(elem3_overseer);
             Ok(())
         }));
 
