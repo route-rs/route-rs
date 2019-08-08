@@ -99,11 +99,8 @@ impl<Packet: Sized> Future for JoinElementOverseer<Packet> {
                 }
             } else {
                 //In this case we found a non-empty channel.
-                match self.wake_provider.try_recv() {
-                    Ok(task) => {
-                        task.notify(); 
-                    },
-                    Err(_) => { }              
+                if let Ok(task) = self.wake_provider.try_recv() {
+                    task.notify();
                 }
                 break; //break out of for loop, we tried to awaken the provider.
             }
@@ -171,7 +168,7 @@ impl<Packet: Sized> Future for JoinElementConsumer<Packet> {
         loop{
             if self.to_provider.is_full() {
                 let task = task::current();
-                if let Err(_) = self.await_provider.try_send(task) {
+                if self.await_provider.try_send(task).is_err() {
                     task::current().notify();
                 }
                 return Ok(Async::NotReady)
@@ -247,7 +244,7 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
                     if let Ok(task) = self.wake_consumers[port + self.most_recent_consumer].try_recv() {
                         task.notify();
                     }
-                    self.most_recent_consumer = self.most_recent_consumer + port;
+                    self.most_recent_consumer += port;
                     return Ok(Async::Ready(Some(packet)));
                 },
                 Ok(None) => {
@@ -286,7 +283,7 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
         }
 
         let task = task::current();
-        if let Err(_) = self.await_consumers.try_send(task) {
+        if self.await_consumers.try_send(task).is_err() {
             task::current().notify();
         }
         Ok(Async::NotReady)
