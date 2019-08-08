@@ -1,0 +1,16 @@
+language: rust
+rust:
+  - stable
+cache: cargo
+jobs:
+  include:
+    - stage: lint
+      install: rustup component add rustfmt
+      script: cargo fmt -- --check
+    - stage: lint
+      install: rustup component add clippy
+      script: cargo clippy --all-targets -- -D warnings
+    - stage: build
+      script: cargo build --verbose
+    - stage: test
+      script: cargo test --verbose
