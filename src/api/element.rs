@@ -1,5 +1,5 @@
-use futures::{Stream, Async, Poll};
 use crate::api::ElementStream;
+use futures::{Async, Poll, Stream};
 
 pub trait Element {
     type Input: Sized;
@@ -10,14 +10,14 @@ pub trait Element {
 
 pub struct ElementLink<E: Element> {
     input_stream: ElementStream<E::Input>,
-    element: E
+    element: E,
 }
 
 impl<E: Element> ElementLink<E> {
     pub fn new(input_stream: ElementStream<E::Input>, element: E) -> Self {
         ElementLink {
             input_stream,
-            element
+            element,
         }
     }
 }
@@ -52,7 +52,7 @@ impl<E: Element> Stream for ElementLink<E> {
             Some(input_packet) => {
                 let output_packet: E::Output = self.element.process(input_packet);
                 Ok(Async::Ready(Some(output_packet)))
-            },
+            }
         }
     }
 }
@@ -60,13 +60,13 @@ impl<E: Element> Stream for ElementLink<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test::packet_collectors::{ExhaustiveCollector, ExhaustiveDrain};
     use crate::utils::test::packet_generators::{LinearIntervalGenerator, PacketIntervalGenerator};
-    use crate::utils::test::packet_collectors::{ExhaustiveDrain, ExhaustiveCollector};
     use core::time;
 
     #[allow(dead_code)]
     struct IdentityElement {
-        id: i32
+        id: i32,
     }
 
     impl Element for IdentityElement {
@@ -79,7 +79,7 @@ mod tests {
     }
 
     /// One Synchronous Element, sourced with an interval yield
-    /// 
+    ///
     /// This test creates one Sync element, and uses the LinearIntervalGenerator to test whether
     /// the element responds correctly to an upstream source providing a series of valid packets,
     /// interleaved with Async::NotReady values, finalized by a Async::Ready(None)
@@ -101,7 +101,10 @@ mod tests {
     #[test]
     fn one_sync_element_collected_yield() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(time::Duration::from_millis(100), packets.clone().into_iter());
+        let packet_generator = PacketIntervalGenerator::new(
+            time::Duration::from_millis(100),
+            packets.clone().into_iter(),
+        );
 
         let elem1 = IdentityElement { id: 0 };
         let elem2 = IdentityElement { id: 1 };
