@@ -104,13 +104,8 @@ impl<E: ClassifyElement> Future for ClassifyElementOverseer<E> {
                         }
                     }
                 }
-            } else {
-                match self.wake_providers[port].try_recv() {
-                    Ok(task) => {
-                        task.notify(); 
-                    },
-                    Err(_) => { }              
-                }
+            } else if let Ok(task) = self.wake_providers[port].try_recv() {
+                task.notify();
             }
         }
         task::current().notify();
@@ -174,7 +169,7 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
             for (port, to_provider) in self.to_providers.iter().enumerate() {
                 if to_provider.is_full() {
                     let task = task::current();
-                    if let Err(_) = self.await_providers[port].try_send(task) {
+                    if self.await_providers[port].try_send(task).is_err() {
                         task::current().notify();
                     }
                     return Ok(Async::NotReady)
@@ -269,7 +264,7 @@ impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
             },
             Err(TryRecvError::Empty) => {
                 let task = task::current();
-                if let Err(_) = self.await_consumer.try_send(task) {
+                if self.await_consumer.try_send(task).is_err() {
                     task::current().notify();
                 }
                 Ok(Async::NotReady)
