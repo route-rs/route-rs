@@ -1,7 +1,10 @@
 use crate::api::ElementStream;
+use crate::api::TaskParkState;
+use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{task, Async, Future, Poll, Stream};
+use std::sync::Arc;
 
 pub trait AsyncElement {
     type Input: Sized;
@@ -17,76 +20,25 @@ pub trait AsyncElement {
 pub struct AsyncElementLink<E: AsyncElement> {
     pub consumer: AsyncElementConsumer<E>,
     pub provider: AsyncElementProvider<E>,
-    pub overseer: AsyncElementOverseer<E>,
 }
 
 impl<E: AsyncElement> AsyncElementLink<E> {
     pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
         let (to_provider, from_consumer) =
             crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
-        let (await_consumer, wake_provider) = crossbeam_channel::bounded::<task::Task>(1);
-        let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
+        let task_park: Arc<AtomicCell<TaskParkState>> =
+            Arc::new(AtomicCell::new(TaskParkState::Empty));
 
         AsyncElementLink {
             consumer: AsyncElementConsumer::new(
                 input_stream,
                 to_provider,
                 element,
-                await_provider.clone(),
-                wake_provider.clone(),
+                Arc::clone(&task_park),
             ),
 
-            provider: AsyncElementProvider::new(
-                from_consumer.clone(),
-                await_consumer.clone(),
-                wake_consumer.clone(),
-            ),
-
-            overseer: AsyncElementOverseer::new(from_consumer, wake_provider, wake_consumer),
+            provider: AsyncElementProvider::new(from_consumer.clone(), task_park),
         }
-    }
-}
-
-pub struct AsyncElementOverseer<E: AsyncElement> {
-    from_consumer: Receiver<Option<E::Output>>,
-    wake_provider: Receiver<task::Task>,
-    wake_consumer: Receiver<task::Task>,
-}
-
-impl<E: AsyncElement> AsyncElementOverseer<E> {
-    fn new(
-        from_consumer: Receiver<Option<E::Output>>,
-        wake_provider: Receiver<task::Task>,
-        wake_consumer: Receiver<task::Task>,
-    ) -> Self {
-        AsyncElementOverseer {
-            from_consumer,
-            wake_provider,
-            wake_consumer,
-        }
-    }
-}
-
-impl<E: AsyncElement> Future for AsyncElementOverseer<E> {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if self.from_consumer.is_empty() {
-            match self.wake_consumer.try_recv() {
-                Ok(task) => {
-                    task.notify();
-                }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    return Ok(Async::Ready(()));
-                }
-            }
-        } else if let Ok(task) = self.wake_provider.try_recv() {
-            task.notify();
-        }
-        task::current().notify();
-        Ok(Async::NotReady)
     }
 }
 
@@ -100,8 +52,7 @@ pub struct AsyncElementConsumer<E: AsyncElement> {
     input_stream: ElementStream<E::Input>,
     to_provider: Sender<Option<E::Output>>,
     element: E,
-    await_provider: Sender<task::Task>,
-    wake_provider: Receiver<task::Task>,
+    task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
 impl<E: AsyncElement> AsyncElementConsumer<E> {
@@ -109,26 +60,33 @@ impl<E: AsyncElement> AsyncElementConsumer<E> {
         input_stream: ElementStream<E::Input>,
         to_provider: Sender<Option<E::Output>>,
         element: E,
-        await_provider: Sender<task::Task>,
-        wake_provider: Receiver<task::Task>,
+        task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         AsyncElementConsumer {
             input_stream,
             to_provider,
             element,
-            await_provider,
-            wake_provider,
+            task_park,
         }
     }
 }
 
+/// Special Drop for AsyncElementConsumer
+///
+/// When we are dropping the consumer, we want to send a message to the
+/// provider so that it may drop as well. Additionally, we awaken the
+/// provider, since an asleep provider counts on the consumer to awaken
+/// it. This prevents a deadlock during consumer drops, or unexpected
+/// teardown. We also place a `TaskParkState::Dead` in the task_park
+/// so that the provider knows it can not rely on the consumer to awaken
+/// it in the future.
 impl<E: AsyncElement> Drop for AsyncElementConsumer<E> {
     fn drop(&mut self) {
         if let Err(err) = self.to_provider.try_send(None) {
             panic!("Consumer: Drop: try_send to_provider, fail?: {:?}", err);
         }
-        if let Ok(task) = self.wake_provider.try_recv() {
-            task.notify();
+        if let TaskParkState::Full(provider) = self.task_park.swap(TaskParkState::Dead) {
+            provider.notify();
         }
     }
 }
@@ -157,9 +115,19 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             if self.to_provider.is_full() {
-                let task = task::current();
-                if self.await_provider.try_send(task).is_err() {
-                    task::current().notify();
+                let consumer = task::current();
+                match self.task_park.swap(TaskParkState::Full(consumer)) {
+                    TaskParkState::Full(provider) => {
+                        provider.notify();
+                    }
+                    TaskParkState::Empty => {}
+                    // When TaskParkState is dead, we must self notify, and return the `task_park`
+                    // to the `Dead` state. This ensures future calls to poll won't think the
+                    // `task_park` is working.
+                    TaskParkState::Dead => {
+                        self.task_park.store(TaskParkState::Dead);
+                        task::current().notify();
+                    }
                 }
                 return Ok(Async::NotReady);
             }
@@ -175,8 +143,9 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
                             err
                         );
                     }
-                    if let Ok(task) = self.wake_provider.try_recv() {
-                        task.notify();
+                    if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty)
+                    {
+                        consumer.notify();
                     }
                 }
             }
@@ -190,28 +159,31 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
 /// element which is polling for packets.
 pub struct AsyncElementProvider<E: AsyncElement> {
     from_consumer: Receiver<Option<E::Output>>,
-    await_consumer: Sender<task::Task>,
-    wake_consumer: Receiver<task::Task>,
+    task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
 impl<E: AsyncElement> AsyncElementProvider<E> {
     fn new(
         from_consumer: Receiver<Option<E::Output>>,
-        await_consumer: Sender<task::Task>,
-        wake_consumer: Receiver<task::Task>,
+        task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         AsyncElementProvider {
             from_consumer,
-            await_consumer,
-            wake_consumer,
+            task_park,
         }
     }
 }
 
+/// Special Drop for Provider
+///
+/// This Drop notifies the consumer that is can no longer rely on the provider
+/// to awaken it. It is not expected behavior that the provider dies while the
+/// consumer is still alive. But it may happen in edge cases and we want to
+/// ensure that a deadlock does not occur.
 impl<E: AsyncElement> Drop for AsyncElementProvider<E> {
     fn drop(&mut self) {
-        if let Ok(task) = self.wake_consumer.try_recv() {
-            task.notify();
+        if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Dead) {
+            consumer.notify();
         }
     }
 }
@@ -232,7 +204,7 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
     /// will no longer be receivig packets. Return Async::Ready(None) to forward propagate teardown
     ///
     /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the consumer to awaken us with more
-    /// work, and return Async::NotReady to signal to runtime to sleep this task.
+    /// work, by returning Async::NotReady to signal to runtime to sleep this task.
     ///
     /// #4 Err(TryRecvError::Disconnected): Consumer is in teardown and has dropped its side of the
     /// from_consumer channel; we will no longer receive packets. Return Async::Ready(None) to forward
@@ -241,16 +213,25 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.from_consumer.try_recv() {
             Ok(Some(packet)) => {
-                if let Ok(task) = self.wake_consumer.try_recv() {
-                    task.notify();
+                if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty) {
+                    consumer.notify();
                 }
                 Ok(Async::Ready(Some(packet)))
             }
             Ok(None) => Ok(Async::Ready(None)),
             Err(TryRecvError::Empty) => {
-                let task = task::current();
-                if self.await_consumer.try_send(task).is_err() {
-                    task::current().notify();
+                let provider = task::current();
+                match self.task_park.swap(TaskParkState::Full(provider)) {
+                    TaskParkState::Full(consumer) => {
+                        consumer.notify();
+                    }
+                    TaskParkState::Empty => {}
+                    // Similar to the consumer, if the `task_park` is dead, we must self notify
+                    // and retain the Dead state to prevent deadlocks.
+                    TaskParkState::Dead => {
+                        self.task_park.store(TaskParkState::Dead);
+                        task::current().notify();
+                    }
                 }
                 Ok(Async::NotReady)
             }
@@ -313,12 +294,10 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
-        let elem0_overseer = elem0_link.overseer;
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -339,12 +318,10 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem0_drain = elem0_link.consumer;
         let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
-        let elem0_overseer = elem0_link.overseer;
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -411,15 +388,10 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let elem3_collector = ExhaustiveCollector::new(0, Box::new(elem3_link.provider), s);
 
-        let elem1_overseer = elem1_link.overseer;
-        let elem3_overseer = elem3_link.overseer;
-
         tokio::run(lazy(|| {
             tokio::spawn(elem1_drain);
             tokio::spawn(elem3_drain);
             tokio::spawn(elem3_collector);
-            tokio::spawn(elem1_overseer);
-            tokio::spawn(elem3_overseer);
             Ok(())
         }));
 
