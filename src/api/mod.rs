@@ -1,4 +1,4 @@
-use futures::Stream;
+use futures::{task, Stream};
 
 mod element;
 pub use self::element::*;
@@ -13,3 +13,9 @@ mod join_element;
 pub use self::join_element::*;
 
 pub type ElementStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
+
+enum TaskParkState {
+    Dead,
+    Empty,
+    Full(task::Task),
+}
