@@ -1,7 +1,10 @@
 use crate::api::ElementStream;
+use crate::api::TaskParkState;
+use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{task, Async, Future, Poll, Stream};
+use std::sync::Arc;
 
 pub trait ClassifyElement {
     type Packet: Sized;
@@ -12,7 +15,6 @@ pub trait ClassifyElement {
 pub struct ClassifyElementLink<E: ClassifyElement> {
     pub consumer: ClassifyElementConsumer<E>,
     pub providers: Vec<ClassifyElementProvider<E>>,
-    pub overseer: ClassifyElementOverseer<E>,
 }
 
 impl<E: ClassifyElement> ClassifyElementLink<E> {
@@ -32,103 +34,30 @@ impl<E: ClassifyElement> ClassifyElementLink<E> {
         );
 
         let mut to_providers: Vec<Sender<Option<E::Packet>>> = Vec::new();
-        let mut await_providers: Vec<Sender<task::Task>> = Vec::new();
-        let mut wake_providers: Vec<Receiver<task::Task>> = Vec::new();
         let mut providers: Vec<ClassifyElementProvider<E>> = Vec::new();
 
         let mut from_consumers: Vec<Receiver<Option<E::Packet>>> = Vec::new();
-        let mut wake_consumers: Vec<Receiver<task::Task>> = Vec::new();
+
+        let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
         for _ in 0..branches {
             let (to_provider, from_consumer) =
                 crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
-            let (await_consumer, wake_provider) = crossbeam_channel::bounded::<task::Task>(1);
-            let (await_provider, wake_consumer) = crossbeam_channel::bounded::<task::Task>(1);
+            let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-            let provider = ClassifyElementProvider::new(
-                from_consumer.clone(),
-                await_consumer,
-                wake_consumer.clone(),
-            );
+            let provider =
+                ClassifyElementProvider::new(from_consumer.clone(), Arc::clone(&task_park));
 
             to_providers.push(to_provider);
-            await_providers.push(await_provider);
-            wake_providers.push(wake_provider);
             providers.push(provider);
-
             from_consumers.push(from_consumer);
-            wake_consumers.push(wake_consumer);
+            task_parks.push(task_park);
         }
 
         ClassifyElementLink {
-            consumer: ClassifyElementConsumer::new(
-                input_stream,
-                to_providers,
-                element,
-                await_providers,
-                wake_providers.clone(),
-            ),
+            consumer: ClassifyElementConsumer::new(input_stream, to_providers, element, task_parks),
             providers,
-            overseer: ClassifyElementOverseer::new(
-                from_consumers,
-                wake_providers,
-                wake_consumers,
-                branches,
-            ),
         }
-    }
-}
-pub struct ClassifyElementOverseer<E: ClassifyElement> {
-    from_consumers: Vec<Receiver<Option<E::Packet>>>,
-    wake_providers: Vec<Receiver<task::Task>>,
-    wake_consumers: Vec<Receiver<task::Task>>,
-    providers_alive: usize,
-}
-
-impl<E: ClassifyElement> ClassifyElementOverseer<E> {
-    fn new(
-        from_consumers: Vec<Receiver<Option<E::Packet>>>,
-        wake_providers: Vec<Receiver<task::Task>>,
-        wake_consumers: Vec<Receiver<task::Task>>,
-        branches: usize,
-    ) -> Self {
-        ClassifyElementOverseer {
-            from_consumers,
-            wake_providers,
-            wake_consumers,
-            providers_alive: branches,
-        }
-    }
-}
-
-impl<E: ClassifyElement> Future for ClassifyElementOverseer<E> {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        for (port, from_consumer) in self.from_consumers.iter().enumerate() {
-            if from_consumer.is_empty() {
-                // Name wake_consumers is a misnomer since there is only one consumer, however in this case we
-                // are looking for the handle the consumer handed out to a particular provider.
-                match self.wake_consumers[port].try_recv() {
-                    Ok(task) => {
-                        task.notify();
-                    }
-                    Err(TryRecvError::Empty) => {}
-                    Err(TryRecvError::Disconnected) => {
-                        // Only return once all the providers have had their queues emptied.
-                        self.providers_alive -= 1;
-                        if self.providers_alive == 0 {
-                            return Ok(Async::Ready(()));
-                        }
-                    }
-                }
-            } else if let Ok(task) = self.wake_providers[port].try_recv() {
-                task.notify();
-            }
-        }
-        task::current().notify();
-        Ok(Async::NotReady)
     }
 }
 
@@ -136,8 +65,7 @@ pub struct ClassifyElementConsumer<E: ClassifyElement> {
     input_stream: ElementStream<E::Packet>,
     to_providers: Vec<Sender<Option<E::Packet>>>,
     element: E,
-    await_providers: Vec<Sender<task::Task>>,
-    wake_providers: Vec<Receiver<task::Task>>,
+    task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
 impl<E: ClassifyElement> ClassifyElementConsumer<E> {
@@ -145,15 +73,13 @@ impl<E: ClassifyElement> ClassifyElementConsumer<E> {
         input_stream: ElementStream<E::Packet>,
         to_providers: Vec<Sender<Option<E::Packet>>>,
         element: E,
-        await_providers: Vec<Sender<task::Task>>,
-        wake_providers: Vec<Receiver<task::Task>>,
+        task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
         ClassifyElementConsumer {
             input_stream,
             to_providers,
             element,
-            await_providers,
-            wake_providers,
+            task_parks,
         }
     }
 }
@@ -167,9 +93,9 @@ impl<E: ClassifyElement> Drop for ClassifyElementConsumer<E> {
             }
         }
 
-        for wake_provider in self.wake_providers.iter() {
-            if let Ok(task) = wake_provider.try_recv() {
-                task.notify();
+        for task_park in self.task_parks.iter() {
+            if let TaskParkState::Full(provider) = task_park.swap(TaskParkState::Dead) {
+                provider.notify();
             }
         }
     }
@@ -187,9 +113,16 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
         loop {
             for (port, to_provider) in self.to_providers.iter().enumerate() {
                 if to_provider.is_full() {
-                    let task = task::current();
-                    if self.await_providers[port].try_send(task).is_err() {
-                        task::current().notify();
+                    let consumer = task::current();
+                    match self.task_parks[port].swap(TaskParkState::Full(consumer)) {
+                        TaskParkState::Full(provider) => {
+                            provider.notify();
+                        }
+                        TaskParkState::Empty => {}
+                        TaskParkState::Dead => {
+                            self.task_parks[port].store(TaskParkState::Dead);
+                            task::current().notify();
+                        }
                     }
                     return Ok(Async::NotReady);
                 }
@@ -209,8 +142,10 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
                             port, err
                         );
                     }
-                    if let Ok(task) = self.wake_providers[port].try_recv() {
-                        task.notify();
+                    if let TaskParkState::Full(provider) =
+                        self.task_parks[port].swap(TaskParkState::Empty)
+                    {
+                        provider.notify();
                     }
                 }
             }
@@ -223,28 +158,25 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
 /// a PR that solves this problem.
 pub struct ClassifyElementProvider<E: ClassifyElement> {
     from_consumer: crossbeam_channel::Receiver<Option<E::Packet>>,
-    await_consumer: crossbeam_channel::Sender<task::Task>,
-    wake_consumer: crossbeam_channel::Receiver<task::Task>,
+    task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
 impl<E: ClassifyElement> ClassifyElementProvider<E> {
     fn new(
         from_consumer: crossbeam_channel::Receiver<Option<E::Packet>>,
-        await_consumer: crossbeam_channel::Sender<task::Task>,
-        wake_consumer: crossbeam_channel::Receiver<task::Task>,
+        task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         ClassifyElementProvider {
             from_consumer,
-            await_consumer,
-            wake_consumer,
+            task_park,
         }
     }
 }
 
 impl<E: ClassifyElement> Drop for ClassifyElementProvider<E> {
     fn drop(&mut self) {
-        if let Ok(task) = self.wake_consumer.try_recv() {
-            task.notify();
+        if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Dead) {
+            consumer.notify();
         }
     }
 }
@@ -274,16 +206,23 @@ impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.from_consumer.try_recv() {
             Ok(Some(packet)) => {
-                if let Ok(task) = self.wake_consumer.try_recv() {
-                    task.notify();
+                if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty) {
+                    consumer.notify();
                 }
                 Ok(Async::Ready(Some(packet)))
             }
             Ok(None) => Ok(Async::Ready(None)),
             Err(TryRecvError::Empty) => {
-                let task = task::current();
-                if self.await_consumer.try_send(task).is_err() {
-                    task::current().notify();
+                let provider = task::current();
+                match self.task_park.swap(TaskParkState::Full(provider)) {
+                    TaskParkState::Full(consumer) => {
+                        consumer.notify();
+                    }
+                    TaskParkState::Empty => {}
+                    TaskParkState::Dead => {
+                        self.task_park.store(TaskParkState::Dead);
+                        task::current().notify();
+                    }
                 }
                 Ok(Async::NotReady)
             }
@@ -353,7 +292,6 @@ mod tests {
             number_branches,
         );
         let elem0_drain = elem0_link.consumer;
-        let elem0_overseer = elem0_link.overseer;
 
         // Ordering is important since we are popping.
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
@@ -368,7 +306,6 @@ mod tests {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -398,7 +335,6 @@ mod tests {
             number_branches,
         );
         let elem0_drain = elem0_link.consumer;
-        let elem0_overseer = elem0_link.overseer;
 
         // Ordering is important since we are popping.
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
@@ -413,7 +349,6 @@ mod tests {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
@@ -439,7 +374,6 @@ mod tests {
             number_branches,
         );
         let elem0_drain = elem0_link.consumer;
-        let elem0_overseer = elem0_link.overseer;
 
         // Ordering is important since we are popping.
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
@@ -454,7 +388,6 @@ mod tests {
             tokio::spawn(elem0_drain);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
-            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 
