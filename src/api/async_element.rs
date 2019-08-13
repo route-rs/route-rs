@@ -24,6 +24,9 @@ pub struct AsyncElementLink<E: AsyncElement> {
 
 impl<E: AsyncElement> AsyncElementLink<E> {
     pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
+        if queue_capacity == 0 {
+            panic!("queue capacity must be non-zero")
+        }
         let (to_provider, from_consumer) =
             crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
         let task_park: Arc<AtomicCell<TaskParkState>> =
@@ -327,6 +330,19 @@ mod tests {
 
         let router_output: Vec<_> = r.iter().collect();
         assert_eq!(router_output.len(), 2001);
+    }
+
+    #[test]
+    #[should_panic(expected = "queue capacity must be non-zero")]
+    fn one_async_element_empty_channel() {
+        let default_channel_size = 0;
+        let packets = vec![];
+        let packet_generator = immediate_stream(packets);
+
+        let elem0 = AsyncIdentityElement { id: 0 };
+
+        let _elem0_link =
+            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
     }
 
     #[test]
