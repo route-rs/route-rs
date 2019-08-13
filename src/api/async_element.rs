@@ -281,10 +281,7 @@ mod tests {
     fn one_async_element() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator = immediate_stream(packets.clone());
 
         let elem0 = AsyncIdentityElement { id: 0 };
 
@@ -308,7 +305,7 @@ mod tests {
     #[test]
     fn one_async_element_long_stream() {
         let default_channel_size = 10;
-        let packet_generator = immediate_stream(0..=2000);
+        let packet_generator = immediate_stream(0..2000);
 
         let elem0 = AsyncIdentityElement { id: 0 };
 
@@ -326,17 +323,14 @@ mod tests {
         }));
 
         let router_output: Vec<_> = r.iter().collect();
-        assert_eq!(router_output.len(), 2001);
+        assert_eq!(router_output.len(), 2000);
     }
 
     #[test]
     fn two_async_elements() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator = immediate_stream(packets.clone());
 
         let elem0 = AsyncIdentityElement { id: 0 };
         let elem1 = AsyncIdentityElement { id: 1 };
@@ -367,10 +361,7 @@ mod tests {
     fn series_sync_and_async() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator = immediate_stream(packets.clone());
 
         let elem0 = IdentityElement { id: 0 };
         let elem1 = AsyncIdentityElement { id: 1 };
@@ -392,6 +383,36 @@ mod tests {
             tokio::spawn(elem1_drain);
             tokio::spawn(elem3_drain);
             tokio::spawn(elem3_collector);
+            Ok(())
+        }));
+
+        let router_output: Vec<_> = r.iter().collect();
+        assert_eq!(router_output, packets);
+    }
+
+    #[test]
+    fn one_async_element_wait_between_packets() {
+        let default_channel_size = 10;
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packet_generator = PacketIntervalGenerator::new(
+            time::Duration::from_millis(100),
+            packets.clone().into_iter(),
+        );
+
+        let elem0 = AsyncIdentityElement { id: 0 };
+
+        let elem0_link =
+            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+
+        let (s, r) = crossbeam_channel::unbounded();
+        let elem0_drain = elem0_link.consumer;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_overseer = elem0_link.overseer;
+
+        tokio::run(lazy(|| {
+            tokio::spawn(elem0_drain);
+            tokio::spawn(elem0_collector);
+            tokio::spawn(elem0_overseer);
             Ok(())
         }));
 

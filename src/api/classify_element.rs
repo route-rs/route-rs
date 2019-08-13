@@ -277,11 +277,7 @@ mod tests {
     fn one_classify_element() {
         let default_channel_size = 10;
         let number_branches = 2;
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
@@ -313,18 +309,14 @@ mod tests {
         assert_eq!(elem0_port0_output, vec![0, 2, 420, 4, 6, 8]);
 
         let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9, 11]);
+        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
     fn one_classify_element_only_odd() {
         let default_channel_size = 5;
         let number_branches = 2;
-        let packets = vec![1, 1337, 3, 5, 7, 9, 11];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
@@ -356,14 +348,14 @@ mod tests {
         assert!(elem0_port0_output.is_empty());
 
         let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9, 11]);
+        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
     fn one_classify_element_immediate_yield() {
         let default_channel_size = 10;
         let number_branches = 2;
-        let packet_generator = immediate_stream(0..=2000);
+        let packet_generator = immediate_stream(0..2000);
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
@@ -392,9 +384,55 @@ mod tests {
         }));
 
         let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(elem0_port0_output.len(), 1001);
+        assert_eq!(elem0_port0_output.len(), 1000);
 
         let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
         assert_eq!(elem0_port1_output.len(), 1000);
+    }
+
+    #[test]
+    fn one_classify_element_wait_between_packets() {
+        let default_channel_size = 10;
+        let number_branches = 2;
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packet_generator = PacketIntervalGenerator::new(
+            time::Duration::from_millis(100),
+            packets.clone().into_iter(),
+        );
+
+        let elem0 = ClassifyEvenOddElement { id: 0 };
+
+        let mut elem0_link = ClassifyElementLink::new(
+            Box::new(packet_generator),
+            elem0,
+            default_channel_size,
+            number_branches,
+        );
+
+        let elem0_drain = elem0_link.consumer;
+        let elem0_overseer = elem0_link.overseer;
+
+        // Ordering is important since we are popping.
+        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
+        let elem0_port1_collector =
+            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
+
+        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
+        let elem0_port0_collector =
+            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s0);
+
+        tokio::run(lazy(|| {
+            tokio::spawn(elem0_drain);
+            tokio::spawn(elem0_port0_collector);
+            tokio::spawn(elem0_port1_collector);
+            tokio::spawn(elem0_overseer);
+            Ok(())
+        }));
+
+        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
+        assert_eq!(elem0_port0_output, vec![0, 2, 420, 4, 6, 8]);
+
+        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
+        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
     }
 }
