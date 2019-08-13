@@ -146,9 +146,9 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
                             err
                         );
                     }
-                    if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty)
+                    if let TaskParkState::Full(provider) = self.task_park.swap(TaskParkState::Empty)
                     {
-                        consumer.notify();
+                        provider.notify();
                     }
                 }
             }
@@ -216,8 +216,16 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.from_consumer.try_recv() {
             Ok(Some(packet)) => {
-                if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty) {
-                    consumer.notify();
+                match self.task_park.swap(TaskParkState::Empty) {
+                    TaskParkState::Full(consumer) => {
+                        consumer.notify();
+                    }
+                    TaskParkState::Empty => {}
+                    // Similar to the consumer, if the `task_park` is dead, we must self notify
+                    // and retain the Dead state to prevent deadlocks.
+                    TaskParkState::Dead => {
+                        self.task_park.store(TaskParkState::Dead);
+                    }
                 }
                 Ok(Async::Ready(Some(packet)))
             }
