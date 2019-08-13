@@ -325,14 +325,8 @@ mod tests {
     fn join_element() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let packet_generator0 = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
-        let packet_generator1 = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator0 = immediate_stream(packets.clone());
+        let packet_generator1 = immediate_stream(packets.clone());
 
         let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
         input_streams.push(Box::new(packet_generator0));
@@ -431,5 +425,43 @@ mod tests {
 
         let join0_output: Vec<_> = join0_collector_output.iter().collect();
         assert_eq!(join0_output.len(), 10005);
+    }
+
+    #[test]
+    fn join_element_wait_between_packets() {
+        let default_channel_size = 10;
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+        let packet_generator0 = PacketIntervalGenerator::new(
+            time::Duration::from_millis(100),
+            packets.clone().into_iter(),
+        );
+        let packet_generator1 = PacketIntervalGenerator::new(
+            time::Duration::from_millis(100),
+            packets.clone().into_iter(),
+        );
+
+        let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
+        input_streams.push(Box::new(packet_generator0));
+        input_streams.push(Box::new(packet_generator1));
+
+        let mut join0_link = JoinElementLink::new(input_streams, default_channel_size);
+        let join0_input1_drain = join0_link.consumers.pop().unwrap();
+        let join0_input0_drain = join0_link.consumers.pop().unwrap();
+
+        let (s, join0_collector_output) = crossbeam_channel::unbounded();
+        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.provider), s);
+
+        let join0_overseer = join0_link.overseer;
+
+        tokio::run(lazy(|| {
+            tokio::spawn(join0_input0_drain);
+            tokio::spawn(join0_input1_drain);
+            tokio::spawn(join0_collector);
+            tokio::spawn(join0_overseer);
+            Ok(())
+        }));
+
+        let join0_output: Vec<_> = join0_collector_output.iter().collect();
+        assert_eq!(join0_output.len(), packets.len() * 2);
     }
 }

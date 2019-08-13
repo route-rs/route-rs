@@ -60,8 +60,8 @@ impl<E: Element> Stream for ElementLink<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::packet_collectors::{ExhaustiveCollector, ExhaustiveDrain};
-    use crate::utils::test::packet_generators::{LinearIntervalGenerator, PacketIntervalGenerator};
+    use crate::utils::test::packet_collectors::ExhaustiveCollector;
+    use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
     #[allow(dead_code)]
@@ -78,14 +78,10 @@ mod tests {
         }
     }
 
-    /// One Synchronous Element, sourced with an interval yield
-    ///
-    /// This test creates one Sync element, and uses the LinearIntervalGenerator to test whether
-    /// the element responds correctly to an upstream source providing a series of valid packets,
-    /// interleaved with Async::NotReady values, finalized by a Async::Ready(None)
     #[test]
-    fn one_sync_element_interval_yield() {
-        let packet_generator = LinearIntervalGenerator::new(time::Duration::from_millis(100), 10);
+    fn one_sync_element() {
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packet_generator = immediate_stream(packets.clone());
 
         let elem1 = IdentityElement { id: 0 };
         let elem2 = IdentityElement { id: 1 };
@@ -93,13 +89,17 @@ mod tests {
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
 
-        let consumer = ExhaustiveDrain::new(1, Box::new(elem2_link));
+        let (s, r) = crossbeam::crossbeam_channel::unbounded();
+        let consumer = ExhaustiveCollector::new(1, Box::new(elem2_link), s);
 
         tokio::run(consumer);
+
+        let router_output: Vec<_> = r.iter().collect();
+        assert_eq!(router_output, packets);
     }
 
     #[test]
-    fn one_sync_element_collected_yield() {
+    fn one_sync_element_wait_between_packets() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = PacketIntervalGenerator::new(
             time::Duration::from_millis(100),
@@ -109,11 +109,10 @@ mod tests {
         let elem1 = IdentityElement { id: 0 };
         let elem2 = IdentityElement { id: 1 };
 
-        let (s, r) = crossbeam::crossbeam_channel::unbounded();
-
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
 
+        let (s, r) = crossbeam::crossbeam_channel::unbounded();
         let consumer = ExhaustiveCollector::new(1, Box::new(elem2_link), s);
 
         tokio::run(consumer);
