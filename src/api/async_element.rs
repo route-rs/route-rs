@@ -285,10 +285,7 @@ mod tests {
     fn one_async_element_small_channel() {
         let default_channel_size = 1;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(100),
-            packets.clone().into_iter(),
-        );
+        let packet_generator = immediate_stream(packets.clone());
 
         let elem0 = AsyncIdentityElement::new(0);
 
