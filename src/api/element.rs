@@ -60,31 +60,23 @@ impl<E: Element> Stream for ElementLink<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test::identity_elements::IdentityElement;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
-    #[allow(dead_code)]
-    struct IdentityElement {
-        id: i32,
-    }
-
-    impl Element for IdentityElement {
-        type Input = i32;
-        type Output = i32;
-
-        fn process(&mut self, packet: Self::Input) -> Self::Output {
-            packet
-        }
-    }
-
+    /// One Synchronous Element, sourced with an interval yield
+    ///
+    /// This test creates one Sync element, and uses the LinearIntervalGenerator to test whether
+    /// the element responds correctly to an upstream source providing a series of valid packets,
+    /// interleaved with Async::NotReady values, finalized by a Async::Ready(None)
     #[test]
     fn one_sync_element() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem1 = IdentityElement { id: 0 };
-        let elem2 = IdentityElement { id: 1 };
+        let elem1 = IdentityElement::new(0);
+        let elem2 = IdentityElement::new(1);
 
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
@@ -106,8 +98,8 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem1 = IdentityElement { id: 0 };
-        let elem2 = IdentityElement { id: 1 };
+        let elem1 = IdentityElement::new(0);
+        let elem2 = IdentityElement::new(1);
 
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
