@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub trait ClassifyElement {
     type Packet: Sized;
 
-    fn classify(&mut self, packet: Self::Packet) -> (usize, Self::Packet);
+    fn classify(&mut self, packet: &Self::Packet) -> usize;
 }
 
 pub struct ClassifyElementLink<E: ClassifyElement> {
@@ -132,7 +132,7 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
             match packet_option {
                 None => return Ok(Async::Ready(())),
                 Some(packet) => {
-                    let (port, packet) = self.element.classify(packet);
+                    let port = self.element.classify(&packet);
                     if port >= self.to_providers.len() {
                         panic!("Tried to access invalid port: {}", port);
                     }
@@ -264,12 +264,8 @@ mod tests {
     impl ClassifyElement for ClassifyEvenOddElement {
         type Packet = i32;
 
-        fn classify(&mut self, packet: Self::Packet) -> (usize, Self::Packet) {
-            if (packet % 2) == 0 {
-                (0, packet)
-            } else {
-                (1, packet)
-            }
+        fn classify(&mut self, packet: &Self::Packet) -> usize {
+            (packet % 2) as usize
         }
     }
 
