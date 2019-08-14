@@ -1,9 +1,9 @@
+use crate::api::task_park::*;
 use crate::api::ElementStream;
-use crate::api::TaskParkState;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
-use futures::{task, Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 pub trait AsyncElement {
@@ -88,9 +88,7 @@ impl<E: AsyncElement> Drop for AsyncElementConsumer<E> {
         if let Err(err) = self.to_provider.try_send(None) {
             panic!("Consumer: Drop: try_send to_provider, fail?: {:?}", err);
         }
-        if let TaskParkState::Full(provider) = self.task_park.swap(TaskParkState::Dead) {
-            provider.notify();
-        }
+        die_and_notify(&self.task_park);
     }
 }
 
@@ -118,20 +116,7 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             if self.to_provider.is_full() {
-                let consumer = task::current();
-                match self.task_park.swap(TaskParkState::Full(consumer)) {
-                    TaskParkState::Full(provider) => {
-                        provider.notify();
-                    }
-                    TaskParkState::Empty => {}
-                    // When TaskParkState is dead, we must self notify, and return the `task_park`
-                    // to the `Dead` state. This ensures future calls to poll won't think the
-                    // `task_park` is working.
-                    TaskParkState::Dead => {
-                        self.task_park.store(TaskParkState::Dead);
-                        task::current().notify();
-                    }
-                }
+                park_and_notify(&self.task_park);
                 return Ok(Async::NotReady);
             }
             let input_packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
@@ -146,10 +131,7 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
                             err
                         );
                     }
-                    if let TaskParkState::Full(provider) = self.task_park.swap(TaskParkState::Empty)
-                    {
-                        provider.notify();
-                    }
+                    unpark_and_notify(&self.task_park);
                 }
             }
         }
@@ -185,9 +167,7 @@ impl<E: AsyncElement> AsyncElementProvider<E> {
 /// ensure that a deadlock does not occur.
 impl<E: AsyncElement> Drop for AsyncElementProvider<E> {
     fn drop(&mut self) {
-        if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Dead) {
-            consumer.notify();
-        }
+        die_and_notify(&self.task_park);
     }
 }
 
@@ -216,34 +196,12 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.from_consumer.try_recv() {
             Ok(Some(packet)) => {
-                match self.task_park.swap(TaskParkState::Empty) {
-                    TaskParkState::Full(consumer) => {
-                        consumer.notify();
-                    }
-                    TaskParkState::Empty => {}
-                    // Similar to the consumer, if the `task_park` is dead, we must self notify
-                    // and retain the Dead state to prevent deadlocks.
-                    TaskParkState::Dead => {
-                        self.task_park.store(TaskParkState::Dead);
-                    }
-                }
+                unpark_and_notify(&self.task_park);
                 Ok(Async::Ready(Some(packet)))
             }
             Ok(None) => Ok(Async::Ready(None)),
             Err(TryRecvError::Empty) => {
-                let provider = task::current();
-                match self.task_park.swap(TaskParkState::Full(provider)) {
-                    TaskParkState::Full(consumer) => {
-                        consumer.notify();
-                    }
-                    TaskParkState::Empty => {}
-                    // Similar to the consumer, if the `task_park` is dead, we must self notify
-                    // and retain the Dead state to prevent deadlocks.
-                    TaskParkState::Dead => {
-                        self.task_park.store(TaskParkState::Dead);
-                        task::current().notify();
-                    }
-                }
+                park_and_notify(&self.task_park);
                 Ok(Async::NotReady)
             }
             Err(TryRecvError::Disconnected) => Ok(Async::Ready(None)),

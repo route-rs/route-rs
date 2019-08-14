@@ -1,9 +1,9 @@
+use crate::api::task_park::*;
 use crate::api::ElementStream;
-use crate::api::TaskParkState;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
-use futures::{task, Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 pub struct JoinElementLink<Packet: Sized> {
@@ -75,9 +75,7 @@ impl<Packet: Sized> Drop for JoinElementConsumer<Packet> {
         if let Err(err) = self.to_provider.try_send(None) {
             panic!("Consumer: Drop: try_send to_provider, fail?: {:?}", err);
         }
-        if let TaskParkState::Full(provider) = self.task_park.swap(TaskParkState::Dead) {
-            provider.notify();
-        }
+        die_and_notify(&self.task_park);
     }
 }
 
@@ -105,20 +103,7 @@ impl<Packet: Sized> Future for JoinElementConsumer<Packet> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             if self.to_provider.is_full() {
-                let consumer = task::current();
-                match self.task_park.swap(TaskParkState::Full(consumer)) {
-                    TaskParkState::Full(provider) => {
-                        provider.notify();
-                    }
-                    TaskParkState::Empty => {}
-                    // When TaskParkState is dead, we must self notify, and return the `task_park`
-                    // to the `Dead` state. This ensures future calls to poll won't think the
-                    // `task_park` is working.
-                    TaskParkState::Dead => {
-                        self.task_park.store(TaskParkState::Dead);
-                        task::current().notify();
-                    }
-                }
+                park_and_notify(&self.task_park);
                 return Ok(Async::NotReady);
             }
             let input_packet_option: Option<Packet> = try_ready!(self.input_stream.poll());
@@ -132,10 +117,7 @@ impl<Packet: Sized> Future for JoinElementConsumer<Packet> {
                             err
                         );
                     }
-                    if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty)
-                    {
-                        consumer.notify();
-                    }
+                    unpark_and_notify(&self.task_park);
                 }
             }
         }
@@ -169,9 +151,7 @@ impl<Packet: Sized> JoinElementProvider<Packet> {
 impl<Packet: Sized> Drop for JoinElementProvider<Packet> {
     fn drop(&mut self) {
         for task_park in self.task_parks.iter() {
-            if let TaskParkState::Full(consumer) = task_park.swap(TaskParkState::Dead) {
-                consumer.notify();
-            }
+            die_and_notify(&task_park);
         }
     }
 }
@@ -188,20 +168,7 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
         for (port, from_consumer) in after_recent.iter().enumerate() {
             match from_consumer.try_recv() {
                 Ok(Some(packet)) => {
-                    match self.task_parks[port + self.most_recent_consumer]
-                        .swap(TaskParkState::Empty)
-                    {
-                        TaskParkState::Full(consumer) => {
-                            consumer.notify();
-                        }
-                        TaskParkState::Empty => {}
-                        // Similar to the consumer, if the `task_park` is dead, we must
-                        // retain the Dead state to prevent deadlocks.
-                        TaskParkState::Dead => {
-                            self.task_parks[port + self.most_recent_consumer]
-                                .store(TaskParkState::Dead);
-                        }
-                    }
+                    unpark_and_notify(&self.task_parks[port + self.most_recent_consumer]);
                     self.most_recent_consumer += port;
                     return Ok(Async::Ready(Some(packet)));
                 }
@@ -221,17 +188,7 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
         for (port, from_consumer) in before_recent.iter().enumerate() {
             match from_consumer.try_recv() {
                 Ok(Some(packet)) => {
-                    match self.task_parks[port].swap(TaskParkState::Empty) {
-                        TaskParkState::Full(consumer) => {
-                            consumer.notify();
-                        }
-                        TaskParkState::Empty => {}
-                        // Similar to the consumer, if the `task_park` is dead, we must
-                        // retain the Dead state to prevent deadlocks.
-                        TaskParkState::Dead => {
-                            self.task_parks[port].store(TaskParkState::Dead);
-                        }
-                    }
+                    unpark_and_notify(&self.task_parks[port]);
                     self.most_recent_consumer = port;
                     return Ok(Async::Ready(Some(packet)));
                 }
@@ -248,29 +205,18 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
             }
         }
 
-        // For now, we are going to store our task handle in every task_park, since we do not have a good way to let
-        // the cosumers share one big task park. Perhaps we could use a mutexed queue, or something similar, rather than
-        // spraying the task handle to every consumer. I think the current implementation results in the provider being
-        // scheduled quite frequently.
-        let provider = task::current();
-        let mut stored_task = false;
+        // For now, we are going to store our task handle in every task_park, since we do not have
+        // a good way to let the consumers share one big task park. Perhaps we could use a mutex'd
+        // queue, or something similar, rather than spraying the task handle to every consumer.
+        // I think the current implementation results in the provider being scheduled quite frequently.
+
+        // DREW COMMENT (WILL REMOVE): This generally fits the pattern of the `park_and_notify`
+        // function, but now this chunk will self-notify on _each_ dead task_park as opposed to just
+        // once if any are dead. Given that we're considering different implementations (above) and
+        // this will only be a problem on shutdown, the simplified logic is a reasonable tradeoff
+        // for slightly worse waking behavior.
         for task_park in self.task_parks.iter() {
-            match task_park.swap(TaskParkState::Full(provider.clone())) {
-                TaskParkState::Full(consumer) => {
-                    stored_task = true;
-                    consumer.notify();
-                }
-                TaskParkState::Empty => {
-                    stored_task = true;
-                }
-                TaskParkState::Dead => {
-                    task_park.store(TaskParkState::Dead);
-                }
-            }
-        }
-        if !stored_task {
-            //if we were unable to store task at least somewhere, self notify
-            task::current().notify();
+            park_and_notify(&task_park);
         }
         Ok(Async::NotReady)
     }
