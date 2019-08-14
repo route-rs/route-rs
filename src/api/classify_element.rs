@@ -239,8 +239,29 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
+    struct ClassifyFizzBuzzElement {
+        id: i32,
+    }
+
+    impl ClassifyElement for ClassifyFizzBuzzElement {
+        type Packet = i32;
+
+        fn classify(&mut self, packet: &Self::Packet) -> usize {
+            if packet % 3 == 0 && packet % 5 == 0 {
+                0 // FizzBuzz
+            } else if packet % 3 == 0 {
+                1 // Fizz
+            } else if packet % 5 == 0 {
+                2 // Buzz
+            } else {
+                3 // other
+            }
+        }
+    }
+
     #[test]
-    fn one_classify_element() {
+    fn one_even_odd() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
@@ -255,7 +276,6 @@ mod tests {
         );
         let elem0_drain = elem0_link.consumer;
 
-        // Ordering is important since we are popping.
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
         let elem0_port1_collector =
             ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
@@ -279,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn one_classify_element_only_odd() {
+    fn one_only_odd() {
         let default_channel_size = 5;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
@@ -294,7 +314,6 @@ mod tests {
         );
         let elem0_drain = elem0_link.consumer;
 
-        // Ordering is important since we are popping.
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
         let elem0_port1_collector =
             ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
@@ -318,46 +337,149 @@ mod tests {
     }
 
     #[test]
-    fn one_classify_element_immediate_yield() {
+    fn one_even_odd_long_stream() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packet_generator = immediate_stream(0..2000);
 
-        let elem0 = ClassifyEvenOddElement { id: 0 };
+        let even_odd_elem = ClassifyEvenOddElement { id: 0 };
 
-        let mut elem0_link = ClassifyElementLink::new(
+        let mut even_odd_link = ClassifyElementLink::new(
             Box::new(packet_generator),
-            elem0,
+            even_odd_elem,
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.consumer;
+        let even_odd_drain = even_odd_link.consumer;
 
-        // Ordering is important since we are popping.
-        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
+        let (s1, odd_collector_output) = crossbeam_channel::unbounded();
+        let odd_collector =
+            ExhaustiveCollector::new(0, Box::new(even_odd_link.providers.pop().unwrap()), s1);
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s0);
+        let (s0, even_collector_output) = crossbeam_channel::unbounded();
+        let even_collector =
+            ExhaustiveCollector::new(0, Box::new(even_odd_link.providers.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
-            tokio::spawn(elem0_port1_collector);
+            tokio::spawn(even_odd_drain);
+            tokio::spawn(even_collector);
+            tokio::spawn(odd_collector);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(elem0_port0_output.len(), 1000);
+        let even_output: Vec<_> = even_collector_output.iter().collect();
+        assert_eq!(even_output.len(), 1000);
 
-        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(elem0_port1_output.len(), 1000);
+        let odd_output: Vec<_> = odd_collector_output.iter().collect();
+        assert_eq!(odd_output.len(), 1000);
     }
 
     #[test]
-    fn one_classify_element_wait_between_packets() {
+    fn one_fizz_buzz() {
+        let default_channel_size = 10;
+        let packet_generator = immediate_stream(0..=30);
+
+        let elem = ClassifyFizzBuzzElement { id: 0 };
+
+        let mut elem_link =
+            ClassifyElementLink::new(Box::new(packet_generator), elem, default_channel_size, 4);
+        let elem_drain = elem_link.consumer;
+
+        let (s3, other_output) = crossbeam_channel::unbounded();
+        let port3_collector =
+            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s3);
+
+        let (s2, buzz_output) = crossbeam_channel::unbounded();
+        let port2_collector =
+            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s2);
+
+        let (s1, fizz_output) = crossbeam_channel::unbounded();
+        let port1_collector =
+            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s1);
+
+        let (s0, fizz_buzz_output) = crossbeam_channel::unbounded();
+        let port0_collector =
+            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s0);
+
+        tokio::run(lazy(|| {
+            tokio::spawn(elem_drain);
+            tokio::spawn(port0_collector);
+            tokio::spawn(port1_collector);
+            tokio::spawn(port2_collector);
+            tokio::spawn(port3_collector);
+            Ok(())
+        }));
+
+        let actual_fizz_buzz = fizz_buzz_output.iter().collect::<Vec<i32>>();
+        let expected_fizz_buzz = vec![0, 15, 30];
+        assert_eq!(expected_fizz_buzz, actual_fizz_buzz);
+
+        let actual_fizz = fizz_output.iter().collect::<Vec<i32>>();
+        let expected_fizz = vec![3, 6, 9, 12, 18, 21, 24, 27];
+        assert_eq!(expected_fizz, actual_fizz);
+
+        let actual_buzz = buzz_output.iter().collect::<Vec<i32>>();
+        let expected_buzz = vec![5, 10, 20, 25];
+        assert_eq!(expected_buzz, actual_buzz);
+
+        let actual_other = other_output.iter().collect::<Vec<i32>>();
+        let expected_other = vec![1, 2, 4, 7, 8, 11, 13, 14, 16, 17, 19, 22, 23, 26, 28, 29];
+        assert_eq!(expected_other, actual_other);
+    }
+
+    #[test]
+    fn fizz_buzz_to_even_odd() {
+        let default_channel_size = 10;
+        let packet_generator = immediate_stream(0..=30);
+
+        let fizz_buzz_elem = ClassifyFizzBuzzElement { id: 0 };
+
+        let mut fizz_buzz_elem_link: ClassifyElementLink<ClassifyFizzBuzzElement> =
+            ClassifyElementLink::new(
+                Box::new(packet_generator),
+                fizz_buzz_elem,
+                default_channel_size,
+                4,
+            );
+        let fizz_buzz_drain = fizz_buzz_elem_link.consumer;
+
+        let even_odd_elem = ClassifyEvenOddElement { id: 0 };
+
+        let mut even_odd_elem_link: ClassifyElementLink<ClassifyEvenOddElement> =
+            ClassifyElementLink::new(
+                Box::new(fizz_buzz_elem_link.providers.pop().unwrap()),
+                even_odd_elem,
+                default_channel_size,
+                2,
+            );
+
+        let even_odd_drain = even_odd_elem_link.consumer;
+
+        let (s1, odd_collector_output) = crossbeam_channel::unbounded();
+        let odd_collector =
+            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.providers.pop().unwrap()), s1);
+
+        let (s0, even_collector_output) = crossbeam_channel::unbounded();
+        let even_collector =
+            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.providers.pop().unwrap()), s0);
+
+        tokio::run(lazy(|| {
+            tokio::spawn(fizz_buzz_drain);
+            tokio::spawn(even_odd_drain);
+            tokio::spawn(even_collector);
+            tokio::spawn(odd_collector);
+            Ok(())
+        }));
+
+        let actual_evens = even_collector_output.iter().collect::<Vec<i32>>();
+        assert_eq!(actual_evens, vec![2, 4, 8, 14, 16, 22, 26, 28]);
+
+        let actual_odds = odd_collector_output.iter().collect::<Vec<i32>>();
+        assert_eq!(actual_odds, vec![1, 7, 11, 13, 17, 19, 23, 29]);
+    }
+
+    #[test]
+    fn one_even_odd_wait_between_packets() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
@@ -377,7 +499,6 @@ mod tests {
 
         let elem0_drain = elem0_link.consumer;
 
-        // Ordering is important since we are popping.
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
         let elem0_port1_collector =
             ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
