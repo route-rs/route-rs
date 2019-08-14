@@ -246,39 +246,12 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::element::{Element, ElementLink};
+    use crate::api::element::ElementLink;
+    use crate::utils::test::identity_elements::{AsyncIdentityElement, IdentityElement};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
     use futures::future::lazy;
-
-    #[allow(dead_code)]
-    struct IdentityElement {
-        id: i32,
-    }
-
-    impl Element for IdentityElement {
-        type Input = i32;
-        type Output = i32;
-
-        fn process(&mut self, packet: Self::Input) -> Self::Output {
-            packet
-        }
-    }
-
-    #[allow(dead_code)]
-    struct AsyncIdentityElement {
-        id: i32,
-    }
-
-    impl AsyncElement for AsyncIdentityElement {
-        type Input = i32;
-        type Output = i32;
-
-        fn process(&mut self, packet: Self::Input) -> Self::Output {
-            packet
-        }
-    }
 
     #[test]
     fn one_async_element() {
@@ -286,7 +259,7 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem0 = AsyncIdentityElement::new(0);
 
         let elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
@@ -310,7 +283,7 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = immediate_stream(0..2000);
 
-        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem0 = AsyncIdentityElement::new(0);
 
         let elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
@@ -333,10 +306,10 @@ mod tests {
     #[should_panic(expected = "queue capacity must be non-zero")]
     fn one_async_element_empty_channel() {
         let default_channel_size = 0;
-        let packets = vec![];
+        let packets: Vec<i32> = vec![];
         let packet_generator = immediate_stream(packets);
 
-        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem0 = AsyncIdentityElement::new(0);
 
         let _elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
@@ -351,7 +324,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem0 = AsyncIdentityElement::new(0);
 
         let elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
@@ -373,10 +346,10 @@ mod tests {
     #[test]
     fn one_async_element_empty_stream() {
         let default_channel_size = 10;
-        let packets = vec![];
+        let packets: Vec<i32> = vec![];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem0 = AsyncIdentityElement::new(0);
 
         let elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
@@ -401,8 +374,8 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = AsyncIdentityElement { id: 0 };
-        let elem1 = AsyncIdentityElement { id: 1 };
+        let elem0 = AsyncIdentityElement::new(0);
+        let elem1 = AsyncIdentityElement::new(1);
 
         let elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
@@ -432,10 +405,10 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = IdentityElement { id: 0 };
-        let elem1 = AsyncIdentityElement { id: 1 };
-        let elem2 = IdentityElement { id: 2 };
-        let elem3 = AsyncIdentityElement { id: 3 };
+        let elem0 = IdentityElement::new(0);
+        let elem1 = AsyncIdentityElement::new(1);
+        let elem2 = IdentityElement::new(2);
+        let elem3 = AsyncIdentityElement::new(3);
 
         let elem0_link = ElementLink::new(Box::new(packet_generator), elem0);
         let elem1_link = AsyncElementLink::new(Box::new(elem0_link), elem1, default_channel_size);
@@ -468,7 +441,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem0 = AsyncIdentityElement { id: 0 };
+        let elem0 = AsyncIdentityElement::new(0);
 
         let elem0_link =
             AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
