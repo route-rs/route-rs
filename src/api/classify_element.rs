@@ -1,9 +1,9 @@
+use crate::api::task_park::*;
 use crate::api::ElementStream;
-use crate::api::TaskParkState;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
-use futures::{task, Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 pub trait ClassifyElement {
@@ -94,9 +94,7 @@ impl<E: ClassifyElement> Drop for ClassifyElementConsumer<E> {
         }
 
         for task_park in self.task_parks.iter() {
-            if let TaskParkState::Full(provider) = task_park.swap(TaskParkState::Dead) {
-                provider.notify();
-            }
+            die_and_notify(&task_park);
         }
     }
 }
@@ -113,17 +111,7 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
         loop {
             for (port, to_provider) in self.to_providers.iter().enumerate() {
                 if to_provider.is_full() {
-                    let consumer = task::current();
-                    match self.task_parks[port].swap(TaskParkState::Full(consumer)) {
-                        TaskParkState::Full(provider) => {
-                            provider.notify();
-                        }
-                        TaskParkState::Empty => {}
-                        TaskParkState::Dead => {
-                            self.task_parks[port].store(TaskParkState::Dead);
-                            task::current().notify();
-                        }
-                    }
+                    park_and_notify(&self.task_parks[port]);
                     return Ok(Async::NotReady);
                 }
             }
@@ -142,11 +130,7 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
                             port, err
                         );
                     }
-                    if let TaskParkState::Full(provider) =
-                        self.task_parks[port].swap(TaskParkState::Empty)
-                    {
-                        provider.notify();
-                    }
+                    unpark_and_notify(&self.task_parks[port]);
                 }
             }
         }
@@ -175,9 +159,7 @@ impl<E: ClassifyElement> ClassifyElementProvider<E> {
 
 impl<E: ClassifyElement> Drop for ClassifyElementProvider<E> {
     fn drop(&mut self) {
-        if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Dead) {
-            consumer.notify();
-        }
+        die_and_notify(&self.task_park);
     }
 }
 
@@ -194,7 +176,7 @@ impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
     /// an until-now full channel) to be awoken, wake them. Return the Async::Ready(Option(Packet))
     ///
     /// #2 Ok(None): this means that the consumer is in tear-down, and we
-    /// will no longer be receivig packets. Return Async::Ready(None) to forward propagate teardown
+    /// will no longer be receiving packets. Return Async::Ready(None) to forward propagate teardown
     ///
     /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the consumer to awaken us with more
     /// work, and return Async::NotReady to signal to runtime to sleep this task.
@@ -206,24 +188,12 @@ impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.from_consumer.try_recv() {
             Ok(Some(packet)) => {
-                if let TaskParkState::Full(consumer) = self.task_park.swap(TaskParkState::Empty) {
-                    consumer.notify();
-                }
+                unpark_and_notify(&self.task_park);
                 Ok(Async::Ready(Some(packet)))
             }
             Ok(None) => Ok(Async::Ready(None)),
             Err(TryRecvError::Empty) => {
-                let provider = task::current();
-                match self.task_park.swap(TaskParkState::Full(provider)) {
-                    TaskParkState::Full(consumer) => {
-                        consumer.notify();
-                    }
-                    TaskParkState::Empty => {}
-                    TaskParkState::Dead => {
-                        self.task_park.store(TaskParkState::Dead);
-                        task::current().notify();
-                    }
-                }
+                park_and_notify(&self.task_park);
                 Ok(Async::NotReady)
             }
             Err(TryRecvError::Disconnected) => Ok(Async::Ready(None)),
