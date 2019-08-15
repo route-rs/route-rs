@@ -1,17 +1,11 @@
-use crate::api::task_park::*;
-use crate::api::ElementStream;
+use crate::element::AsyncElement;
+use crate::link::task_park::*;
+use crate::link::PacketStream;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
-
-pub trait AsyncElement {
-    type Input: Sized;
-    type Output: Sized;
-
-    fn process(&mut self, packet: Self::Input) -> Self::Output;
-}
 
 /// The AsyncElementLink is a wrapper to create and contain both sides of the
 /// link, the consumer, which intakes and processes packets, and the provider,
@@ -23,7 +17,7 @@ pub struct AsyncElementLink<E: AsyncElement> {
 }
 
 impl<E: AsyncElement> AsyncElementLink<E> {
-    pub fn new(input_stream: ElementStream<E::Input>, element: E, queue_capacity: usize) -> Self {
+    pub fn new(input_stream: PacketStream<E::Input>, element: E, queue_capacity: usize) -> Self {
         if queue_capacity == 0 {
             panic!("queue capacity must be non-zero")
         }
@@ -52,7 +46,7 @@ impl<E: AsyncElement> AsyncElementLink<E> {
 /// after which it will return NotReady to sleep. This is handed to, and is
 /// polled by the runtime.
 pub struct AsyncElementConsumer<E: AsyncElement> {
-    input_stream: ElementStream<E::Input>,
+    input_stream: PacketStream<E::Input>,
     to_provider: Sender<Option<E::Output>>,
     element: E,
     task_park: Arc<AtomicCell<TaskParkState>>,
@@ -60,7 +54,7 @@ pub struct AsyncElementConsumer<E: AsyncElement> {
 
 impl<E: AsyncElement> AsyncElementConsumer<E> {
     fn new(
-        input_stream: ElementStream<E::Input>,
+        input_stream: PacketStream<E::Input>,
         to_provider: Sender<Option<E::Output>>,
         element: E,
         task_park: Arc<AtomicCell<TaskParkState>>,
@@ -212,7 +206,7 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::element::ElementLink;
+    use crate::link::sync_link::ElementLink;
     use crate::utils::test::identity_elements::{AsyncIdentityElement, IdentityElement};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};

@@ -1,11 +1,11 @@
-use crate::api::ElementStream;
+use crate::link::PacketStream;
 use futures::{stream, Async, Poll, Stream};
 use std::time::Duration;
 use tokio::timer::Interval;
 
 // Immediately yields a collection of packets to be poll'd.
 // Thin wrapper around iter_ok.
-pub fn immediate_stream<I>(collection: I) -> ElementStream<I::Item>
+pub fn immediate_stream<I>(collection: I) -> PacketStream<I::Item>
 where
     I: IntoIterator,
     I::IntoIter: Send + 'static,

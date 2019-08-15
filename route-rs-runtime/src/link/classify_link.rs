@@ -1,16 +1,11 @@
-use crate::api::task_park::*;
-use crate::api::ElementStream;
+use crate::element::ClassifyElement;
+use crate::link::task_park::*;
+use crate::link::PacketStream;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
-
-pub trait ClassifyElement {
-    type Packet: Sized;
-
-    fn classify(&mut self, packet: &Self::Packet) -> usize;
-}
 
 pub struct ClassifyElementLink<E: ClassifyElement> {
     pub consumer: ClassifyElementConsumer<E>,
@@ -19,7 +14,7 @@ pub struct ClassifyElementLink<E: ClassifyElement> {
 
 impl<E: ClassifyElement> ClassifyElementLink<E> {
     pub fn new(
-        input_stream: ElementStream<E::Packet>,
+        input_stream: PacketStream<E::Packet>,
         element: E,
         queue_capacity: usize,
         branches: usize,
@@ -62,7 +57,7 @@ impl<E: ClassifyElement> ClassifyElementLink<E> {
 }
 
 pub struct ClassifyElementConsumer<E: ClassifyElement> {
-    input_stream: ElementStream<E::Packet>,
+    input_stream: PacketStream<E::Packet>,
     to_providers: Vec<Sender<Option<E::Packet>>>,
     element: E,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
@@ -70,7 +65,7 @@ pub struct ClassifyElementConsumer<E: ClassifyElement> {
 
 impl<E: ClassifyElement> ClassifyElementConsumer<E> {
     fn new(
-        input_stream: ElementStream<E::Packet>,
+        input_stream: PacketStream<E::Packet>,
         to_providers: Vec<Sender<Option<E::Packet>>>,
         element: E,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
@@ -204,7 +199,7 @@ impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::element::Element;
+    use crate::element::Element;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
