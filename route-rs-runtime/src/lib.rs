@@ -5,4 +5,5 @@ extern crate tokio;
 
 pub mod element;
 pub mod link;
+pub mod pipeline;
 mod utils;
