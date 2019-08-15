@@ -54,7 +54,7 @@ impl<E: Element> Stream for ElementLink<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::identity_elements::IdentityElement;
+    use crate::element::IdentityElement;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -69,8 +69,8 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem1 = IdentityElement::new(0);
-        let elem2 = IdentityElement::new(1);
+        let elem1 = IdentityElement::new();
+        let elem2 = IdentityElement::new();
 
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
@@ -92,8 +92,8 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem1 = IdentityElement::new(0);
-        let elem2 = IdentityElement::new(1);
+        let elem1 = IdentityElement::new();
+        let elem2 = IdentityElement::new();
 
         let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
         let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
