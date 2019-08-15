@@ -199,27 +199,12 @@ impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::Element;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
     use crossbeam::crossbeam_channel;
 
     use futures::future::lazy;
-
-    #[allow(dead_code)]
-    struct IdentityElement {
-        id: i32,
-    }
-
-    impl Element for IdentityElement {
-        type Input = i32;
-        type Output = i32;
-
-        fn process(&mut self, packet: Self::Input) -> Self::Output {
-            packet
-        }
-    }
 
     #[allow(dead_code)]
     struct ClassifyEvenOddElement {

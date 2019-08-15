@@ -4,15 +4,14 @@ use std::marker::PhantomData;
 /* IdentityElement
   This is an element that passes what it has received
 */
+#[derive(Default)]
 pub struct IdentityElement<A: Sized> {
-    id: i32,
     phantom: PhantomData<A>,
 }
 
 impl<A> IdentityElement<A> {
-    pub fn new(id: i32) -> IdentityElement<A> {
+    pub fn new() -> IdentityElement<A> {
         IdentityElement {
-            id,
             phantom: PhantomData,
         }
     }
@@ -30,15 +29,14 @@ impl<A> Element for IdentityElement<A> {
 /* AsyncIdentityElement
   This is an async element that passes what it has received
 */
+#[derive(Default)]
 pub struct AsyncIdentityElement<A: Sized> {
-    id: i32,
     phantom: PhantomData<A>,
 }
 
 impl<A> AsyncIdentityElement<A> {
-    pub fn new(id: i32) -> AsyncIdentityElement<A> {
+    pub fn new() -> AsyncIdentityElement<A> {
         AsyncIdentityElement {
-            id,
             phantom: PhantomData,
         }
     }
