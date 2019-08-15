@@ -1,10 +1,4 @@
-[package]
-name = "route-rs"
-version = "0.1.0"
-authors = ["Collin Valley <collin.valley@gmail.com>"]
-edition = "2018"
-
-[dependencies]
-tokio = "*"
-futures = "*"
-crossbeam = "*"
+[workspace]
+members = [
+    "route-rs-runtime",
+]
