@@ -1,4 +1,4 @@
-use crate::api::{AsyncElement, Element};
+use crate::element::{AsyncElement, Element};
 use std::marker::PhantomData;
 
 /* IdentityElement

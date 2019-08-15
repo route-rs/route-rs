@@ -1,5 +1,5 @@
-use crate::api::task_park::*;
-use crate::api::ElementStream;
+use crate::link::task_park::*;
+use crate::link::PacketStream;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
@@ -12,7 +12,7 @@ pub struct JoinElementLink<Packet: Sized> {
 }
 
 impl<Packet: Sized> JoinElementLink<Packet> {
-    pub fn new(input_streams: Vec<ElementStream<Packet>>, queue_capacity: usize) -> Self {
+    pub fn new(input_streams: Vec<PacketStream<Packet>>, queue_capacity: usize) -> Self {
         assert!(
             input_streams.len() <= 1000,
             format!("input_steams len {} > 1000", input_streams.len())
@@ -51,14 +51,14 @@ impl<Packet: Sized> JoinElementLink<Packet> {
 }
 
 pub struct JoinElementConsumer<Packet: Sized> {
-    input_stream: ElementStream<Packet>,
+    input_stream: PacketStream<Packet>,
     to_provider: Sender<Option<Packet>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
 impl<Packet: Sized> JoinElementConsumer<Packet> {
     fn new(
-        input_stream: ElementStream<Packet>,
+        input_stream: PacketStream<Packet>,
         to_provider: Sender<Option<Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
@@ -240,7 +240,7 @@ mod tests {
         let packet_generator0 = immediate_stream(packets.clone());
         let packet_generator1 = immediate_stream(packets.clone());
 
-        let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
@@ -268,7 +268,7 @@ mod tests {
         let packet_generator0 = immediate_stream(0..=2000);
         let packet_generator1 = immediate_stream(0..=2000);
 
-        let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
@@ -299,7 +299,7 @@ mod tests {
         let packet_generator3 = immediate_stream(0..=2000);
         let packet_generator4 = immediate_stream(0..=2000);
 
-        let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
         input_streams.push(Box::new(packet_generator2));
@@ -343,7 +343,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let mut input_streams: Vec<ElementStream<usize>> = Vec::new();
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 

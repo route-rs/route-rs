@@ -1,15 +1,15 @@
-use crate::api::ElementStream;
+use crate::link::PacketStream;
 use crossbeam::crossbeam_channel::Sender;
 use futures::{Async, Future, Poll};
 use std::fmt::Debug;
 
 pub struct ExhaustiveDrain<T: Debug> {
     id: usize,
-    stream: ElementStream<T>,
+    stream: PacketStream<T>,
 }
 
 impl<T: Debug> ExhaustiveDrain<T> {
-    pub fn new(id: usize, stream: ElementStream<T>) -> Self {
+    pub fn new(id: usize, stream: PacketStream<T>) -> Self {
         ExhaustiveDrain { id, stream }
     }
 }
@@ -33,12 +33,12 @@ impl<T: Debug> Future for ExhaustiveDrain<T> {
 /// may be compared in a test.
 pub struct ExhaustiveCollector<T: Debug> {
     id: usize,
-    stream: ElementStream<T>,
+    stream: PacketStream<T>,
     packet_dump: Sender<T>,
 }
 
 impl<T: Debug> ExhaustiveCollector<T> {
-    pub fn new(id: usize, stream: ElementStream<T>, packet_dump: Sender<T>) -> Self {
+    pub fn new(id: usize, stream: PacketStream<T>, packet_dump: Sender<T>) -> Self {
         ExhaustiveCollector {
             id,
             stream,

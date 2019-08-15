@@ -1,20 +1,14 @@
-use crate::api::ElementStream;
+use crate::element::Element;
+use crate::link::PacketStream;
 use futures::{Async, Poll, Stream};
 
-pub trait Element {
-    type Input: Sized;
-    type Output: Sized;
-
-    fn process(&mut self, packet: Self::Input) -> Self::Output;
-}
-
 pub struct ElementLink<E: Element> {
-    input_stream: ElementStream<E::Input>,
+    input_stream: PacketStream<E::Input>,
     element: E,
 }
 
 impl<E: Element> ElementLink<E> {
-    pub fn new(input_stream: ElementStream<E::Input>, element: E) -> Self {
+    pub fn new(input_stream: PacketStream<E::Input>, element: E) -> Self {
         ElementLink {
             input_stream,
             element,
