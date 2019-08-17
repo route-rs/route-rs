@@ -3,7 +3,7 @@ use crate::link::PacketStream;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
-use futures::{Async, Future, Poll, Stream};
+use futures::{task, Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 pub struct JoinElementLink<Packet: Sized> {
@@ -205,18 +205,19 @@ impl<Packet: Sized> Stream for JoinElementProvider<Packet> {
             }
         }
 
-        // For now, we are going to store our task handle in every task_park, since we do not have
-        // a good way to let the consumers share one big task park. Perhaps we could use a mutex'd
-        // queue, or something similar, rather than spraying the task handle to every consumer.
-        // I think the current implementation results in the provider being scheduled quite frequently.
-
-        // DREW COMMENT (WILL REMOVE): This generally fits the pattern of the `park_and_notify`
-        // function, but now this chunk will self-notify on _each_ dead task_park as opposed to just
-        // once if any are dead. Given that we're considering different implementations (above) and
-        // this will only be a problem on shutdown, the simplified logic is a reasonable tradeoff
-        // for slightly worse waking behavior.
+        // We could not get a packet from any of our consumers, this means we will park our task in a
+        // common location, and then hand out Arcs to all the consumers to the common location. The first
+        // one to access the provider task will awaken us, so we can continue providing packets.
+        let mut parked_consumer_task = false;
+        let provider_task = Arc::new(AtomicCell::new(Some(task::current())));
         for task_park in self.task_parks.iter() {
-            park_and_notify(&task_park);
+            if indirect_park_and_notify(&task_park, Arc::clone(&provider_task)) {
+                parked_consumer_task = true;
+            }
+        }
+        //we were unable to park task, so we must self notify, presumably all the consumers are dead.
+        if !parked_consumer_task {
+            task::current().notify();
         }
         Ok(Async::NotReady)
     }
