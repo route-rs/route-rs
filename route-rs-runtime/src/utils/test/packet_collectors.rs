@@ -55,12 +55,9 @@ impl<T: Debug> Future for ExhaustiveCollector<T> {
         loop {
             match try_ready!(self.stream.poll()) {
                 Some(value) => {
-                    if let Err(err) = self.packet_dump.try_send(value) {
-                        panic!(
-                            "Exhaustive Collector: Error sending to packet dump: {:?}",
-                            err
-                        );
-                    };
+                    self.packet_dump
+                        .try_send(value)
+                        .expect("Exhaustive Collector: Error sending to packet dump");
                 }
                 None => return Ok(Async::Ready(())),
             }

@@ -29,11 +29,10 @@ impl<Output> Future for OutputChannelLink<Output> {
             }
 
             match try_ready!(self.input_stream.poll()) {
-                Some(packet) => {
-                    if let Err(err) = self.output_channel.try_send(packet) {
-                        panic!("OutputChannelLink: Error sending to channel: {:?}", err);
-                    }
-                }
+                Some(packet) => self
+                    .output_channel
+                    .try_send(packet)
+                    .expect("OutputChannelLink::Poll: try_send to_egressor shouldn't fail"),
                 None => return Ok(Async::Ready(())),
             }
         }

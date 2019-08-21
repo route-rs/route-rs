@@ -72,9 +72,9 @@ impl<Packet: Sized> JoinIngressor<Packet> {
 
 impl<Packet: Sized> Drop for JoinIngressor<Packet> {
     fn drop(&mut self) {
-        if let Err(err) = self.to_egressor.try_send(None) {
-            panic!("Ingressor: Drop: try_send to_egressor, fail?: {:?}", err);
-        }
+        self.to_egressor
+            .try_send(None)
+            .expect("JoinIngressor::Drop: try_send to_egressor shouldn't fail");
         die_and_notify(&self.task_park);
     }
 }
@@ -111,12 +111,9 @@ impl<Packet: Sized> Future for JoinIngressor<Packet> {
             match input_packet_option {
                 None => return Ok(Async::Ready(())),
                 Some(packet) => {
-                    if let Err(err) = self.to_egressor.try_send(Some(packet)) {
-                        panic!(
-                            "Error in to_egressor sender, have nowhere to put packet: {:?}",
-                            err
-                        );
-                    }
+                    self.to_egressor
+                        .try_send(Some(packet))
+                        .expect("JoinIngressor::Poll: try_send to_egressor shouldn't fail");
                     unpark_and_notify(&self.task_park);
                 }
             }

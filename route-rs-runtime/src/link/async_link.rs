@@ -82,9 +82,9 @@ impl<E: AsyncElement> AsyncIngressor<E> {
 /// it in the future.
 impl<E: AsyncElement> Drop for AsyncIngressor<E> {
     fn drop(&mut self) {
-        if let Err(err) = self.to_egressor.try_send(None) {
-            panic!("Ingressor: Drop: try_send to_Egressor, fail?: {:?}", err);
-        }
+        self.to_egressor
+            .try_send(None)
+            .expect("AsyncIngressor::Drop: try_send to_egressor shouldn't fail");
         die_and_notify(&self.task_park);
     }
 }
@@ -122,12 +122,9 @@ impl<E: AsyncElement> Future for AsyncIngressor<E> {
                 None => return Ok(Async::Ready(())),
                 Some(input_packet) => {
                     let output_packet: E::Output = self.element.process(input_packet);
-                    if let Err(err) = self.to_egressor.try_send(Some(output_packet)) {
-                        panic!(
-                            "Error in to_egressor sender, have nowhere to put packet: {:?}",
-                            err
-                        );
-                    }
+                    self.to_egressor
+                        .try_send(Some(output_packet))
+                        .expect("AsyncIngressor::Poll: try_send to_egressor shouldn't fail");
                     unpark_and_notify(&self.task_park);
                 }
             }
