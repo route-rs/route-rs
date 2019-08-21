@@ -12,6 +12,9 @@ pub use self::classify_link::*;
 mod join_link;
 pub use self::join_link::*;
 
+mod tee_link;
+pub use self::tee_link::*;
+
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
 
 mod task_park;
