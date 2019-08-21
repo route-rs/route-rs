@@ -83,11 +83,10 @@ impl<E: ClassifyElement> Drop for ClassifyIngressor<E> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
-            if let Err(err) = to_egressor.try_send(None) {
-                panic!("ingressor: Drop: try_send to provider, fail?: {:?}", err);
-            }
+            to_egressor
+                .try_send(None)
+                .expect("ClassifyIngressor::Drop: try_send to_egressor shouldn't fail");
         }
-
         for task_park in self.task_parks.iter() {
             die_and_notify(&task_park);
         }
