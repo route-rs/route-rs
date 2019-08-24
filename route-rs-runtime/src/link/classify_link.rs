@@ -7,12 +7,12 @@ use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-pub struct ClassifyElementLink<E: ClassifyElement> {
-    pub consumer: ClassifyElementConsumer<E>,
-    pub providers: Vec<ClassifyElementProvider<E>>,
+pub struct ClassifyLink<E: ClassifyElement> {
+    pub ingressor: ClassifyIngressor<E>,
+    pub egressors: Vec<ClassifyEgressor<E>>,
 }
 
-impl<E: ClassifyElement> ClassifyElementLink<E> {
+impl<E: ClassifyElement> ClassifyLink<E> {
     pub fn new(
         input_stream: PacketStream<E::Packet>,
         element: E,
@@ -29,63 +29,62 @@ impl<E: ClassifyElement> ClassifyElementLink<E> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        let mut to_providers: Vec<Sender<Option<E::Packet>>> = Vec::new();
-        let mut providers: Vec<ClassifyElementProvider<E>> = Vec::new();
+        let mut to_egressors: Vec<Sender<Option<E::Packet>>> = Vec::new();
+        let mut egressors: Vec<ClassifyEgressor<E>> = Vec::new();
 
-        let mut from_consumers: Vec<Receiver<Option<E::Packet>>> = Vec::new();
+        let mut from_ingressors: Vec<Receiver<Option<E::Packet>>> = Vec::new();
 
         let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
         for _ in 0..branches {
-            let (to_provider, from_consumer) =
+            let (to_egressor, from_ingressor) =
                 crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-            let provider =
-                ClassifyElementProvider::new(from_consumer.clone(), Arc::clone(&task_park));
+            let provider = ClassifyEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
 
-            to_providers.push(to_provider);
-            providers.push(provider);
-            from_consumers.push(from_consumer);
+            to_egressors.push(to_egressor);
+            egressors.push(provider);
+            from_ingressors.push(from_ingressor);
             task_parks.push(task_park);
         }
 
-        ClassifyElementLink {
-            consumer: ClassifyElementConsumer::new(input_stream, to_providers, element, task_parks),
-            providers,
+        ClassifyLink {
+            ingressor: ClassifyIngressor::new(input_stream, to_egressors, element, task_parks),
+            egressors,
         }
     }
 }
 
-pub struct ClassifyElementConsumer<E: ClassifyElement> {
+pub struct ClassifyIngressor<E: ClassifyElement> {
     input_stream: PacketStream<E::Packet>,
-    to_providers: Vec<Sender<Option<E::Packet>>>,
+    to_egressors: Vec<Sender<Option<E::Packet>>>,
     element: E,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
-impl<E: ClassifyElement> ClassifyElementConsumer<E> {
+impl<E: ClassifyElement> ClassifyIngressor<E> {
     fn new(
         input_stream: PacketStream<E::Packet>,
-        to_providers: Vec<Sender<Option<E::Packet>>>,
+        to_egressors: Vec<Sender<Option<E::Packet>>>,
         element: E,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
-        ClassifyElementConsumer {
+        ClassifyIngressor {
             input_stream,
-            to_providers,
+            to_egressors,
             element,
             task_parks,
         }
     }
 }
 
-impl<E: ClassifyElement> Drop for ClassifyElementConsumer<E> {
+impl<E: ClassifyElement> Drop for ClassifyIngressor<E> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
-        for to_provider in self.to_providers.iter() {
-            if let Err(err) = to_provider.try_send(None) {
-                panic!("Consumer: Drop: try_send to provider, fail?: {:?}", err);
+        for to_egressor in self.to_egressors.iter() {
+            if let Err(err) = to_egressor.try_send(None) {
+                panic!("ingressor: Drop: try_send to provider, fail?: {:?}", err);
             }
         }
 
@@ -95,18 +94,18 @@ impl<E: ClassifyElement> Drop for ClassifyElementConsumer<E> {
     }
 }
 
-impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
+impl<E: ClassifyElement> Future for ClassifyIngressor<E> {
     type Item = ();
     type Error = ();
 
-    /// Same logic as AsyncElementConsumer, except if any of the channels are full we
+    /// Same logic as AsyncEgressor, except if any of the channels are full we
     /// await that channel to clear before processing a new packet. This is somewhat
     /// inefficient, but seems acceptable for now since we want to yield compute to
-    /// that producer, as there is a backup.
+    /// that egressor, as there is a backup in its queue.
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            for (port, to_provider) in self.to_providers.iter().enumerate() {
-                if to_provider.is_full() {
+            for (port, to_egressor) in self.to_egressors.iter().enumerate() {
+                if to_egressor.is_full() {
                     park_and_notify(&self.task_parks[port]);
                     return Ok(Async::NotReady);
                 }
@@ -117,12 +116,12 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
                 None => return Ok(Async::Ready(())),
                 Some(packet) => {
                     let port = self.element.classify(&packet);
-                    if port >= self.to_providers.len() {
+                    if port >= self.to_egressors.len() {
                         panic!("Tried to access invalid port: {}", port);
                     }
-                    if let Err(err) = self.to_providers[port].try_send(Some(packet)) {
+                    if let Err(err) = self.to_egressors[port].try_send(Some(packet)) {
                         panic!(
-                            "Error in to_providers[{}] sender, have nowhere to put packet: {:?}",
+                            "Error in to_egressors[{}] sender, have nowhere to put packet: {:?}",
                             port, err
                         );
                     }
@@ -136,53 +135,53 @@ impl<E: ClassifyElement> Future for ClassifyElementConsumer<E> {
 /// Classify Element Provider, exactly the same as AsyncElementProvider, but
 /// they have different trait bounds. Hence the reimplementaton. Would love
 /// a PR that solves this problem.
-pub struct ClassifyElementProvider<E: ClassifyElement> {
-    from_consumer: crossbeam_channel::Receiver<Option<E::Packet>>,
+pub struct ClassifyEgressor<E: ClassifyElement> {
+    from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: ClassifyElement> ClassifyElementProvider<E> {
+impl<E: ClassifyElement> ClassifyEgressor<E> {
     fn new(
-        from_consumer: crossbeam_channel::Receiver<Option<E::Packet>>,
+        from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
-        ClassifyElementProvider {
-            from_consumer,
+        ClassifyEgressor {
+            from_ingressor,
             task_park,
         }
     }
 }
 
-impl<E: ClassifyElement> Drop for ClassifyElementProvider<E> {
+impl<E: ClassifyElement> Drop for ClassifyEgressor<E> {
     fn drop(&mut self) {
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: ClassifyElement> Stream for ClassifyElementProvider<E> {
+impl<E: ClassifyElement> Stream for ClassifyEgressor<E> {
     type Item = E::Packet;
     type Error = ();
 
-    /// Implement Poll for Stream for ClassifyElementProvider
+    /// Implement Poll for Stream for ClassifyEgressor
     ///
-    /// This function, tries to retrieve a packet off the `from_consumer`
+    /// This function, tries to retrieve a packet off the `from_ingressor`
     /// channel, there are four cases:
     /// ###
-    /// #1 Ok(Some(Packet)): Got a packet. If the consumer needs, (likely due to
+    /// #1 Ok(Some(Packet)): Got a packet. If the ingressor needs, (likely due to
     /// an until-now full channel) to be awoken, wake them. Return the Async::Ready(Option(Packet))
     ///
-    /// #2 Ok(None): this means that the consumer is in tear-down, and we
+    /// #2 Ok(None): this means that the ingressor is in tear-down, and we
     /// will no longer be receiving packets. Return Async::Ready(None) to forward propagate teardown
     ///
-    /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the consumer to awaken us with more
+    /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the ingressor to awaken us with more
     /// work, and return Async::NotReady to signal to runtime to sleep this task.
     ///
-    /// #4 Err(TryRecvError::Disconnected): Consumer is in teardown and has dropped its side of the
-    /// from_consumer channel; we will no longer receive packets. Return Async::Ready(None) to forward
+    /// #4 Err(TryRecvError::Disconnected): ingressor is in teardown and has dropped its side of the
+    /// from_ingressor channel; we will no longer receive packets. Return Async::Ready(None) to forward
     /// propagate teardown.
     /// ###
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.from_consumer.try_recv() {
+        match self.from_ingressor.try_recv() {
             Ok(Some(packet)) => {
                 unpark_and_notify(&self.task_park);
                 Ok(Async::Ready(Some(packet)))
@@ -249,21 +248,21 @@ mod tests {
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
-        let mut elem0_link = ClassifyElementLink::new(
+        let mut elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.consumer;
+        let elem0_drain = elem0_link.ingressor;
 
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
         let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
 
         let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
         let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -287,21 +286,21 @@ mod tests {
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
-        let mut elem0_link = ClassifyElementLink::new(
+        let mut elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.consumer;
+        let elem0_drain = elem0_link.ingressor;
 
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
         let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
 
         let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
         let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -325,21 +324,21 @@ mod tests {
 
         let even_odd_elem = ClassifyEvenOddElement { id: 0 };
 
-        let mut even_odd_link = ClassifyElementLink::new(
+        let mut even_odd_link = ClassifyLink::new(
             Box::new(packet_generator),
             even_odd_elem,
             default_channel_size,
             number_branches,
         );
-        let even_odd_drain = even_odd_link.consumer;
+        let even_odd_drain = even_odd_link.ingressor;
 
         let (s1, odd_collector_output) = crossbeam_channel::unbounded();
         let odd_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_link.providers.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(even_odd_link.egressors.pop().unwrap()), s1);
 
         let (s0, even_collector_output) = crossbeam_channel::unbounded();
         let even_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_link.providers.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(even_odd_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(even_odd_drain);
@@ -363,24 +362,24 @@ mod tests {
         let elem = ClassifyFizzBuzzElement { id: 0 };
 
         let mut elem_link =
-            ClassifyElementLink::new(Box::new(packet_generator), elem, default_channel_size, 4);
-        let elem_drain = elem_link.consumer;
+            ClassifyLink::new(Box::new(packet_generator), elem, default_channel_size, 4);
+        let elem_drain = elem_link.ingressor;
 
         let (s3, other_output) = crossbeam_channel::unbounded();
         let port3_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s3);
+            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s3);
 
         let (s2, buzz_output) = crossbeam_channel::unbounded();
         let port2_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s2);
+            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s2);
 
         let (s1, fizz_output) = crossbeam_channel::unbounded();
         let port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s1);
 
         let (s0, fizz_buzz_output) = crossbeam_channel::unbounded();
         let port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.providers.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem_drain);
@@ -415,34 +414,32 @@ mod tests {
 
         let fizz_buzz_elem = ClassifyFizzBuzzElement { id: 0 };
 
-        let mut fizz_buzz_elem_link: ClassifyElementLink<ClassifyFizzBuzzElement> =
-            ClassifyElementLink::new(
-                Box::new(packet_generator),
-                fizz_buzz_elem,
-                default_channel_size,
-                4,
-            );
-        let fizz_buzz_drain = fizz_buzz_elem_link.consumer;
+        let mut fizz_buzz_elem_link: ClassifyLink<ClassifyFizzBuzzElement> = ClassifyLink::new(
+            Box::new(packet_generator),
+            fizz_buzz_elem,
+            default_channel_size,
+            4,
+        );
+        let fizz_buzz_drain = fizz_buzz_elem_link.ingressor;
 
         let even_odd_elem = ClassifyEvenOddElement { id: 0 };
 
-        let mut even_odd_elem_link: ClassifyElementLink<ClassifyEvenOddElement> =
-            ClassifyElementLink::new(
-                Box::new(fizz_buzz_elem_link.providers.pop().unwrap()),
-                even_odd_elem,
-                default_channel_size,
-                2,
-            );
+        let mut even_odd_elem_link: ClassifyLink<ClassifyEvenOddElement> = ClassifyLink::new(
+            Box::new(fizz_buzz_elem_link.egressors.pop().unwrap()),
+            even_odd_elem,
+            default_channel_size,
+            2,
+        );
 
-        let even_odd_drain = even_odd_elem_link.consumer;
+        let even_odd_drain = even_odd_elem_link.ingressor;
 
         let (s1, odd_collector_output) = crossbeam_channel::unbounded();
         let odd_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.providers.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.egressors.pop().unwrap()), s1);
 
         let (s0, even_collector_output) = crossbeam_channel::unbounded();
         let even_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.providers.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(fizz_buzz_drain);
@@ -471,22 +468,22 @@ mod tests {
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
-        let mut elem0_link = ClassifyElementLink::new(
+        let mut elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
             default_channel_size,
             number_branches,
         );
 
-        let elem0_drain = elem0_link.consumer;
+        let elem0_drain = elem0_link.ingressor;
 
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
         let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
 
         let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
         let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.providers.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -511,7 +508,7 @@ mod tests {
 
         let elem0 = ClassifyEvenOddElement { id: 0 };
 
-        let mut _elem0_link = ClassifyElementLink::new(
+        let mut _elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
             default_channel_size,
