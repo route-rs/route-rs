@@ -15,7 +15,7 @@ use std::collections::HashMap;
 mod codegen;
 mod pipeline_graph;
 
-enum ElementLink {
+enum Link {
     Input,
     Output(pipeline_graph::XmlNodeId),
     Sync(pipeline_graph::XmlNodeId, pipeline_graph::XmlNodeId),
@@ -76,7 +76,7 @@ fn gen_element_decls(elements: &[&&NodeData]) -> (String, HashMap<String, String
 }
 
 fn gen_link_decls(
-    links: &[(&XmlNodeId, ElementLink)],
+    links: &[(&XmlNodeId, Link)],
     element_decls: HashMap<String, String>,
 ) -> (String, HashMap<String, String>) {
     let mut decl_idx: usize = 1;
@@ -88,16 +88,16 @@ fn gen_link_decls(
             decl_idx += 1;
             link_decls_map.insert(id.to_owned().to_owned(), symbol.clone());
             let (struct_name, args) = match el {
-                ElementLink::Input => ("InputChannelLink", vec!["input_channel".to_string()]),
-                ElementLink::Output(feeder) => (
+                Link::Input => ("InputChannelLink", vec!["input_channel".to_string()]),
+                Link::Output(feeder) => (
                     "OutputChannelLink",
                     vec![
                         format!("Box::new({})", link_decls_map.get(feeder.as_str()).unwrap()),
                         "output_channel".to_string(),
                     ],
                 ),
-                ElementLink::Sync(feeder, element) => (
-                    "ElementLink",
+                Link::Sync(feeder, element) => (
+                    "SyncLink",
                     vec![
                         format!("Box::new({})", link_decls_map.get(feeder.as_str()).unwrap()),
                         element_decls.get(element.as_str()).unwrap().to_owned(),
@@ -138,17 +138,14 @@ fn gen_run_body(
         match &nd.node_kind {
             NodeKind::IO => {
                 if nd.xml_node_id == input_node.xml_node_id {
-                    links.push((&nd.xml_node_id, ElementLink::Input));
+                    links.push((&nd.xml_node_id, Link::Input));
                 } else if nd.xml_node_id == output_node.xml_node_id {
                     let feeders: Vec<&&EdgeData> = edges
                         .iter()
                         .filter(|e| e.target == nd.xml_node_id)
                         .collect();
                     assert_eq!(feeders.len(), 1);
-                    links.push((
-                        &nd.xml_node_id,
-                        ElementLink::Output(feeders[0].source.to_owned()),
-                    ));
+                    links.push((&nd.xml_node_id, Link::Output(feeders[0].source.to_owned())));
                     drivers.push(nd.xml_node_id.to_owned());
                 } else {
                     panic!("{:?} is IO but not input_node or output_node", nd)
@@ -163,7 +160,7 @@ fn gen_run_body(
                 elements.push(nd);
                 links.push((
                     &nd.xml_node_id,
-                    ElementLink::Sync(feeders[0].source.to_owned(), nd.xml_node_id.to_owned()),
+                    Link::Sync(feeders[0].source.to_owned(), nd.xml_node_id.to_owned()),
                 ));
             }
         }

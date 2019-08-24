@@ -7,16 +7,16 @@ use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-/// The AsyncElementLink is a wrapper to create and contain both sides of the
-/// link, the consumer, which intakes and processes packets, and the provider,
+/// The AsyncLink is a wrapper to create and contain both sides of the
+/// link, the Ingressor, which intakes and processes packets, and the Egressor,
 /// which provides an interface where the next element retrieves the output
 /// packet.
-pub struct AsyncElementLink<E: AsyncElement> {
-    pub consumer: AsyncElementConsumer<E>,
-    pub provider: AsyncElementProvider<E>,
+pub struct AsyncLink<E: AsyncElement> {
+    pub ingressor: AsyncIngressor<E>,
+    pub egressor: AsyncEgressor<E>,
 }
 
-impl<E: AsyncElement> AsyncElementLink<E> {
+impl<E: AsyncElement> AsyncLink<E> {
     pub fn new(input_stream: PacketStream<E::Input>, element: E, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity <= 1000,
@@ -24,95 +24,95 @@ impl<E: AsyncElement> AsyncElementLink<E> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        let (to_provider, from_consumer) =
+        let (to_egressor, from_ingressor) =
             crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
         let task_park: Arc<AtomicCell<TaskParkState>> =
             Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-        AsyncElementLink {
-            consumer: AsyncElementConsumer::new(
+        AsyncLink {
+            ingressor: AsyncIngressor::new(
                 input_stream,
-                to_provider,
+                to_egressor,
                 element,
                 Arc::clone(&task_park),
             ),
 
-            provider: AsyncElementProvider::new(from_consumer.clone(), task_park),
+            egressor: AsyncEgressor::new(from_ingressor.clone(), task_park),
         }
     }
 }
 
-/// The AsyncElementConsumer is responsible for polling its input stream,
+/// The AsyncIngressor is responsible for polling its input stream,
 /// processing them using the `element`s process function, and pushing the
-/// output packet onto the to_provider queue. It does work in batches, so it
+/// output packet onto the to_egressor queue. It does work in batches, so it
 /// will continue to pull packets as long as it can make forward progess,
 /// after which it will return NotReady to sleep. This is handed to, and is
 /// polled by the runtime.
-pub struct AsyncElementConsumer<E: AsyncElement> {
+pub struct AsyncIngressor<E: AsyncElement> {
     input_stream: PacketStream<E::Input>,
-    to_provider: Sender<Option<E::Output>>,
+    to_egressor: Sender<Option<E::Output>>,
     element: E,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: AsyncElement> AsyncElementConsumer<E> {
+impl<E: AsyncElement> AsyncIngressor<E> {
     fn new(
         input_stream: PacketStream<E::Input>,
-        to_provider: Sender<Option<E::Output>>,
+        to_egressor: Sender<Option<E::Output>>,
         element: E,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
-        AsyncElementConsumer {
+        AsyncIngressor {
             input_stream,
-            to_provider,
+            to_egressor,
             element,
             task_park,
         }
     }
 }
 
-/// Special Drop for AsyncElementConsumer
+/// Special Drop for AsyncIngressor
 ///
-/// When we are dropping the consumer, we want to send a message to the
-/// provider so that it may drop as well. Additionally, we awaken the
-/// provider, since an asleep provider counts on the consumer to awaken
-/// it. This prevents a deadlock during consumer drops, or unexpected
+/// When we are dropping the Ingressor, we want to send a message to the
+/// Egressor so that it may drop as well. Additionally, we awaken the
+/// Egressor, since an asleep Egressor counts on the Ingressor to awaken
+/// it. This prevents a deadlock during Ingressor drops, or unexpected
 /// teardown. We also place a `TaskParkState::Dead` in the task_park
-/// so that the provider knows it can not rely on the consumer to awaken
+/// so that the Egressor knows it can not rely on the Ingressor to awaken
 /// it in the future.
-impl<E: AsyncElement> Drop for AsyncElementConsumer<E> {
+impl<E: AsyncElement> Drop for AsyncIngressor<E> {
     fn drop(&mut self) {
-        if let Err(err) = self.to_provider.try_send(None) {
-            panic!("Consumer: Drop: try_send to_provider, fail?: {:?}", err);
+        if let Err(err) = self.to_egressor.try_send(None) {
+            panic!("Ingressor: Drop: try_send to_Egressor, fail?: {:?}", err);
         }
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
+impl<E: AsyncElement> Future for AsyncIngressor<E> {
     type Item = ();
     type Error = ();
 
-    /// Implement Poll for Future for AsyncElementConsumer
+    /// Implement Poll for Future for AsyncIngressor
     ///
     /// Note that this function works a bit different, it continues to process
     /// packets off it's input queue until it reaches a point where it can not
     /// make forward progress. There are three cases:
     /// ###
-    /// #1 The to_provider queue is full, we notify the provider that we need
+    /// #1 The to_egressor queue is full, we notify the Egressor that we need
     /// awaking when there is work to do, and go to sleep.
     ///
     /// #2 The input_stream returns a NotReady, we sleep, with the assumption
     /// that whomever produced the NotReady will awaken the task in the Future.
     ///
-    /// #3 We get a Ready(None), in which case we push a None onto the to_provider
+    /// #3 We get a Ready(None), in which case we push a None onto the to_Egressor
     /// queue and then return Ready(()), which means we enter tear-down, since there
     /// is no futher work to complete.
     /// ###
     /// By Sleep, we mean we return a NotReady to the runtime which will sleep the task.
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            if self.to_provider.is_full() {
+            if self.to_egressor.is_full() {
                 park_and_notify(&self.task_park);
                 return Ok(Async::NotReady);
             }
@@ -122,9 +122,9 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
                 None => return Ok(Async::Ready(())),
                 Some(input_packet) => {
                     let output_packet: E::Output = self.element.process(input_packet);
-                    if let Err(err) = self.to_provider.try_send(Some(output_packet)) {
+                    if let Err(err) = self.to_egressor.try_send(Some(output_packet)) {
                         panic!(
-                            "Error in to_provider sender, have nowhere to put packet: {:?}",
+                            "Error in to_egressor sender, have nowhere to put packet: {:?}",
                             err
                         );
                     }
@@ -135,63 +135,63 @@ impl<E: AsyncElement> Future for AsyncElementConsumer<E> {
     }
 }
 
-/// The Provider side of the AsyncElement is responsible to converting the
+/// The Egressor side of the AsyncLink is responsible to converting the
 /// output queue of processed packets, which is a crossbeam channel, to a
 /// Stream that can be polled for packets. It ends up being owned by the
 /// element which is polling for packets.
-pub struct AsyncElementProvider<E: AsyncElement> {
-    from_consumer: Receiver<Option<E::Output>>,
+pub struct AsyncEgressor<E: AsyncElement> {
+    from_ingressor: Receiver<Option<E::Output>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: AsyncElement> AsyncElementProvider<E> {
+impl<E: AsyncElement> AsyncEgressor<E> {
     fn new(
-        from_consumer: Receiver<Option<E::Output>>,
+        from_ingressor: Receiver<Option<E::Output>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
-        AsyncElementProvider {
-            from_consumer,
+        AsyncEgressor {
+            from_ingressor,
             task_park,
         }
     }
 }
 
-/// Special Drop for Provider
+/// Special Drop for Egressor
 ///
-/// This Drop notifies the consumer that is can no longer rely on the provider
-/// to awaken it. It is not expected behavior that the provider dies while the
-/// consumer is still alive. But it may happen in edge cases and we want to
+/// This Drop notifies the Ingressor that is can no longer rely on the Egressor
+/// to awaken it. It is not expected behavior that the Egressor dies while the
+/// Ingressor is still alive. But it may happen in edge cases and we want to
 /// ensure that a deadlock does not occur.
-impl<E: AsyncElement> Drop for AsyncElementProvider<E> {
+impl<E: AsyncElement> Drop for AsyncEgressor<E> {
     fn drop(&mut self) {
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
+impl<E: AsyncElement> Stream for AsyncEgressor<E> {
     type Item = E::Output;
     type Error = ();
 
-    ///Implement Poll for Stream for AsyncElementProvider
+    /// Implement Poll for Stream for AsyncEgressor
     ///
-    /// This function, tries to retrieve a packet off the `from_consumer`
+    /// This function, tries to retrieve a packet off the `from_ingressor`
     /// channel, there are four cases:
     /// ###
-    /// #1 Ok(Some(Packet)): Got a packet.if the consumer needs (likely due to
+    /// #1 Ok(Some(Packet)): Got a packet. If the Ingressor needs (likely due to
     /// an until now full channel) to be awoken, wake them. Return the Async::Ready(Option(Packet))
     ///
-    /// #2 Ok(None): this means that the consumer is in tear-down, and we
+    /// #2 Ok(None): this means that the Ingressor is in tear-down, and we
     /// will no longer be receivig packets. Return Async::Ready(None) to forward propagate teardown
     ///
-    /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the consumer to awaken us with more
+    /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the Ingressor to awaken us with more
     /// work, by returning Async::NotReady to signal to runtime to sleep this task.
     ///
-    /// #4 Err(TryRecvError::Disconnected): Consumer is in teardown and has dropped its side of the
-    /// from_consumer channel; we will no longer receive packets. Return Async::Ready(None) to forward
+    /// #4 Err(TryRecvError::Disconnected): Ingressor is in teardown and has dropped its side of the
+    /// from_ingressor channel; we will no longer receive packets. Return Async::Ready(None) to forward
     /// propagate teardown.
     /// ###
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.from_consumer.try_recv() {
+        match self.from_ingressor.try_recv() {
             Ok(Some(packet)) => {
                 unpark_and_notify(&self.task_park);
                 Ok(Async::Ready(Some(packet)))
@@ -210,7 +210,7 @@ impl<E: AsyncElement> Stream for AsyncElementProvider<E> {
 mod tests {
     use super::*;
     use crate::element::{AsyncIdentityElement, IdentityElement};
-    use crate::link::sync_link::ElementLink;
+    use crate::link::sync_link::SyncLink;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -224,12 +224,11 @@ mod tests {
 
         let elem0 = AsyncIdentityElement::new();
 
-        let elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem0_drain = elem0_link.consumer;
-        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_drain = elem0_link.ingressor;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -248,12 +247,11 @@ mod tests {
 
         let elem0 = AsyncIdentityElement::new();
 
-        let elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem0_drain = elem0_link.consumer;
-        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_drain = elem0_link.ingressor;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -274,8 +272,7 @@ mod tests {
 
         let elem0 = AsyncIdentityElement::new();
 
-        let _elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let _elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
     }
 
     #[test]
@@ -286,12 +283,11 @@ mod tests {
 
         let elem0 = AsyncIdentityElement::new();
 
-        let elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem0_drain = elem0_link.consumer;
-        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_drain = elem0_link.ingressor;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -311,12 +307,11 @@ mod tests {
 
         let elem0 = AsyncIdentityElement::new();
 
-        let elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem0_drain = elem0_link.consumer;
-        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_drain = elem0_link.ingressor;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -337,16 +332,14 @@ mod tests {
         let elem0 = AsyncIdentityElement::new();
         let elem1 = AsyncIdentityElement::new();
 
-        let elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
-        let elem1_link =
-            AsyncElementLink::new(Box::new(elem0_link.provider), elem1, default_channel_size);
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let elem1_link = AsyncLink::new(Box::new(elem0_link.egressor), elem1, default_channel_size);
 
-        let elem0_drain = elem0_link.consumer;
-        let elem1_drain = elem1_link.consumer;
+        let elem0_drain = elem0_link.ingressor;
+        let elem1_drain = elem1_link.ingressor;
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem1_collector = ExhaustiveCollector::new(0, Box::new(elem1_link.provider), s);
+        let elem1_collector = ExhaustiveCollector::new(0, Box::new(elem1_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);
@@ -370,16 +363,16 @@ mod tests {
         let elem2 = IdentityElement::new();
         let elem3 = AsyncIdentityElement::new();
 
-        let elem0_link = ElementLink::new(Box::new(packet_generator), elem0);
-        let elem1_link = AsyncElementLink::new(Box::new(elem0_link), elem1, default_channel_size);
-        let elem2_link = ElementLink::new(Box::new(elem1_link.provider), elem2);
-        let elem3_link = AsyncElementLink::new(Box::new(elem2_link), elem3, default_channel_size);
+        let elem0_link = SyncLink::new(Box::new(packet_generator), elem0);
+        let elem1_link = AsyncLink::new(Box::new(elem0_link), elem1, default_channel_size);
+        let elem2_link = SyncLink::new(Box::new(elem1_link.egressor), elem2);
+        let elem3_link = AsyncLink::new(Box::new(elem2_link), elem3, default_channel_size);
 
-        let elem1_drain = elem1_link.consumer;
-        let elem3_drain = elem3_link.consumer;
+        let elem1_drain = elem1_link.ingressor;
+        let elem3_drain = elem3_link.ingressor;
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem3_collector = ExhaustiveCollector::new(0, Box::new(elem3_link.provider), s);
+        let elem3_collector = ExhaustiveCollector::new(0, Box::new(elem3_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem1_drain);
@@ -403,12 +396,11 @@ mod tests {
 
         let elem0 = AsyncIdentityElement::new();
 
-        let elem0_link =
-            AsyncElementLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
 
         let (s, r) = crossbeam_channel::unbounded();
-        let elem0_drain = elem0_link.consumer;
-        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.provider), s);
+        let elem0_drain = elem0_link.ingressor;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.egressor), s);
 
         tokio::run(lazy(|| {
             tokio::spawn(elem0_drain);

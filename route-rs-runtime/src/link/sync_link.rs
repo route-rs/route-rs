@@ -2,21 +2,21 @@ use crate::element::Element;
 use crate::link::PacketStream;
 use futures::{Async, Poll, Stream};
 
-pub struct ElementLink<E: Element> {
+pub struct SyncLink<E: Element> {
     input_stream: PacketStream<E::Input>,
     element: E,
 }
 
-impl<E: Element> ElementLink<E> {
+impl<E: Element> SyncLink<E> {
     pub fn new(input_stream: PacketStream<E::Input>, element: E) -> Self {
-        ElementLink {
+        SyncLink {
             input_stream,
             element,
         }
     }
 }
 
-impl<E: Element> Stream for ElementLink<E> {
+impl<E: Element> Stream for SyncLink<E> {
     type Item = E::Output;
     type Error = ();
 
@@ -72,8 +72,8 @@ mod tests {
         let elem1 = IdentityElement::new();
         let elem2 = IdentityElement::new();
 
-        let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
-        let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
+        let elem1_link = SyncLink::new(Box::new(packet_generator), elem1);
+        let elem2_link = SyncLink::new(Box::new(elem1_link), elem2);
 
         let (s, r) = crossbeam::crossbeam_channel::unbounded();
         let consumer = ExhaustiveCollector::new(1, Box::new(elem2_link), s);
@@ -95,8 +95,8 @@ mod tests {
         let elem1 = IdentityElement::new();
         let elem2 = IdentityElement::new();
 
-        let elem1_link = ElementLink::new(Box::new(packet_generator), elem1);
-        let elem2_link = ElementLink::new(Box::new(elem1_link), elem2);
+        let elem1_link = SyncLink::new(Box::new(packet_generator), elem1);
+        let elem2_link = SyncLink::new(Box::new(elem1_link), elem2);
 
         let (s, r) = crossbeam::crossbeam_channel::unbounded();
         let consumer = ExhaustiveCollector::new(1, Box::new(elem2_link), s);
