@@ -27,6 +27,7 @@ impl<E: ClassifyElement> ClassifyElementLink<E> {
             queue_capacity <= 1000,
             format!("Classify Element queue_capacity: {} > 1000", queue_capacity)
         );
+        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         let mut to_providers: Vec<Sender<Option<E::Packet>>> = Vec::new();
         let mut providers: Vec<ClassifyElementProvider<E>> = Vec::new();
@@ -499,5 +500,22 @@ mod tests {
 
         let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
         assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
+    }
+
+    #[test]
+    #[should_panic(expected = "queue capacity must be non-zero")]
+    fn one_classify_element_empty_channel() {
+        let default_channel_size = 0;
+        let number_branches = 2;
+        let packet_generator = immediate_stream(vec![]);
+
+        let elem0 = ClassifyEvenOddElement { id: 0 };
+
+        let mut _elem0_link = ClassifyElementLink::new(
+            Box::new(packet_generator),
+            elem0,
+            default_channel_size,
+            number_branches,
+        );
     }
 }
