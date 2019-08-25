@@ -1,0 +1,3 @@
+[submodule "daq-sys/libdaq"]
+	path = daq-sys/libdaq
+	url = https://github.com/moosingin3space/libdaq.git
