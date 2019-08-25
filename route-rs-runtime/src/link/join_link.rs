@@ -15,12 +15,13 @@ impl<Packet: Sized> JoinElementLink<Packet> {
     pub fn new(input_streams: Vec<PacketStream<Packet>>, queue_capacity: usize) -> Self {
         assert!(
             input_streams.len() <= 1000,
-            format!("input_steams len {} > 1000", input_streams.len())
+            format!("input_streams len {} > 1000", input_streams.len())
         ); //Let's be reasonable here
         assert!(
             queue_capacity <= 1000,
             format!("Split Element queue_capacity: {} > 1000", queue_capacity)
         );
+        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         let number_consumers = input_streams.len();
 
@@ -422,5 +423,20 @@ mod tests {
 
         let join0_output: Vec<_> = join0_collector_output.iter().collect();
         assert_eq!(join0_output.len(), packets.len() * 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "queue capacity must be non-zero")]
+    fn one_join_element_empty_channel() {
+        let default_channel_size = 0;
+        let packets = vec![];
+        let packet_generator0 = immediate_stream(packets.clone());
+        let packet_generator1 = immediate_stream(packets.clone());
+
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+        input_streams.push(Box::new(packet_generator0));
+        input_streams.push(Box::new(packet_generator1));
+
+        let mut _join0_link = JoinElementLink::new(input_streams, default_channel_size);
     }
 }

@@ -18,9 +18,12 @@ pub struct AsyncElementLink<E: AsyncElement> {
 
 impl<E: AsyncElement> AsyncElementLink<E> {
     pub fn new(input_stream: PacketStream<E::Input>, element: E, queue_capacity: usize) -> Self {
-        if queue_capacity == 0 {
-            panic!("queue capacity must be non-zero")
-        }
+        assert!(
+            queue_capacity <= 1000,
+            format!("Async Element queue_capacity: {} > 1000", queue_capacity)
+        );
+        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
+
         let (to_provider, from_consumer) =
             crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
         let task_park: Arc<AtomicCell<TaskParkState>> =
