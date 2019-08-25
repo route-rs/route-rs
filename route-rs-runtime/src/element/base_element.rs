@@ -12,8 +12,14 @@ pub trait AsyncElement {
     fn process(&mut self, packet: Self::Input) -> Self::Output;
 }
 
-pub trait ClassifyElement {
-    type Packet: Sized;
-
-    fn classify(&mut self, packet: &Self::Packet) -> usize;
+pub trait ClassifyElement:
+    Element<
+    Output = (
+        <Self as ClassifyElement>::Class,
+        <Self as ClassifyElement>::ActualOutput,
+    ),
+>
+{
+    type Class: Sized;
+    type ActualOutput: Sized;
 }

@@ -7,15 +7,16 @@ use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-pub struct ClassifyLink<E: ClassifyElement> {
-    pub ingressor: ClassifyIngressor<E>,
+pub struct ClassifyLink<'a, E: ClassifyElement> {
+    pub ingressor: ClassifyIngressor<'a, E>,
     pub egressors: Vec<ClassifyEgressor<E>>,
 }
 
-impl<E: ClassifyElement> ClassifyLink<E> {
+impl<'a, E: ClassifyElement> ClassifyLink<'a, E> {
     pub fn new(
-        input_stream: PacketStream<E::Packet>,
+        input_stream: PacketStream<E::Input>,
         element: E,
+        dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
         queue_capacity: usize,
         branches: usize,
     ) -> Self {
@@ -29,16 +30,16 @@ impl<E: ClassifyElement> ClassifyLink<E> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        let mut to_egressors: Vec<Sender<Option<E::Packet>>> = Vec::new();
+        let mut to_egressors: Vec<Sender<Option<E::ActualOutput>>> = Vec::new();
         let mut egressors: Vec<ClassifyEgressor<E>> = Vec::new();
 
-        let mut from_ingressors: Vec<Receiver<Option<E::Packet>>> = Vec::new();
+        let mut from_ingressors: Vec<Receiver<Option<E::ActualOutput>>> = Vec::new();
 
         let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
         for _ in 0..branches {
             let (to_egressor, from_ingressor) =
-                crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
+                crossbeam_channel::bounded::<Option<E::ActualOutput>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
             let provider = ClassifyEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
@@ -50,28 +51,37 @@ impl<E: ClassifyElement> ClassifyLink<E> {
         }
 
         ClassifyLink {
-            ingressor: ClassifyIngressor::new(input_stream, to_egressors, element, task_parks),
+            ingressor: ClassifyIngressor::new(
+                input_stream,
+                dispatcher,
+                to_egressors,
+                element,
+                task_parks,
+            ),
             egressors,
         }
     }
 }
 
-pub struct ClassifyIngressor<E: ClassifyElement> {
-    input_stream: PacketStream<E::Packet>,
-    to_egressors: Vec<Sender<Option<E::Packet>>>,
+pub struct ClassifyIngressor<'a, E: ClassifyElement> {
+    input_stream: PacketStream<E::Input>,
+    dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
+    to_egressors: Vec<Sender<Option<E::ActualOutput>>>,
     element: E,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
-impl<E: ClassifyElement> ClassifyIngressor<E> {
+impl<'a, E: ClassifyElement> ClassifyIngressor<'a, E> {
     fn new(
-        input_stream: PacketStream<E::Packet>,
-        to_egressors: Vec<Sender<Option<E::Packet>>>,
+        input_stream: PacketStream<E::Input>,
+        dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
+        to_egressors: Vec<Sender<Option<E::ActualOutput>>>,
         element: E,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
         ClassifyIngressor {
             input_stream,
+            dispatcher,
             to_egressors,
             element,
             task_parks,
@@ -79,7 +89,7 @@ impl<E: ClassifyElement> ClassifyIngressor<E> {
     }
 }
 
-impl<E: ClassifyElement> Drop for ClassifyIngressor<E> {
+impl<'a, E: ClassifyElement> Drop for ClassifyIngressor<'a, E> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
@@ -93,7 +103,7 @@ impl<E: ClassifyElement> Drop for ClassifyIngressor<E> {
     }
 }
 
-impl<E: ClassifyElement> Future for ClassifyIngressor<E> {
+impl<'a, E: ClassifyElement> Future for ClassifyIngressor<'a, E> {
     type Item = ();
     type Error = ();
 
@@ -109,16 +119,17 @@ impl<E: ClassifyElement> Future for ClassifyIngressor<E> {
                     return Ok(Async::NotReady);
                 }
             }
-            let packet_option: Option<E::Packet> = try_ready!(self.input_stream.poll());
+            let packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
 
             match packet_option {
                 None => return Ok(Async::Ready(())),
                 Some(packet) => {
-                    let port = self.element.classify(&packet);
+                    let (class, actual_output) = self.element.process(packet);
+                    let port = (self.dispatcher)(class);
                     if port >= self.to_egressors.len() {
                         panic!("Tried to access invalid port: {}", port);
                     }
-                    if let Err(err) = self.to_egressors[port].try_send(Some(packet)) {
+                    if let Err(err) = self.to_egressors[port].try_send(Some(actual_output)) {
                         panic!(
                             "Error in to_egressors[{}] sender, have nowhere to put packet: {:?}",
                             port, err
@@ -135,13 +146,13 @@ impl<E: ClassifyElement> Future for ClassifyIngressor<E> {
 /// they have different trait bounds. Hence the reimplementaton. Would love
 /// a PR that solves this problem.
 pub struct ClassifyEgressor<E: ClassifyElement> {
-    from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
+    from_ingressor: crossbeam_channel::Receiver<Option<E::ActualOutput>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
 impl<E: ClassifyElement> ClassifyEgressor<E> {
     fn new(
-        from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
+        from_ingressor: crossbeam_channel::Receiver<Option<E::ActualOutput>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         ClassifyEgressor {
@@ -158,7 +169,7 @@ impl<E: ClassifyElement> Drop for ClassifyEgressor<E> {
 }
 
 impl<E: ClassifyElement> Stream for ClassifyEgressor<E> {
-    type Item = E::Packet;
+    type Item = E::ActualOutput;
     type Error = ();
 
     /// Implement Poll for Stream for ClassifyEgressor
@@ -198,45 +209,36 @@ impl<E: ClassifyElement> Stream for ClassifyEgressor<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::element::Element;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-    use crossbeam::crossbeam_channel;
-
     use futures::future::lazy;
 
-    #[allow(dead_code)]
-    struct ClassifyEvenOddElement {
-        id: i32,
-    }
+    struct ClassifyEvenness {}
 
-    impl ClassifyElement for ClassifyEvenOddElement {
-        type Packet = i32;
-
-        fn classify(&mut self, packet: &Self::Packet) -> usize {
-            (packet % 2) as usize
+    impl ClassifyEvenness {
+        pub fn new() -> Self {
+            ClassifyEvenness {}
         }
     }
 
-    #[allow(dead_code)]
-    struct ClassifyFizzBuzzElement {
-        id: i32,
-    }
+    impl Element for ClassifyEvenness {
+        type Input = i32;
+        type Output = (bool, i32);
 
-    impl ClassifyElement for ClassifyFizzBuzzElement {
-        type Packet = i32;
-
-        fn classify(&mut self, packet: &Self::Packet) -> usize {
-            if packet % 3 == 0 && packet % 5 == 0 {
-                0 // FizzBuzz
-            } else if packet % 3 == 0 {
-                1 // Fizz
-            } else if packet % 5 == 0 {
-                2 // Buzz
+        fn process(&mut self, packet: Self::Input) -> Self::Output {
+            if packet % 2 == 0 {
+                (true, packet)
             } else {
-                3 // other
+                (false, packet)
             }
         }
+    }
+
+    impl ClassifyElement for ClassifyEvenness {
+        type Class = bool;
+        type ActualOutput = i32;
     }
 
     #[test]
@@ -245,26 +247,27 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let elem0 = ClassifyEvenOddElement { id: 0 };
+        let elem0 = ClassifyEvenness::new();
 
         let mut elem0_link = ClassifyLink::new(
-            Box::new(packet_generator),
+            packet_generator,
             elem0,
+            Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.ingressor;
-
         let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
+
         let elem0_port1_collector =
             ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
 
         let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
+
         let elem0_port0_collector =
             ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
+            tokio::spawn(elem0_link.ingressor);
             tokio::spawn(elem0_port0_collector);
             tokio::spawn(elem0_port1_collector);
             Ok(())
@@ -283,11 +286,12 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let elem0 = ClassifyEvenOddElement { id: 0 };
+        let elem0 = ClassifyEvenness::new();
 
         let mut elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
+            Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
@@ -321,11 +325,12 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(0..2000);
 
-        let even_odd_elem = ClassifyEvenOddElement { id: 0 };
+        let even_odd_elem = ClassifyEvenness::new();
 
         let mut even_odd_link = ClassifyLink::new(
             Box::new(packet_generator),
             even_odd_elem,
+            Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
@@ -353,15 +358,65 @@ mod tests {
         assert_eq!(odd_output.len(), 1000);
     }
 
+    enum FizzBuzz {
+        FizzBuzz,
+        Fizz,
+        Buzz,
+        None,
+    }
+
+    struct ClassifyFizzBuzz {}
+
+    impl ClassifyFizzBuzz {
+        pub fn new() -> Self {
+            ClassifyFizzBuzz {}
+        }
+    }
+
+    impl Element for ClassifyFizzBuzz {
+        type Input = i32;
+        type Output = (FizzBuzz, i32);
+
+        fn process(&mut self, packet: Self::Input) -> Self::Output {
+            (
+                if packet % 3 == 0 && packet % 5 == 0 {
+                    FizzBuzz::FizzBuzz
+                } else if packet % 3 == 0 {
+                    FizzBuzz::Fizz
+                } else if packet % 5 == 0 {
+                    FizzBuzz::Buzz
+                } else {
+                    FizzBuzz::None
+                },
+                packet,
+            )
+        }
+    }
+
+    impl ClassifyElement for ClassifyFizzBuzz {
+        type Class = FizzBuzz;
+        type ActualOutput = i32;
+    }
+
     #[test]
     fn one_fizz_buzz() {
         let default_channel_size = 10;
         let packet_generator = immediate_stream(0..=30);
 
-        let elem = ClassifyFizzBuzzElement { id: 0 };
+        let elem = ClassifyFizzBuzz::new();
 
-        let mut elem_link =
-            ClassifyLink::new(Box::new(packet_generator), elem, default_channel_size, 4);
+        let mut elem_link = ClassifyLink::new(
+            Box::new(packet_generator),
+            elem,
+            Box::new(|fb| match fb {
+                FizzBuzz::FizzBuzz => 0,
+                FizzBuzz::Fizz => 1,
+                FizzBuzz::Buzz => 2,
+                FizzBuzz::None => 3,
+            }),
+            default_channel_size,
+            4,
+        );
         let elem_drain = elem_link.ingressor;
 
         let (s3, other_output) = crossbeam_channel::unbounded();
@@ -411,21 +466,28 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = immediate_stream(0..=30);
 
-        let fizz_buzz_elem = ClassifyFizzBuzzElement { id: 0 };
+        let fizz_buzz_elem = ClassifyFizzBuzz::new();
 
-        let mut fizz_buzz_elem_link: ClassifyLink<ClassifyFizzBuzzElement> = ClassifyLink::new(
+        let mut fizz_buzz_elem_link: ClassifyLink<ClassifyFizzBuzz> = ClassifyLink::new(
             Box::new(packet_generator),
             fizz_buzz_elem,
+            Box::new(|fb| match fb {
+                FizzBuzz::FizzBuzz => 0,
+                FizzBuzz::Fizz => 1,
+                FizzBuzz::Buzz => 2,
+                FizzBuzz::None => 3,
+            }),
             default_channel_size,
             4,
         );
         let fizz_buzz_drain = fizz_buzz_elem_link.ingressor;
 
-        let even_odd_elem = ClassifyEvenOddElement { id: 0 };
+        let even_odd_elem = ClassifyEvenness::new();
 
-        let mut even_odd_elem_link: ClassifyLink<ClassifyEvenOddElement> = ClassifyLink::new(
+        let mut even_odd_elem_link: ClassifyLink<ClassifyEvenness> = ClassifyLink::new(
             Box::new(fizz_buzz_elem_link.egressors.pop().unwrap()),
             even_odd_elem,
+            Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             2,
         );
@@ -465,11 +527,12 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem0 = ClassifyEvenOddElement { id: 0 };
+        let elem0 = ClassifyEvenness::new();
 
         let mut elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
+            Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
@@ -505,11 +568,12 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![]);
 
-        let elem0 = ClassifyEvenOddElement { id: 0 };
+        let elem0 = ClassifyEvenness::new();
 
         let mut _elem0_link = ClassifyLink::new(
             Box::new(packet_generator),
             elem0,
+            Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
