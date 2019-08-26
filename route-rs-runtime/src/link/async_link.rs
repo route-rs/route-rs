@@ -209,7 +209,7 @@ impl<E: AsyncElement> Stream for AsyncEgressor<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::{AsyncIdentityElement, IdentityElement};
+    use crate::element::{AsyncIdentityElement, IdentityElement, TransformElement};
     use crate::link::sync_link::SyncLink;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
@@ -410,5 +410,30 @@ mod tests {
 
         let router_output: Vec<_> = r.iter().collect();
         assert_eq!(router_output, packets);
+    }
+
+    #[test]
+    fn one_async_transform_element() {
+        let default_channel_size = 10;
+        let packets = "route-rs".chars();
+        let packet_generator = immediate_stream(packets.clone());
+
+        let elem0 = TransformElement::new();
+
+        let elem0_link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
+
+        let (s, r) = crossbeam_channel::unbounded();
+        let elem0_drain = elem0_link.ingressor;
+        let elem0_collector = ExhaustiveCollector::new(0, Box::new(elem0_link.egressor), s);
+
+        tokio::run(lazy(|| {
+            tokio::spawn(elem0_drain);
+            tokio::spawn(elem0_collector);
+            Ok(())
+        }));
+
+        let router_output: Vec<u32> = r.iter().collect();
+        let expected_output: Vec<u32> = packets.map(|p| p.into()).collect();
+        assert_eq!(router_output, expected_output);
     }
 }

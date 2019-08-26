@@ -54,7 +54,7 @@ impl<E: Element> Stream for SyncLink<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::IdentityElement;
+    use crate::element::{IdentityElement, TransformElement};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -105,5 +105,26 @@ mod tests {
 
         let router_output: Vec<_> = r.iter().collect();
         assert_eq!(router_output, packets);
+    }
+
+    #[test]
+    fn one_sync_transform_element() {
+        let packets = "route-rs".chars();
+        let packet_generator = immediate_stream(packets.clone());
+
+        let elem1 = TransformElement::new();
+        let elem2 = IdentityElement::new();
+
+        let elem1_link = SyncLink::new(Box::new(packet_generator), elem1);
+        let elem2_link = SyncLink::new(Box::new(elem1_link), elem2);
+
+        let (s, r) = crossbeam::crossbeam_channel::unbounded();
+        let consumer = ExhaustiveCollector::new(1, Box::new(elem2_link), s);
+
+        tokio::run(consumer);
+
+        let router_output: Vec<u32> = r.iter().collect();
+        let expected_output: Vec<u32> = packets.map(|p| p.into()).collect();
+        assert_eq!(router_output, expected_output);
     }
 }
