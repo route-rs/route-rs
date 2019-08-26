@@ -3,6 +3,7 @@ name = "route-rs-graphgen"
 version = "0.1.0"
 authors = ["Sam Gruber <sam@scgruber.com>"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 clap = "*"

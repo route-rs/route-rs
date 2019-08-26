@@ -1,0 +1,23 @@
+[licenses]
+unlicensed = "deny"
+
+# This lists all of the licenses we will allow in our dependencies. Since route-rs is distributed
+# under the MIT license, we want to make sure all of our dependencies are similarly unrestrictive.
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-2-Clause-FreeBSD",
+    "BSD-3-Clause",
+    "CC-BY-3.0",
+    "ISC",
+    "MIT",
+    "Unlicense",
+]
+
+[[licenses.ignore]]
+name = "crossbeam-channel"
+license_files = [
+    # This is a concatenation of several different licenses for third party code included in
+    # crossbeam-channel. Each of them is included in the list above.
+   { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 }
+]
