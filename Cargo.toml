@@ -5,6 +5,9 @@ members = [
     "route-rs-graphgen",
     "route-rs-runtime",
 
+    # I/O Crates
+    "afpacket",
+
     # Example crates
     # These crates show usage of route-rs features and should _not_ be published to crates.io
     "examples/trivial-identity",
