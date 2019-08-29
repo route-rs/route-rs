@@ -4,6 +4,7 @@ unlicensed = "deny"
 # This lists all of the licenses we will allow in our dependencies. Since route-rs is distributed
 # under the MIT license, we want to make sure all of our dependencies are similarly unrestrictive.
 allow = [
+    "0BSD",
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-2-Clause-FreeBSD",
