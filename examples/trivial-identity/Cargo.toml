@@ -12,3 +12,4 @@ route-rs-runtime = { path = "../../route-rs-runtime" }
 tokio = "*"
 futures = "*"
 crossbeam = "*"
+tracing = "0.1.7"
