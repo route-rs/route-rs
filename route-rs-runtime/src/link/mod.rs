@@ -15,6 +15,9 @@ pub use self::join_link::*;
 mod tee_link;
 pub use self::tee_link::*;
 
+mod blackhole_link;
+pub use self::blackhole_link::*;
+
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
 
 mod task_park;
