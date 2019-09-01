@@ -133,145 +133,123 @@ mod tests {
         let number_branches = 1;
         let packet_generator: PacketStream<i32> = immediate_stream(vec![]);
 
-        let mut elem0_link = TeeLink::new(
+        let mut link = TeeLink::new(
             Box::new(packet_generator),
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.ingressor;
+        let drain = link.ingressor;
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let (s0, collector0_output) = crossbeam_channel::unbounded();
+        let collector0 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
+            tokio::spawn(drain);
+            tokio::spawn(collector0);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert!(elem0_port0_output.is_empty());
+        let output: Vec<_> = collector0_output.iter().collect();
+        assert!(output.is_empty());
     }
 
     #[test]
-    fn single_clone() {
+    fn one_way() {
         //TODO: find a way to detect branches all have a ingressor
         let default_channel_size = 5;
         let number_branches = 1;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let mut elem0_link = TeeLink::new(
+        let mut link = TeeLink::new(
             Box::new(packet_generator),
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.ingressor;
+        let drain = link.ingressor;
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let (s0, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
+            tokio::spawn(drain);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(elem0_port0_output, vec![1, 1337, 3, 5, 7, 9]);
+        let output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(output, vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
-    fn basic_two_way_duplicate() {
+    fn two_way() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let mut elem0_link = TeeLink::new(
+        let mut link = TeeLink::new(
             Box::new(packet_generator),
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.ingressor;
+        let drain = link.ingressor;
 
-        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
+        let (s1, collector1_output) = crossbeam_channel::unbounded();
+        let collector1 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let (s0, collector0_output) = crossbeam_channel::unbounded();
+        let collector0 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
-            tokio::spawn(elem0_port1_collector);
+            tokio::spawn(drain);
+            tokio::spawn(collector0);
+            tokio::spawn(collector1);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(
-            elem0_port0_output,
-            vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]
-        );
+        let output0: Vec<_> = collector0_output.iter().collect();
+        assert_eq!(output0, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(
-            elem0_port1_output,
-            vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]
-        );
+        let output1: Vec<_> = collector1_output.iter().collect();
+        assert_eq!(output1, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
     }
 
     #[test]
-    fn basic_three_way_duplicate() {
+    fn three_way() {
         let default_channel_size = 10;
         let number_branches = 3;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let mut elem0_link = TeeLink::new(
+        let mut link = TeeLink::new(
             Box::new(packet_generator),
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.ingressor;
+        let drain = link.ingressor;
 
-        let (s2, elem0_port2_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port2_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s2);
+        let (s2, collector2_output) = crossbeam_channel::unbounded();
+        let collector2 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s2);
 
-        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
+        let (s1, collector1_output) = crossbeam_channel::unbounded();
+        let collector1 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let (s0, collector0_output) = crossbeam_channel::unbounded();
+        let collector0 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
-            tokio::spawn(elem0_port1_collector);
-            tokio::spawn(elem0_port2_collector);
+            tokio::spawn(drain);
+            tokio::spawn(collector0);
+            tokio::spawn(collector1);
+            tokio::spawn(collector2);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(
-            elem0_port0_output,
-            vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]
-        );
+        let output0: Vec<_> = collector0_output.iter().collect();
+        assert_eq!(output0, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(
-            elem0_port1_output,
-            vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]
-        );
+        let output1: Vec<_> = collector1_output.iter().collect();
+        assert_eq!(output1, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let elem0_port2_output: Vec<_> = elem0_port2_collector_output.iter().collect();
-        assert_eq!(
-            elem0_port2_output,
-            vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]
-        );
+        let output2: Vec<_> = collector2_output.iter().collect();
+        assert_eq!(output2, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
     }
 }
