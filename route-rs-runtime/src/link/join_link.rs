@@ -126,7 +126,7 @@ pub struct JoinEgressor<Packet: Sized> {
     from_ingressors: Vec<Receiver<Option<Packet>>>,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ingressors_alive: usize,
-    most_recent_ingressor: usize,
+    next_pull_ingressor: usize,
 }
 
 impl<Packet: Sized> JoinEgressor<Packet> {
@@ -135,12 +135,12 @@ impl<Packet: Sized> JoinEgressor<Packet> {
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
         ingressors_alive: usize,
     ) -> Self {
-        let most_recent_ingressor = 0;
+        let next_pull_ingressor = 0;
         JoinEgressor {
             from_ingressors,
             task_parks,
             ingressors_alive,
-            most_recent_ingressor,
+            next_pull_ingressor,
         }
     }
 }
@@ -158,36 +158,21 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
     type Error = ();
 
     /// Iterate over all the channels, pull the first packet that is available.
-    /// this is unfair if we don't start from a new point each time. But it should
-    /// work as a POC with the unfair version to start. The
+    /// This starts at the next index after the last successful recv
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let (before_recent, after_recent) =
-            self.from_ingressors.split_at(self.most_recent_ingressor);
-        for (port, from_ingressor) in after_recent.iter().enumerate() {
-            match from_ingressor.try_recv() {
-                Ok(Some(packet)) => {
-                    unpark_and_notify(&self.task_parks[port + self.most_recent_ingressor]);
-                    self.most_recent_ingressor += port;
-                    return Ok(Async::Ready(Some(packet)));
-                }
-                Ok(None) => {
-                    //Got a none from a consumer that has shutdown
-                    self.ingressors_alive -= 1;
-                    if self.ingressors_alive == 0 {
-                        return Ok(Async::Ready(None));
-                    }
-                }
-                Err(_) => {
-                    //On an error go to next channel.
-                }
-            }
-        }
-
-        for (port, from_ingressor) in before_recent.iter().enumerate() {
+        //rotate_slice exists in 1.22 nightly experimental
+        let rotated_iter = self
+            .from_ingressors
+            .iter()
+            .enumerate()
+            .cycle()
+            .skip(self.next_pull_ingressor)
+            .take(self.from_ingressors.len());
+        for (port, from_ingressor) in rotated_iter {
             match from_ingressor.try_recv() {
                 Ok(Some(packet)) => {
                     unpark_and_notify(&self.task_parks[port]);
-                    self.most_recent_ingressor = port;
+                    self.next_pull_ingressor = port + 1;
                     return Ok(Async::Ready(Some(packet)));
                 }
                 Ok(None) => {
@@ -362,6 +347,40 @@ mod tests {
 
         let join0_output: Vec<_> = join0_collector_output.iter().collect();
         assert_eq!(join0_output.len(), packets.len() * 2);
+    }
+
+    #[test]
+    fn join_element_fairness_test() {
+        //If fairness changes, may need to update test
+        let default_channel_size = 10;
+        let packets_heavy = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let packets_light = vec![1, 1, 1, 1];
+        let packet_generator0 = immediate_stream(packets_heavy.into_iter());
+        let packet_generator1 = immediate_stream(packets_light.into_iter());
+
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+        input_streams.push(Box::new(packet_generator0));
+        input_streams.push(Box::new(packet_generator1));
+
+        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
+        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
+        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+
+        let (s, join0_collector_output) = crossbeam_channel::unbounded();
+        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+
+        tokio::run(lazy(|| {
+            tokio::spawn(join0_input0_drain);
+            tokio::spawn(join0_input1_drain);
+            tokio::spawn(join0_collector);
+            Ok(())
+        }));
+
+        let join0_output: Vec<_> = join0_collector_output.iter().collect();
+        assert_eq!(
+            join0_output,
+            vec![0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
     }
 
     #[test]
