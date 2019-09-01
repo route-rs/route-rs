@@ -218,7 +218,7 @@ mod tests {
     use futures::future::lazy;
 
     #[test]
-    fn join_element() {
+    fn join_link() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
         let packet_generator0 = immediate_stream(packets.clone());
@@ -228,26 +228,26 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
-        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+        let mut link = JoinLink::new(input_streams, default_channel_size);
+        let drain1 = link.ingressors.pop().unwrap();
+        let drain0 = link.ingressors.pop().unwrap();
 
-        let (s, join0_collector_output) = crossbeam_channel::unbounded();
-        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
 
         tokio::run(lazy(|| {
-            tokio::spawn(join0_input0_drain);
-            tokio::spawn(join0_input1_drain);
-            tokio::spawn(join0_collector);
+            tokio::spawn(drain0);
+            tokio::spawn(drain1);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(join0_output.len(), packets.len() * 2);
+        let link_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(link_output.len(), packets.len() * 2);
     }
 
     #[test]
-    fn one_join_element_long_stream() {
+    fn long_stream() {
         let default_channel_size = 10;
         let packet_generator0 = immediate_stream(0..=2000);
         let packet_generator1 = immediate_stream(0..=2000);
@@ -256,26 +256,26 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
-        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+        let mut link = JoinLink::new(input_streams, default_channel_size);
+        let drain1 = link.ingressors.pop().unwrap();
+        let drain0 = link.ingressors.pop().unwrap();
 
-        let (s, join0_collector_output) = crossbeam_channel::unbounded();
-        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
 
         tokio::run(lazy(|| {
-            tokio::spawn(join0_input0_drain);
-            tokio::spawn(join0_input1_drain);
-            tokio::spawn(join0_collector);
+            tokio::spawn(drain0);
+            tokio::spawn(drain1);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(join0_output.len(), 4002);
+        let link_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(link_output.len(), 4002);
     }
 
     #[test]
-    fn five_inputs_one_join_element() {
+    fn five_inputs() {
         let default_channel_size = 10;
         let packet_generator0 = immediate_stream(0..=2000);
         let packet_generator1 = immediate_stream(0..=2000);
@@ -290,32 +290,32 @@ mod tests {
         input_streams.push(Box::new(packet_generator3));
         input_streams.push(Box::new(packet_generator4));
 
-        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
-        let join0_input4_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input3_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input2_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+        let mut link = JoinLink::new(input_streams, default_channel_size);
+        let drain4 = link.ingressors.pop().unwrap();
+        let drain3 = link.ingressors.pop().unwrap();
+        let drain2 = link.ingressors.pop().unwrap();
+        let drain1 = link.ingressors.pop().unwrap();
+        let drain0 = link.ingressors.pop().unwrap();
 
-        let (s, join0_collector_output) = crossbeam_channel::unbounded();
-        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
 
         tokio::run(lazy(|| {
-            tokio::spawn(join0_input0_drain);
-            tokio::spawn(join0_input1_drain);
-            tokio::spawn(join0_input2_drain);
-            tokio::spawn(join0_input3_drain);
-            tokio::spawn(join0_input4_drain);
-            tokio::spawn(join0_collector);
+            tokio::spawn(drain0);
+            tokio::spawn(drain1);
+            tokio::spawn(drain2);
+            tokio::spawn(drain3);
+            tokio::spawn(drain4);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(join0_output.len(), 10005);
+        let link_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(link_output.len(), 10005);
     }
 
     #[test]
-    fn join_element_wait_between_packets() {
+    fn wait_between_packets() {
         let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
         let packet_generator0 = PacketIntervalGenerator::new(
@@ -331,26 +331,26 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
-        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+        let mut link = JoinLink::new(input_streams, default_channel_size);
+        let drain1 = link.ingressors.pop().unwrap();
+        let drain0 = link.ingressors.pop().unwrap();
 
-        let (s, join0_collector_output) = crossbeam_channel::unbounded();
-        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
 
         tokio::run(lazy(|| {
-            tokio::spawn(join0_input0_drain);
-            tokio::spawn(join0_input1_drain);
-            tokio::spawn(join0_collector);
+            tokio::spawn(drain0);
+            tokio::spawn(drain1);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(join0_output.len(), packets.len() * 2);
+        let join_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(join_output.len(), packets.len() * 2);
     }
 
     #[test]
-    fn join_element_fairness_test() {
+    fn fairness_test() {
         //If fairness changes, may need to update test
         let default_channel_size = 10;
         let packets_heavy = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn join_element_small_channel() {
+    fn small_channel() {
         let default_channel_size = 1;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
         let packet_generator0 = immediate_stream(packets.clone());
@@ -394,26 +394,26 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
-        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+        let mut link = JoinLink::new(input_streams, default_channel_size);
+        let drain1 = link.ingressors.pop().unwrap();
+        let drain0 = link.ingressors.pop().unwrap();
 
-        let (s, join0_collector_output) = crossbeam_channel::unbounded();
-        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
 
         tokio::run(lazy(|| {
-            tokio::spawn(join0_input0_drain);
-            tokio::spawn(join0_input1_drain);
-            tokio::spawn(join0_collector);
+            tokio::spawn(drain0);
+            tokio::spawn(drain1);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(join0_output.len(), packets.len() * 2);
+        let join_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(join_output.len(), packets.len() * 2);
     }
 
     #[test]
-    fn join_element_empty_stream() {
+    fn empty_stream() {
         let default_channel_size = 10;
         let packets = vec![];
         let packet_generator0 = immediate_stream(packets.clone());
@@ -423,27 +423,27 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let mut join0_link = JoinLink::new(input_streams, default_channel_size);
-        let join0_input1_drain = join0_link.ingressors.pop().unwrap();
-        let join0_input0_drain = join0_link.ingressors.pop().unwrap();
+        let mut link = JoinLink::new(input_streams, default_channel_size);
+        let drain1 = link.ingressors.pop().unwrap();
+        let drain0 = link.ingressors.pop().unwrap();
 
-        let (s, join0_collector_output) = crossbeam_channel::unbounded();
-        let join0_collector = ExhaustiveCollector::new(0, Box::new(join0_link.egressor), s);
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
 
         tokio::run(lazy(|| {
-            tokio::spawn(join0_input0_drain);
-            tokio::spawn(join0_input1_drain);
-            tokio::spawn(join0_collector);
+            tokio::spawn(drain0);
+            tokio::spawn(drain1);
+            tokio::spawn(collector);
             Ok(())
         }));
 
-        let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(join0_output.len(), packets.len() * 2);
+        let join_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(join_output.len(), packets.len() * 2);
     }
 
     #[test]
     #[should_panic(expected = "queue capacity must be non-zero")]
-    fn one_join_element_empty_channel() {
+    fn empty_channel() {
         let default_channel_size = 0;
         let packets = vec![];
         let packet_generator0 = immediate_stream(packets.clone());
@@ -453,6 +453,6 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let mut _join0_link = JoinLink::new(input_streams, default_channel_size);
+        let mut _link = JoinLink::new(input_streams, default_channel_size);
     }
 }
