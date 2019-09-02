@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 pub struct ClassifyLink<'a, E: Classifier> {
     pub ingressor: ClassifyIngressor<'a, E>,
-    pub egressors: Vec<ClassifyEgressor<E>>,
+    pub egressors: Vec<ClassifyEgressor<E::Packet>>,
 }
 
 impl<'a, E: Classifier> ClassifyLink<'a, E> {
@@ -31,7 +31,7 @@ impl<'a, E: Classifier> ClassifyLink<'a, E> {
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         let mut to_egressors: Vec<Sender<Option<E::Packet>>> = Vec::new();
-        let mut egressors: Vec<ClassifyEgressor<E>> = Vec::new();
+        let mut egressors: Vec<ClassifyEgressor<E::Packet>> = Vec::new();
 
         let mut from_ingressors: Vec<Receiver<Option<E::Packet>>> = Vec::new();
 
@@ -145,14 +145,14 @@ impl<'a, E: Classifier> Future for ClassifyIngressor<'a, E> {
 /// Classify Element Provider, exactly the same as AsyncElementProvider, but
 /// they have different trait bounds. Hence the reimplementaton. Would love
 /// a PR that solves this problem.
-pub struct ClassifyEgressor<E: Classifier> {
-    from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
+pub struct ClassifyEgressor<Packet: Sized> {
+    from_ingressor: crossbeam_channel::Receiver<Option<Packet>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: Classifier> ClassifyEgressor<E> {
+impl<Packet: Sized> ClassifyEgressor<Packet> {
     fn new(
-        from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
+        from_ingressor: crossbeam_channel::Receiver<Option<Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         ClassifyEgressor {
@@ -162,14 +162,14 @@ impl<E: Classifier> ClassifyEgressor<E> {
     }
 }
 
-impl<E: Classifier> Drop for ClassifyEgressor<E> {
+impl<Packet: Sized> Drop for ClassifyEgressor<Packet> {
     fn drop(&mut self) {
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: Classifier> Stream for ClassifyEgressor<E> {
-    type Item = E::Packet;
+impl<Packet: Sized> Stream for ClassifyEgressor<Packet> {
+    type Item = Packet;
     type Error = ();
 
     /// Implement Poll for Stream for ClassifyEgressor
