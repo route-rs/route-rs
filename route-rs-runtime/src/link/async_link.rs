@@ -13,7 +13,7 @@ use std::sync::Arc;
 /// packet.
 pub struct AsyncLink<E: AsyncElement> {
     pub ingressor: AsyncIngressor<E>,
-    pub egressor: AsyncEgressor<E>,
+    pub egressor: AsyncEgressor<E::Output>,
 }
 
 impl<E: AsyncElement> AsyncLink<E> {
@@ -136,14 +136,14 @@ impl<E: AsyncElement> Future for AsyncIngressor<E> {
 /// output queue of processed packets, which is a crossbeam channel, to a
 /// Stream that can be polled for packets. It ends up being owned by the
 /// element which is polling for packets.
-pub struct AsyncEgressor<E: AsyncElement> {
-    from_ingressor: Receiver<Option<E::Output>>,
+pub struct AsyncEgressor<Packet: Sized> {
+    from_ingressor: Receiver<Option<Packet>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: AsyncElement> AsyncEgressor<E> {
+impl<Packet: Sized> AsyncEgressor<Packet> {
     fn new(
-        from_ingressor: Receiver<Option<E::Output>>,
+        from_ingressor: Receiver<Option<Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         AsyncEgressor {
@@ -159,14 +159,14 @@ impl<E: AsyncElement> AsyncEgressor<E> {
 /// to awaken it. It is not expected behavior that the Egressor dies while the
 /// Ingressor is still alive. But it may happen in edge cases and we want to
 /// ensure that a deadlock does not occur.
-impl<E: AsyncElement> Drop for AsyncEgressor<E> {
+impl<Packet: Sized> Drop for AsyncEgressor<Packet> {
     fn drop(&mut self) {
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: AsyncElement> Stream for AsyncEgressor<E> {
-    type Item = E::Output;
+impl<Packet: Sized> Stream for AsyncEgressor<Packet> {
+    type Item = Packet;
     type Error = ();
 
     /// Implement Poll for Stream for AsyncEgressor
