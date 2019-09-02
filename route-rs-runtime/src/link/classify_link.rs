@@ -1,4 +1,4 @@
-use crate::element::ClassifyElement;
+use crate::element::Classifier;
 use crate::link::task_park::*;
 use crate::link::PacketStream;
 use crossbeam::atomic::AtomicCell;
@@ -7,14 +7,14 @@ use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-pub struct ClassifyLink<'a, E: ClassifyElement> {
+pub struct ClassifyLink<'a, E: Classifier> {
     pub ingressor: ClassifyIngressor<'a, E>,
     pub egressors: Vec<ClassifyEgressor<E>>,
 }
 
-impl<'a, E: ClassifyElement> ClassifyLink<'a, E> {
+impl<'a, E: Classifier> ClassifyLink<'a, E> {
     pub fn new(
-        input_stream: PacketStream<E::Input>,
+        input_stream: PacketStream<E::Packet>,
         element: E,
         dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
         queue_capacity: usize,
@@ -30,16 +30,16 @@ impl<'a, E: ClassifyElement> ClassifyLink<'a, E> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        let mut to_egressors: Vec<Sender<Option<E::ActualOutput>>> = Vec::new();
+        let mut to_egressors: Vec<Sender<Option<E::Packet>>> = Vec::new();
         let mut egressors: Vec<ClassifyEgressor<E>> = Vec::new();
 
-        let mut from_ingressors: Vec<Receiver<Option<E::ActualOutput>>> = Vec::new();
+        let mut from_ingressors: Vec<Receiver<Option<E::Packet>>> = Vec::new();
 
         let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
         for _ in 0..branches {
             let (to_egressor, from_ingressor) =
-                crossbeam_channel::bounded::<Option<E::ActualOutput>>(queue_capacity);
+                crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
             let provider = ClassifyEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
@@ -63,19 +63,19 @@ impl<'a, E: ClassifyElement> ClassifyLink<'a, E> {
     }
 }
 
-pub struct ClassifyIngressor<'a, E: ClassifyElement> {
-    input_stream: PacketStream<E::Input>,
+pub struct ClassifyIngressor<'a, E: Classifier> {
+    input_stream: PacketStream<E::Packet>,
     dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
-    to_egressors: Vec<Sender<Option<E::ActualOutput>>>,
+    to_egressors: Vec<Sender<Option<E::Packet>>>,
     element: E,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
-impl<'a, E: ClassifyElement> ClassifyIngressor<'a, E> {
+impl<'a, E: Classifier> ClassifyIngressor<'a, E> {
     fn new(
-        input_stream: PacketStream<E::Input>,
+        input_stream: PacketStream<E::Packet>,
         dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
-        to_egressors: Vec<Sender<Option<E::ActualOutput>>>,
+        to_egressors: Vec<Sender<Option<E::Packet>>>,
         element: E,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
@@ -89,7 +89,7 @@ impl<'a, E: ClassifyElement> ClassifyIngressor<'a, E> {
     }
 }
 
-impl<'a, E: ClassifyElement> Drop for ClassifyIngressor<'a, E> {
+impl<'a, E: Classifier> Drop for ClassifyIngressor<'a, E> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
@@ -103,7 +103,7 @@ impl<'a, E: ClassifyElement> Drop for ClassifyIngressor<'a, E> {
     }
 }
 
-impl<'a, E: ClassifyElement> Future for ClassifyIngressor<'a, E> {
+impl<'a, E: Classifier> Future for ClassifyIngressor<'a, E> {
     type Item = ();
     type Error = ();
 
@@ -119,17 +119,17 @@ impl<'a, E: ClassifyElement> Future for ClassifyIngressor<'a, E> {
                     return Ok(Async::NotReady);
                 }
             }
-            let packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
+            let packet_option: Option<E::Packet> = try_ready!(self.input_stream.poll());
 
             match packet_option {
                 None => return Ok(Async::Ready(())),
                 Some(packet) => {
-                    let (class, actual_output) = self.element.process(packet);
+                    let class = self.element.classify(&packet);
                     let port = (self.dispatcher)(class);
                     if port >= self.to_egressors.len() {
                         panic!("Tried to access invalid port: {}", port);
                     }
-                    if let Err(err) = self.to_egressors[port].try_send(Some(actual_output)) {
+                    if let Err(err) = self.to_egressors[port].try_send(Some(packet)) {
                         panic!(
                             "Error in to_egressors[{}] sender, have nowhere to put packet: {:?}",
                             port, err
@@ -145,14 +145,14 @@ impl<'a, E: ClassifyElement> Future for ClassifyIngressor<'a, E> {
 /// Classify Element Provider, exactly the same as AsyncElementProvider, but
 /// they have different trait bounds. Hence the reimplementaton. Would love
 /// a PR that solves this problem.
-pub struct ClassifyEgressor<E: ClassifyElement> {
-    from_ingressor: crossbeam_channel::Receiver<Option<E::ActualOutput>>,
+pub struct ClassifyEgressor<E: Classifier> {
+    from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: ClassifyElement> ClassifyEgressor<E> {
+impl<E: Classifier> ClassifyEgressor<E> {
     fn new(
-        from_ingressor: crossbeam_channel::Receiver<Option<E::ActualOutput>>,
+        from_ingressor: crossbeam_channel::Receiver<Option<E::Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
         ClassifyEgressor {
@@ -162,14 +162,14 @@ impl<E: ClassifyElement> ClassifyEgressor<E> {
     }
 }
 
-impl<E: ClassifyElement> Drop for ClassifyEgressor<E> {
+impl<E: Classifier> Drop for ClassifyEgressor<E> {
     fn drop(&mut self) {
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: ClassifyElement> Stream for ClassifyEgressor<E> {
-    type Item = E::ActualOutput;
+impl<E: Classifier> Stream for ClassifyEgressor<E> {
+    type Item = E::Packet;
     type Error = ();
 
     /// Implement Poll for Stream for ClassifyEgressor
@@ -209,7 +209,6 @@ impl<E: ClassifyElement> Stream for ClassifyEgressor<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::Element;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -223,22 +222,13 @@ mod tests {
         }
     }
 
-    impl Element for ClassifyEvenness {
-        type Input = i32;
-        type Output = (bool, i32);
-
-        fn process(&mut self, packet: Self::Input) -> Self::Output {
-            if packet % 2 == 0 {
-                (true, packet)
-            } else {
-                (false, packet)
-            }
-        }
-    }
-
-    impl ClassifyElement for ClassifyEvenness {
+    impl Classifier for ClassifyEvenness {
+        type Packet = i32;
         type Class = bool;
-        type ActualOutput = i32;
+
+        fn classify(&self, packet: &Self::Packet) -> Self::Class {
+            packet % 2 == 0
+        }
     }
 
     #[test]
@@ -373,29 +363,21 @@ mod tests {
         }
     }
 
-    impl Element for ClassifyFizzBuzz {
-        type Input = i32;
-        type Output = (FizzBuzz, i32);
-
-        fn process(&mut self, packet: Self::Input) -> Self::Output {
-            (
-                if packet % 3 == 0 && packet % 5 == 0 {
-                    FizzBuzz::FizzBuzz
-                } else if packet % 3 == 0 {
-                    FizzBuzz::Fizz
-                } else if packet % 5 == 0 {
-                    FizzBuzz::Buzz
-                } else {
-                    FizzBuzz::None
-                },
-                packet,
-            )
-        }
-    }
-
-    impl ClassifyElement for ClassifyFizzBuzz {
+    impl Classifier for ClassifyFizzBuzz {
+        type Packet = i32;
         type Class = FizzBuzz;
-        type ActualOutput = i32;
+
+        fn classify(&self, packet: &Self::Packet) -> Self::Class {
+            if packet % 3 == 0 && packet % 5 == 0 {
+                FizzBuzz::FizzBuzz
+            } else if packet % 3 == 0 {
+                FizzBuzz::Fizz
+            } else if packet % 5 == 0 {
+                FizzBuzz::Buzz
+            } else {
+                FizzBuzz::None
+            }
+        }
     }
 
     #[test]
