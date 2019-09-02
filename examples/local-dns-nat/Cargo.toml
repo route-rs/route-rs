@@ -1,0 +1,15 @@
+[package]
+name = "local-dns-nat"
+version = "0.1.0"
+authors = ["Sam Gruber <sam@scgruber.com>"]
+edition = "2018"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+route-rs-runtime = { path = "../../route-rs-runtime" }
+tokio = "*"
+futures = "*"
+crossbeam = "*"
+smoltcp = "0.5.0"
