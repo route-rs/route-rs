@@ -1,14 +1,14 @@
 use crate::link::task_park::*;
-use crate::link::PacketStream;
+use crate::link::{AsyncEgressor, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
-use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
+use crossbeam::crossbeam_channel::{Receiver, Sender};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 pub struct TeeLink<P: Sized + Clone> {
     pub ingressor: TeeIngressor<P>,
-    pub egressors: Vec<TeeEgressor<P>>,
+    pub egressors: Vec<AsyncEgressor<P>>,
 }
 
 impl<P: Sized + Clone> TeeLink<P> {
@@ -23,7 +23,7 @@ impl<P: Sized + Clone> TeeLink<P> {
         );
 
         let mut to_egressors: Vec<Sender<Option<P>>> = Vec::new();
-        let mut egressors: Vec<TeeEgressor<P>> = Vec::new();
+        let mut egressors: Vec<AsyncEgressor<P>> = Vec::new();
 
         let mut from_ingressors: Vec<Receiver<Option<P>>> = Vec::new();
 
@@ -34,7 +34,7 @@ impl<P: Sized + Clone> TeeLink<P> {
                 crossbeam_channel::bounded::<Option<P>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-            let egressor = TeeEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
+            let egressor = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
 
             to_egressors.push(to_egressor);
             egressors.push(egressor);
@@ -114,62 +114,6 @@ impl<P: Sized + Clone> Future for TeeIngressor<P> {
                     }
                 }
             }
-        }
-    }
-}
-
-/// Tee Element Egressor, exactly the same as AsyncElementEgressor, but
-/// they have different trait bounds. Hence the reimplementaton. Would love
-/// a PR that solves this problem.
-pub struct TeeEgressor<P> {
-    from_ingressor: crossbeam_channel::Receiver<Option<P>>,
-    task_park: Arc<AtomicCell<TaskParkState>>,
-}
-
-impl<P> TeeEgressor<P> {
-    fn new(
-        from_ingressor: crossbeam_channel::Receiver<Option<P>>,
-        task_park: Arc<AtomicCell<TaskParkState>>,
-    ) -> Self {
-        TeeEgressor {
-            from_ingressor,
-            task_park,
-        }
-    }
-}
-
-impl<P> Drop for TeeEgressor<P> {
-    fn drop(&mut self) {
-        die_and_notify(&self.task_park);
-    }
-}
-
-impl<P: Sized + Clone> Stream for TeeEgressor<P> {
-    type Item = P;
-    type Error = ();
-
-    /// Implement Poll for Stream for TeeEgressor
-    ///
-    /// This function, tries to retrieve a packet off the `from_ingressor`
-    /// channel, there are four cases:
-    /// ###
-    /// #1 Ok(Some(Packet)): Got a packet.
-    /// #2 Ok(None): this means that the ingressor is in tear-down
-    /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the ingressor to awaken us
-    /// #4 Err(TryRecvError::Disconnected): Ingressor is in teardown
-    /// ###
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.from_ingressor.try_recv() {
-            Ok(Some(packet)) => {
-                unpark_and_notify(&self.task_park);
-                Ok(Async::Ready(Some(packet)))
-            }
-            Ok(None) => Ok(Async::Ready(None)),
-            Err(TryRecvError::Empty) => {
-                park_and_notify(&self.task_park);
-                Ok(Async::NotReady)
-            }
-            Err(TryRecvError::Disconnected) => Ok(Async::Ready(None)),
         }
     }
 }
