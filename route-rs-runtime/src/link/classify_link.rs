@@ -1,15 +1,15 @@
 use crate::element::Classifier;
 use crate::link::task_park::*;
-use crate::link::PacketStream;
+use crate::link::{AsyncEgressor, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
-use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
+use crossbeam::crossbeam_channel::{Receiver, Sender};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 pub struct ClassifyLink<'a, E: Classifier> {
     pub ingressor: ClassifyIngressor<'a, E>,
-    pub egressors: Vec<ClassifyEgressor<E::Packet>>,
+    pub egressors: Vec<AsyncEgressor<E::Packet>>,
 }
 
 impl<'a, E: Classifier> ClassifyLink<'a, E> {
@@ -31,7 +31,7 @@ impl<'a, E: Classifier> ClassifyLink<'a, E> {
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         let mut to_egressors: Vec<Sender<Option<E::Packet>>> = Vec::new();
-        let mut egressors: Vec<ClassifyEgressor<E::Packet>> = Vec::new();
+        let mut egressors: Vec<AsyncEgressor<E::Packet>> = Vec::new();
 
         let mut from_ingressors: Vec<Receiver<Option<E::Packet>>> = Vec::new();
 
@@ -42,7 +42,7 @@ impl<'a, E: Classifier> ClassifyLink<'a, E> {
                 crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-            let provider = ClassifyEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
+            let provider = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
 
             to_egressors.push(to_egressor);
             egressors.push(provider);
@@ -138,70 +138,6 @@ impl<'a, E: Classifier> Future for ClassifyIngressor<'a, E> {
                     unpark_and_notify(&self.task_parks[port]);
                 }
             }
-        }
-    }
-}
-
-/// Classify Element Provider, exactly the same as AsyncElementProvider, but
-/// they have different trait bounds. Hence the reimplementaton. Would love
-/// a PR that solves this problem.
-pub struct ClassifyEgressor<Packet: Sized> {
-    from_ingressor: crossbeam_channel::Receiver<Option<Packet>>,
-    task_park: Arc<AtomicCell<TaskParkState>>,
-}
-
-impl<Packet: Sized> ClassifyEgressor<Packet> {
-    fn new(
-        from_ingressor: crossbeam_channel::Receiver<Option<Packet>>,
-        task_park: Arc<AtomicCell<TaskParkState>>,
-    ) -> Self {
-        ClassifyEgressor {
-            from_ingressor,
-            task_park,
-        }
-    }
-}
-
-impl<Packet: Sized> Drop for ClassifyEgressor<Packet> {
-    fn drop(&mut self) {
-        die_and_notify(&self.task_park);
-    }
-}
-
-impl<Packet: Sized> Stream for ClassifyEgressor<Packet> {
-    type Item = Packet;
-    type Error = ();
-
-    /// Implement Poll for Stream for ClassifyEgressor
-    ///
-    /// This function, tries to retrieve a packet off the `from_ingressor`
-    /// channel, there are four cases:
-    /// ###
-    /// #1 Ok(Some(Packet)): Got a packet. If the ingressor needs, (likely due to
-    /// an until-now full channel) to be awoken, wake them. Return the Async::Ready(Option(Packet))
-    ///
-    /// #2 Ok(None): this means that the ingressor is in tear-down, and we
-    /// will no longer be receiving packets. Return Async::Ready(None) to forward propagate teardown
-    ///
-    /// #3 Err(TryRecvError::Empty): Packet queue is empty, await the ingressor to awaken us with more
-    /// work, and return Async::NotReady to signal to runtime to sleep this task.
-    ///
-    /// #4 Err(TryRecvError::Disconnected): ingressor is in teardown and has dropped its side of the
-    /// from_ingressor channel; we will no longer receive packets. Return Async::Ready(None) to forward
-    /// propagate teardown.
-    /// ###
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.from_ingressor.try_recv() {
-            Ok(Some(packet)) => {
-                unpark_and_notify(&self.task_park);
-                Ok(Async::Ready(Some(packet)))
-            }
-            Ok(None) => Ok(Async::Ready(None)),
-            Err(TryRecvError::Empty) => {
-                park_and_notify(&self.task_park);
-                Ok(Async::NotReady)
-            }
-            Err(TryRecvError::Disconnected) => Ok(Async::Ready(None)),
         }
     }
 }
