@@ -142,7 +142,7 @@ pub struct AsyncEgressor<Packet: Sized> {
 }
 
 impl<Packet: Sized> AsyncEgressor<Packet> {
-    fn new(
+    pub fn new(
         from_ingressor: Receiver<Option<Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
