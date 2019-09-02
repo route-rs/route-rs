@@ -1,5 +1,5 @@
 use crate::packets::*;
-use route_rs_runtime::element::{ClassifyElement, Element};
+use route_rs_runtime::element::{Classifier, Element};
 use std::collections::HashMap;
 
 pub struct SetInterfaceByDestination {
@@ -44,21 +44,16 @@ impl ClassifyDNS {
     }
 }
 
-impl Element for ClassifyDNS {
-    type Input = (Interface, SimplePacket);
-    type Output = (ClassifyDNSOutput, Self::Input);
+impl Classifier for ClassifyDNS {
+    type Packet = (Interface, SimplePacket);
+    type Class = ClassifyDNSOutput;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
+    fn classify(&self, packet: &Self::Packet) -> Self::Class {
         match packet.1.destination.port {
-            53 => (ClassifyDNSOutput::DNS, packet),
-            _ => (ClassifyDNSOutput::Other, packet),
+            53 => ClassifyDNSOutput::DNS,
+            _ => ClassifyDNSOutput::Other,
         }
     }
-}
-
-impl ClassifyElement for ClassifyDNS {
-    type Class = ClassifyDNSOutput;
-    type ActualOutput = Self::Input;
 }
 
 pub struct LocalDNSInterceptor {
