@@ -12,7 +12,7 @@ impl Hash for LookupTupleIpv4 {
 }
 
 /// The 5-tuple of an IPv4 packet commonly used for NAT translation, firewall rules, etc.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct LookupTupleIpv4 {
     proto: IpProtocol,
     src_ip: Ipv4Address,

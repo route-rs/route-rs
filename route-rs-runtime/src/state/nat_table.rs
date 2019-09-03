@@ -17,9 +17,10 @@ impl NatTable {
 
     /// Insert a set of internal and external tuples into NatTable, returns and
     /// Error if the value already exists
-    pub fn insert(&self, internal: LookupTupleIpv4, external: LookupTupleIpv4) -> Result<(), ()> {
-        if self.table.write().insert_no_overwrite(internal, external).is_err() {
-            Err(())
+    pub fn insert(&self, internal: LookupTupleIpv4, external: LookupTupleIpv4) -> Result<(),()> {
+        let mut nat_table = self.table.write().unwrap();
+        if nat_table.insert_no_overwrite(internal, external).is_err() {
+           return Err(());
         }
         Ok(())
     }
@@ -28,28 +29,41 @@ impl NatTable {
     /// rows if there is a collision, so be careful before you do this.
     pub fn insert_overwrite(&self, internal: LookupTupleIpv4, external: LookupTupleIpv4) {
         //TODO need some sort of error here. 
-        self.table.write().insert(internal,external);
+        let mut nat_table = self.table.write().unwrap();
+        nat_table.insert(internal,external);
     }
 
     /// Retrieve Internal Tuple given an External Tuple, returns Error if
     /// there is no entry for the given Internal Tuple.
-    pub fn get_internal(&self, external: &LookupTupleIpv4) -> Option<&LookupTupleIpv4> {
-        self.table.read().get_by_left(external)
+    /// In order to prevent borrowing confusion, we return a clone of the Tuple.
+    pub fn get_internal(&self, external: &LookupTupleIpv4) -> Option<LookupTupleIpv4> {
+        let nat_table = self.table.read().unwrap();
+        match nat_table.get_by_right(external) {
+            Some(tuple) => Some(tuple.clone()),
+            None => None,
+        }
     }
 
     /// Retrieve External Tuple given an Internal Tuple, returns Error if
     /// there is no entry for the given Internal Tuple.
-    pub fn get_external(&self, internal: &LookupTupleIpv4) -> Option<&LookupTupleIpv4> {
-        self.table.read().get_by_right(internal)  
+    /// In order to prevent borrowing confusion, we return a clone of the Tuple.
+    pub fn get_external(&self, internal: &LookupTupleIpv4) -> Option<LookupTupleIpv4> {
+        let nat_table = self.table.read().unwrap();
+        match nat_table.get_by_left(internal) {
+            Some(tuple) => Some(tuple.clone()),
+            None => None,
+        }
     }
 
     /// Returns True if Internal Tuple already exists in Table
     pub fn contains_internal(&self, internal: &LookupTupleIpv4) -> bool {
-        self.table.read().contains_left(internal)
+        let nat_table = self.table.read().unwrap();
+        nat_table.contains_left(internal)
     }
 
     /// Returns True if External Tuple already exists in Table
     pub fn contains_external(&self, external: &LookupTupleIpv4) -> bool {
-        self.table.contains_right(external)
+        let nat_table = self.table.read().unwrap();
+        nat_table.contains_right(external)
     }
 }
