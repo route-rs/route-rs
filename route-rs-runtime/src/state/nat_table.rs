@@ -33,7 +33,7 @@ impl NatTable {
         nat_table.insert(internal,external);
     }
 
-    /// Retrieve Internal Tuple given an External Tuple, returns Error if
+    /// Retrieve Internal Tuple given an External Tuple, returns None if
     /// there is no entry for the given Internal Tuple.
     /// In order to prevent borrowing confusion, we return a clone of the Tuple.
     pub fn get_internal(&self, external: &LookupTupleIpv4) -> Option<LookupTupleIpv4> {
@@ -44,7 +44,7 @@ impl NatTable {
         }
     }
 
-    /// Retrieve External Tuple given an Internal Tuple, returns Error if
+    /// Retrieve External Tuple given an Internal Tuple, returns None if
     /// there is no entry for the given Internal Tuple.
     /// In order to prevent borrowing confusion, we return a clone of the Tuple.
     pub fn get_external(&self, internal: &LookupTupleIpv4) -> Option<LookupTupleIpv4> {
