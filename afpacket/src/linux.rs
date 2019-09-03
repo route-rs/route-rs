@@ -20,6 +20,10 @@ pub(crate) const TP_STATUS_WRONG_FORMAT: u32 = 4;
 
 pub(crate) const SIOCGIFINDEX: libc::c_ulong = 0x8933;
 
+pub(crate) const SOL_PACKET: libc::c_int = 263;
+pub(crate) const PACKET_ADD_MEMBERSHIP: libc::c_int = 1;
+pub(crate) const PACKET_DROP_MEMBERSHIP: libc::c_int = 2;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct ifmap {
@@ -84,4 +88,14 @@ pub(crate) struct tpacket3_hdr {
     tp_net: u16,
     hdr1: tpacket_hdr_variant1,
     tp_padding: [u8; 8],
+}
+
+pub(crate) const PACKET_MR_PROMISC: libc::c_int = 1;
+
+#[repr(C)]
+pub(crate) struct packet_mreq {
+    pub(crate) mr_ifindex: libc::c_int,
+    pub(crate) mr_type: libc::c_ushort,
+    pub(crate) mr_alen: libc::c_ushort,
+    pub(crate) mr_address: [libc::c_char; 8],
 }

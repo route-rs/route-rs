@@ -26,6 +26,7 @@ pub struct Socket {
 /// to/written from.
 pub struct BoundSocket {
     fd: libc::c_int,
+    iface: linux::ifreq,
     send_addr: libc::sockaddr_ll,
 }
 
@@ -56,7 +57,7 @@ impl Socket {
         // because 1) it handles FFI failures in accordance with the bound API's conventions, and
         // 2) it safely borrows the &CStr passed in. We will test this functionality with `miri` to
         // confirm the above assumptions.
-        let send_addr = unsafe {
+        let (send_addr, iface) = unsafe {
             // get the index of the interface
             let mut ifr: linux::ifreq = MaybeUninit::zeroed().assume_init();
             ptr::copy_nonoverlapping(
@@ -74,7 +75,8 @@ impl Socket {
 
             // bind the socket
             let mut ll: libc::sockaddr_ll = MaybeUninit::zeroed().assume_init();
-            ll.sll_family = libc::AF_PACKET as libc::c_ushort;
+            ll.sll_family = libc::AF_PACKET as libc::sa_family_t;
+            ll.sll_protocol = (libc::ETH_P_ALL as u16).to_be();
             ll.sll_ifindex = ifr.ifr_ifru.ifru_ivalue; // expanded from `ifr_ifindex` in kernel headers
                                                        // Resources:
                                                        // https://beej.us/guide/bgnet/html/multi/syscalls.html#bind
@@ -87,7 +89,8 @@ impl Socket {
             if err < 0 {
                 return Err(io::Error::last_os_error());
             }
-            ll
+
+            (ll, ifr)
         };
         let fd = self.fd;
         // This ensures that `self` does not attempt to close the file descriptor, as the file
@@ -95,7 +98,11 @@ impl Socket {
         // resource leaks since the stack-bound `self` is consumed and deallocated in
         // `mem::forget`.
         mem::forget(self);
-        Ok(BoundSocket { fd, send_addr })
+        Ok(BoundSocket {
+            fd,
+            iface,
+            send_addr,
+        })
     }
 
     /// Configures the socket's non-blocking status.
@@ -139,6 +146,42 @@ impl Socket {
 }
 
 impl BoundSocket {
+    /// Turns promsicuous mode on or off on this NIC. Useful for recieving all packets on an
+    /// interface, including those not addressed to the device.
+    pub fn set_promiscuous(&mut self, p: bool) -> io::Result<()> {
+        // This block is unsafe because it uses FFI. We believe this code to be safe, as it
+        // conforms to the invariants of the BoundSocket API and the underlying C library.
+        unsafe {
+            let mut mreq: linux::packet_mreq = MaybeUninit::zeroed().assume_init();
+            mreq.mr_ifindex = self.iface.ifr_ifru.ifru_ivalue; // expanded from `ifr_ifindex` in kernel headers
+            mreq.mr_type = linux::PACKET_MR_PROMISC as u16;
+
+            // Resources for the next two setsockopt invocations:
+            // man 7 packet
+            let err = if p {
+                libc::setsockopt(
+                    self.fd,
+                    linux::SOL_PACKET,
+                    linux::PACKET_ADD_MEMBERSHIP,
+                    &mreq as *const _ as *const libc::c_void,
+                    mem::size_of::<linux::packet_mreq>() as u32,
+                )
+            } else {
+                libc::setsockopt(
+                    self.fd,
+                    linux::SOL_PACKET,
+                    linux::PACKET_DROP_MEMBERSHIP,
+                    &mreq as *const _ as *const libc::c_void,
+                    mem::size_of::<linux::packet_mreq>() as u32,
+                )
+            };
+            if err < 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+
     /// Sends a frame to the NIC.
     pub fn send(&mut self, frame: &[u8]) -> io::Result<usize> {
         // This block is marked as unsafe because it uses FFI. We believe this code to be safe,
