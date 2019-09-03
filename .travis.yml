@@ -7,16 +7,12 @@ branches:
     - master
 jobs:
   include:
-    - stage: lint
-      install: rustup component add rustfmt
-      script: cargo fmt -- --check
-    - stage: lint
-      install: rustup component add clippy
-      script: cargo clippy --all-targets -- -D warnings
-    - stage: lint
-      install: cargo install -f cargo-deny
-      script: cargo deny check
-    - stage: build
-      script: cargo build --verbose
     - stage: test
-      script: cargo test --verbose
+      install: rustup component add rustfmt &&
+                rustup component add clippy &&
+                cargo install -f cargo-deny
+      script: cargo fmt -- --check &&
+                cargo clippy --all-targets -- -D warnings &&
+                cargo deny check &&
+                cargo build --verbose &&
+                cargo test --verbose
