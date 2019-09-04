@@ -1,8 +1,8 @@
+use crate::packet::tuple::LookupTupleIpv4;
 use bimap::BiHashMap;
 use std::sync::RwLock;
-use crate::packet::tuple::LookupTupleIpv4;
 
-struct NatTable {
+pub struct NatTable {
     table: RwLock<BiHashMap<LookupTupleIpv4, LookupTupleIpv4>>,
 }
 
@@ -10,17 +10,15 @@ impl NatTable {
     /// Creates a new empty Nat Table
     pub fn new() -> Self {
         let table = RwLock::new(BiHashMap::new());
-        NatTable{
-            table,
-        }
+        NatTable { table }
     }
 
     /// Insert a set of internal and external tuples into NatTable, returns and
     /// Error if the value already exists
-    pub fn insert(&self, internal: LookupTupleIpv4, external: LookupTupleIpv4) -> Result<(),()> {
+    pub fn insert(&self, internal: LookupTupleIpv4, external: LookupTupleIpv4) -> Result<(), ()> {
         let mut nat_table = self.table.write().unwrap();
         if nat_table.insert_no_overwrite(internal, external).is_err() {
-           return Err(());
+            return Err(());
         }
         Ok(())
     }
@@ -28,9 +26,9 @@ impl NatTable {
     /// Insert a set of internal and external tuples into NatTale, this will overwrite
     /// rows if there is a collision, so be careful before you do this.
     pub fn insert_overwrite(&self, internal: LookupTupleIpv4, external: LookupTupleIpv4) {
-        //TODO need some sort of error here. 
+        //TODO need some sort of error here.
         let mut nat_table = self.table.write().unwrap();
-        nat_table.insert(internal,external);
+        nat_table.insert(internal, external);
     }
 
     /// Retrieve Internal Tuple given an External Tuple, returns None if
@@ -119,7 +117,9 @@ mod tests {
             9593);
 
         // Test insertion
-        nat_table.insert(internal_tuple.clone(), external_tuple.clone()).unwrap();
+        nat_table
+            .insert(internal_tuple.clone(), external_tuple.clone())
+            .unwrap();
         assert_eq!(nat_table.len(), 1);
 
         // Test contains

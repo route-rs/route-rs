@@ -1,3 +1,4 @@
+use rand::Rng;
 use smoltcp::wire::*;
 use std::hash::{Hash, Hasher};
 
@@ -14,11 +15,11 @@ impl Hash for LookupTupleIpv4 {
 /// The 5-tuple of an IPv4 packet commonly used for NAT translation, firewall rules, etc.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct LookupTupleIpv4 {
-    proto: IpProtocol,
-    src_ip: Ipv4Address,
-    dst_ip: Ipv4Address,
-    src_port: u16,
-    dst_port: u16,
+    pub proto: IpProtocol,
+    pub src_ip: Ipv4Address,
+    pub dst_ip: Ipv4Address,
+    pub src_port: u16,
+    pub dst_port: u16,
 }
 
 impl LookupTupleIpv4 {
@@ -65,6 +66,36 @@ impl LookupTupleIpv4 {
             src_port,
             dst_port,
         })
+    }
+
+    /// Create matching tuple for reverse flow
+    pub fn reverse_tuple(&self) -> LookupTupleIpv4 {
+        LookupTupleIpv4 {
+            proto: self.proto,
+            src_ip: self.dst_ip,
+            src_port: self.dst_port,
+            dst_ip: self.src_ip,
+            dst_port: self.src_port,
+        }
+    }
+
+    /// Create matching tuple for reverse flow specifically for NAT,
+    /// with given IP address for dst_ip and random dst_port
+    pub fn reverse_tuple_nat(&self, external_ip: Ipv4Address) -> LookupTupleIpv4 {
+        let mut new_tuple = LookupTupleIpv4 {
+            proto: self.proto,
+            src_ip: self.dst_ip,
+            src_port: self.dst_port,
+            dst_ip: external_ip,
+            dst_port: 0,
+        };
+        new_tuple.randomize_dst_port();
+        new_tuple
+    }
+
+    pub fn randomize_dst_port(&mut self) {
+        let mut rng = rand::thread_rng();
+        self.dst_port = rng.gen();
     }
 
     pub fn rewrite_packet(&self, packet: &mut Ipv4Packet<Vec<u8>>) {

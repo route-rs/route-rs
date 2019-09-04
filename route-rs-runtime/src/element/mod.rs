@@ -10,5 +10,8 @@ pub use self::transform_elements::*;
 mod dec_ip_hop;
 pub use self::dec_ip_hop::*;
 
+mod lan_rewriter;
+pub use self::lan_rewriter::*;
+
 mod classifier;
 pub use self::classifier::*;
