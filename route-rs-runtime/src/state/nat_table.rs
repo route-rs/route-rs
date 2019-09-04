@@ -104,23 +104,19 @@ mod tests {
     fn insert_one_row() {
         let nat_table = NatTable::new();
 
-        // Create a testing packet
-        let init_ttl = 64;
-        let repr = Ipv4Repr {
-            src_addr: Ipv4Address::new(10, 0, 0, 1),
-            dst_addr: Ipv4Address::new(10, 0, 0, 2),
-            protocol: IpProtocol::Tcp,
-            payload_len: 10,
-            hop_limit: init_ttl,
-        };
-        let buffer = vec![0; repr.buffer_len() + repr.payload_len];
-        let mut packet = Ipv4Packet::new_unchecked(buffer);
-        repr.emit(&mut packet, &ChecksumCapabilities::default());
-
         // Create test tuple
-        //TODO: this fails because I don't have a valid TCP packet
-        let mut internal_tuple = LookupTupleIpv4::new(&mut packet).unwrap();
-        let mut external_tuple = internal_tuple.clone();
+        let internal_tuple = LookupTupleIpv4::new(
+            IpProtocol::Tcp,
+            Ipv4Address::new(10,0,0,1),
+            Ipv4Address::new(10,0,0,2),
+            1337,
+            2000);
+        let external_tuple = LookupTupleIpv4::new(
+            IpProtocol::Tcp,
+            Ipv4Address::new(172,168,0,1),
+            Ipv4Address::new(8,8,8,8),
+            420,
+            9593);
 
         // Test insertion
         nat_table.insert(internal_tuple.clone(), external_tuple.clone()).unwrap();
@@ -130,5 +126,21 @@ mod tests {
         assert!(nat_table.contains_internal(&internal_tuple));
         assert!(nat_table.contains_external(&external_tuple));
 
+        // Test get
+        assert_eq!(nat_table.get_internal(&external_tuple), Some(internal_tuple.clone()));
+        assert_eq!(nat_table.get_external(&internal_tuple), Some(external_tuple.clone()));
+
+        // Test can't overwrite
+        assert!(nat_table.insert(internal_tuple.clone(), external_tuple.clone()).is_err());
+        assert_eq!(nat_table.len(), 1);
+
+        //Test can overwrite
+        nat_table.insert_overwrite(internal_tuple.clone(), external_tuple.clone());
+        assert_eq!(nat_table.len(), 1);
+        assert_eq!(nat_table.get_internal(&external_tuple), Some(internal_tuple.clone()));
+
+        //Test clear 
+        nat_table.clear();
+        assert!(nat_table.is_empty());
     }
 }

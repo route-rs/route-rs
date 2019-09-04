@@ -12,7 +12,7 @@ impl Hash for LookupTupleIpv4 {
 }
 
 /// The 5-tuple of an IPv4 packet commonly used for NAT translation, firewall rules, etc.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct LookupTupleIpv4 {
     proto: IpProtocol,
     src_ip: Ipv4Address,
@@ -22,9 +22,21 @@ pub struct LookupTupleIpv4 {
 }
 
 impl LookupTupleIpv4 {
+    /// Create a new LookupTupleIpv4 by specifying all fields
+    pub fn new(proto: IpProtocol, src_ip: Ipv4Address, dst_ip: Ipv4Address, src_port: u16, dst_port: u16) -> LookupTupleIpv4 {
+        LookupTupleIpv4{
+            proto,
+            src_ip,
+            dst_ip,
+            src_port,
+            dst_port,
+        }
+    }
+
+    //TODO, could this be a from implementation?
     /// Takes a packet and returns a result with the 5-tuple if the packet is a valid TCP or UDP, Err
     /// otherwise (ICMP support will be added eventually...)
-    pub fn new(packet: &mut Ipv4Packet<Vec<u8>>) -> Result<LookupTupleIpv4, &'static str> {
+    pub fn new_from_packet(packet: &mut Ipv4Packet<Vec<u8>>) -> Result<LookupTupleIpv4, &'static str> {
         let src_ip = packet.src_addr();
         let dst_ip = packet.dst_addr();
         let proto = packet.protocol();
