@@ -56,7 +56,7 @@ mod tests {
     }
 
     #[test]
-    fn blackhole_link_finishes() {
+    fn finishes() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
@@ -68,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn blackhole_link_with_wait_finishes() {
+    fn finishes_with_wait() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
@@ -83,7 +83,7 @@ mod tests {
     }
 
     #[test]
-    fn blackhole_odd_packets() {
+    fn odd_packets() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
