@@ -62,10 +62,15 @@ fn swap_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>, swap: TaskParkSta
     }
 }
 
+/// Notifies a task if it resides in the `task_park`
+/// Use this when you wish you wake up a task but do not wish to sleep yourself
 pub fn unpark_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
     swap_and_notify(task_park, TaskParkState::Empty);
 }
 
+/// Notifies a task if it resides in the `task_park`, and
+/// then parks the callee task in the `task_park`.
+/// Use when you wish to sleep the current task
 pub fn park_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
     let task = task::current();
     if !swap_and_notify(task_park, TaskParkState::Parked(task)) {
@@ -73,6 +78,10 @@ pub fn park_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
     }
 }
 
+/// Simlar to logic to `park_and_notify`, with the key difference being that it
+/// takes a provided Arc of the task handle that we wish to park. This enables the
+/// callee to park their task handle in multiple locations without fear of overnotificiation.
+/// This is used primarily by the egressor of the join element.
 pub fn indirect_park_and_notify(
     task_park: &Arc<AtomicCell<TaskParkState>>,
     task: Arc<AtomicCell<Option<task::Task>>>,
@@ -80,6 +89,10 @@ pub fn indirect_park_and_notify(
     swap_and_notify(task_park, TaskParkState::IndirectParked(task))
 }
 
+/// Notifies a task if it resides in the `task_park`, and then sets
+/// the `TaskParkState` to `Dead`.
+/// Use when the callee is dropping and will not be able to awaken tasks
+/// parked here in the future.
 pub fn die_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
     swap_and_notify(task_park, TaskParkState::Dead);
 }
