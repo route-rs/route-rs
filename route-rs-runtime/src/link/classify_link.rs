@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn one_even_odd() {
+    fn even_odd() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn one_only_odd() {
+    fn only_odd() {
         let default_channel_size = 5;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn one_even_odd_long_stream() {
+    fn even_odd_long_stream() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packet_generator = immediate_stream(0..2000);
@@ -317,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn one_fizz_buzz() {
+    fn fizz_buzz() {
         let default_channel_size = 10;
         let packet_generator = immediate_stream(0..=30);
 
@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn one_even_odd_wait_between_packets() {
+    fn even_odd_wait_between_packets() {
         let default_channel_size = 10;
         let number_branches = 2;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "queue capacity must be non-zero")]
-    fn one_classify_element_empty_channel() {
+    fn empty_channel() {
         let default_channel_size = 0;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![]);
