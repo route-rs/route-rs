@@ -20,10 +20,12 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
         let elem_1_identityelement = IdentityElement::new();
 
         let link_1 = InputChannelLink::new(input_channel);
+
         let link_2 = SyncLink::new(Box::new(link_1), elem_1_identityelement);
+
         let link_3 = OutputChannelLink::new(Box::new(link_2), output_channel);
 
-        tokio::run(lazy(|| {
+        tokio::run(lazy(move || {
             tokio::spawn(link_3);
             Ok(())
         }));

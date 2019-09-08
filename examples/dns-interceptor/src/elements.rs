@@ -8,7 +8,9 @@ pub struct SetInterfaceByDestination {
 }
 
 impl SetInterfaceByDestination {
-    pub fn new(lan_subnet_prefix: u32, lan_subnet_mask: u32) -> Self {
+    pub fn new() -> Self {
+        let lan_subnet_prefix = u32::from_be_bytes([10, 0, 0, 1]);
+        let lan_subnet_mask = 0xFF00_0000;
         SetInterfaceByDestination {
             lan_subnet_prefix,
             lan_subnet_mask,
