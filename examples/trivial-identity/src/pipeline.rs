@@ -17,10 +17,10 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
         input_channel: crossbeam::Receiver<Self::Input>,
         output_channel: crossbeam::Sender<Self::Output>,
     ) {
-        let elem_1 = IdentityElement::new();
+        let elem_1_identityelement = IdentityElement::new();
 
         let link_1 = InputChannelLink::new(input_channel);
-        let link_2 = SyncLink::new(Box::new(link_1), elem_1);
+        let link_2 = SyncLink::new(Box::new(link_1), elem_1_identityelement);
         let link_3 = OutputChannelLink::new(Box::new(link_2), output_channel);
 
         tokio::run(lazy(|| {

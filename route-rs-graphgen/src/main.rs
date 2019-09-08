@@ -66,7 +66,7 @@ fn gen_element_decls(elements: &[&&NodeData]) -> (String, HashMap<String, String
     let decls: Vec<String> = elements
         .iter()
         .map(|e| {
-            let symbol = format!("elem_{}", decl_idx);
+            let symbol = format!("elem_{}_{}", decl_idx, e.node_class.to_lowercase());
             decl_idx += 1;
             element_decls_map.insert(e.xml_node_id.to_owned(), symbol.clone());
             codegen::let_new(symbol, &e.node_class, Vec::<&str>::new())
