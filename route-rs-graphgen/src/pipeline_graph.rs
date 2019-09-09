@@ -10,6 +10,7 @@ pub type XmlNodeId = String;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeKind {
+    Classifier,
     Element,
     IO,
 }
@@ -32,6 +33,7 @@ pub struct EdgeData {
     pub xml_node_id: XmlNodeId,
     pub source: XmlNodeId,
     pub target: XmlNodeId,
+    pub label: Option<String>,
 }
 
 pub struct PipelineGraph {
@@ -58,7 +60,21 @@ impl PipelineGraph {
             graph.extend_with_edges(&[(source_index, target_index, e)]);
         }
 
-        PipelineGraph { graph }
+        let mut g = PipelineGraph { graph };
+        g.mark_classifiers();
+        g
+    }
+
+    /// Converts elements that have multiple output edges into Classifiers. In the future we'll
+    /// want to distinguish between Classifiers and Tees based on whether they have labels, but for
+    /// now we only have a Classifier example.
+    pub fn mark_classifiers(&mut self) {
+        self.graph.node_indices().for_each(|ni| {
+            if self.graph.edges(ni).count() > 1 {
+                let mut weight = self.graph.node_weight_mut(ni).unwrap();
+                weight.node_kind = NodeKind::Classifier;
+            }
+        })
     }
 
     /// Provides a vector of all nodes in the graph, in arbitrary order.
@@ -170,6 +186,7 @@ fn nodes_edges_from_xml<R: Read>(xml_source: EventReader<R>) -> (Vec<NodeData>, 
                         xml_node_id: get_attr(&attrs, "id").unwrap(),
                         source: get_attr(&attrs, "source").unwrap(),
                         target: get_attr(&attrs, "target").unwrap(),
+                        label: get_attr(&attrs, "value"),
                     });
                 }
                 // Ignore other xml node types
