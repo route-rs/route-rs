@@ -313,3 +313,72 @@ mod let_new {
         )
     }
 }
+
+pub fn match_expr<S, T, U>(symbol: S, branches: Vec<(T, U)>) -> String
+where
+    S: Into<String>,
+    T: Into<String>,
+    U: Into<String>,
+{
+    let branch_expr = branches
+        .into_iter()
+        .map(|(pattern, result)| format!("{} => {{ {} }},", pattern.into(), result.into()))
+        .collect::<Vec<String>>();
+    let branch_expr_str = if !branch_expr.is_empty() {
+        [
+            String::from("\n"),
+            indent("    ", branch_expr.join("\n")),
+            String::from("\n"),
+        ]
+        .join("")
+    } else {
+        String::from("")
+    };
+    format!("match {} {{{}}}", symbol.into(), branch_expr_str)
+}
+
+#[cfg(test)]
+mod match_expr {
+    use super::*;
+
+    #[test]
+    fn empty_branches() {
+        let empty_branches: Vec<(&str, &str)> = vec![];
+        assert_eq!(match_expr("foo", empty_branches), "match foo {}");
+    }
+
+    #[test]
+    fn one_branch() {
+        let branches = vec![("_", "true")];
+        assert_eq!(
+            match_expr("foo", branches),
+            "match foo {\n    _ => { true },\n}"
+        );
+    }
+
+    #[test]
+    fn two_branches() {
+        let branches = vec![("true", "\"red\""), ("false", "\"blue\"")];
+        assert_eq!(
+            match_expr("foo", branches),
+            "match foo {\n    true => { \"red\" },\n    false => { \"blue\" },\n}"
+        );
+    }
+}
+
+pub fn box_expr<S>(expr: S) -> String
+where
+    S: Into<String>,
+{
+    format!("Box::new({})", expr.into())
+}
+
+#[cfg(test)]
+mod box_expr {
+    use super::*;
+
+    #[test]
+    fn thing() {
+        assert_eq!(box_expr("thing"), "Box::new(thing)");
+    }
+}

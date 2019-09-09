@@ -11,29 +11,36 @@ use xml::reader::EventReader;
 
 use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNodeId};
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
 
 mod codegen;
 mod pipeline_graph;
 
 enum Link {
     Input,
-    Output(pipeline_graph::XmlNodeId),
-    Sync(pipeline_graph::XmlNodeId, pipeline_graph::XmlNodeId),
+    Output((XmlNodeId, Option<String>)),
+    Sync((XmlNodeId, Option<String>), XmlNodeId),
+    Classify((XmlNodeId, Option<String>), XmlNodeId, Vec<String>),
+    Join(Vec<(XmlNodeId, Option<String>)>),
 }
 
-fn gen_source_imports(modules: Vec<&str>) -> String {
-    let local_imports = modules
+fn gen_source_imports(local_modules: Vec<&str>, runtime_modules: Vec<&str>) -> String {
+    let local_imports = local_modules
         .iter()
         .map(|m| format!("crate::{}::*", m))
         .collect::<Vec<String>>();
+    let runtime_imports = runtime_modules
+        .iter()
+        .map(|m| format!("route_rs_runtime::{}::*", m))
+        .collect::<Vec<String>>();
     let external_imports = vec![
         "futures::lazy",
-        "route_rs_runtime::element::*",
-        "route_rs_runtime::link::*",
         "route_rs_runtime::pipeline::{InputChannelLink, OutputChannelLink}",
     ];
     [
         codegen::import(local_imports),
+        codegen::import(runtime_imports),
         codegen::import(external_imports),
     ]
     .join("\n")
@@ -75,53 +82,188 @@ fn gen_element_decls(elements: &[&&NodeData]) -> (String, HashMap<String, String
     (decls.join("\n"), element_decls_map)
 }
 
+fn map_get_with_panic<'a, A, B>(map: &'a HashMap<A, B>, key: &A) -> &'a B
+where
+    A: Eq + Hash + Debug + 'a,
+    B: Debug + 'a,
+{
+    match map.get(key) {
+        Some(x) => x,
+        None => panic!("get({:?}) failed on {:?}", key, map),
+    }
+}
+
+fn unspool_channels(symbol: &str, channels: &mut Vec<String>, index: usize, kind: &str) -> String {
+    let instance_symbol = format!("{}_{}_{}", &symbol, kind, index);
+    channels.push(format!(
+        "let {} = {}_{}s.next().unwrap();",
+        &instance_symbol, &symbol, kind,
+    ));
+    instance_symbol
+}
+
 fn gen_link_decls(
-    links: &[(&XmlNodeId, Link)],
+    links: &[(XmlNodeId, Link)],
     element_decls: HashMap<String, String>,
-) -> (String, HashMap<String, String>) {
+) -> (String, Vec<String>) {
     let mut decl_idx: usize = 1;
     let mut link_decls_map = HashMap::new();
+    let mut drivers: Vec<String> = vec![];
     let decls: Vec<String> = links
         .iter()
         .map(|(id, el)| {
             let symbol = format!("link_{}", decl_idx);
             decl_idx += 1;
-            link_decls_map.insert(id.to_owned().to_owned(), symbol.clone());
-            let (struct_name, args) = match el {
-                Link::Input => ("InputChannelLink", vec!["input_channel".to_string()]),
-                Link::Output(feeder) => (
-                    "OutputChannelLink",
-                    vec![
-                        format!("Box::new({})", link_decls_map.get(feeder.as_str()).unwrap()),
-                        "output_channel".to_string(),
-                    ],
-                ),
-                Link::Sync(feeder, element) => (
-                    "SyncLink",
-                    vec![
-                        format!("Box::new({})", link_decls_map.get(feeder.as_str()).unwrap()),
-                        element_decls.get(element.as_str()).unwrap().to_owned(),
-                    ],
-                ),
-            };
-            codegen::let_new(symbol, struct_name, args)
+            match el {
+                Link::Input => {
+                    link_decls_map.insert((id.to_owned(), None), symbol.clone());
+                    codegen::let_new(
+                        symbol,
+                        "InputChannelLink",
+                        vec!["input_channel".to_string()],
+                    )
+                }
+                Link::Output(feeder) => {
+                    link_decls_map.insert((id.to_owned(), None), symbol.clone());
+                    drivers.push(symbol.clone());
+                    codegen::let_new(
+                        symbol,
+                        "OutputChannelLink",
+                        vec![
+                            codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
+                            "output_channel".to_string(),
+                        ],
+                    )
+                }
+                Link::Sync(feeder, element) => {
+                    link_decls_map.insert((id.to_owned(), None), symbol.clone());
+                    codegen::let_new(
+                        symbol,
+                        "SyncLink",
+                        vec![
+                            codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
+                            element_decls.get(element.as_str()).unwrap().to_owned(),
+                        ],
+                    )
+                }
+                Link::Classify(feeder, element, branches) => {
+                    let mut match_branches = vec![];
+                    let mut egressors = vec![];
+                    for branch_index in 0..(branches.len()) {
+                        match_branches.push((
+                            branches.get(branch_index).unwrap(),
+                            branch_index.to_string(),
+                        ));
+                        let egressor_symbol =
+                            unspool_channels(&symbol, &mut egressors, branch_index, "egressor");
+                        link_decls_map.insert(
+                            (
+                                id.to_owned(),
+                                Some(branches.get(branch_index).unwrap().to_owned()),
+                            ),
+                            egressor_symbol.clone(),
+                        );
+                    }
+                    drivers.push(format!("{}_ingressor", &symbol));
+                    let mut classify_decls = vec![
+                        codegen::let_new(
+                            symbol.clone(),
+                            "ClassifyLink",
+                            vec![
+                                codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
+                                element_decls.get(element.as_str()).unwrap().to_owned(),
+                                codegen::box_expr(format!(
+                                    "|c| {}",
+                                    codegen::match_expr("c", match_branches)
+                                )),
+                                String::from("10"),
+                                branches.len().to_string(),
+                            ],
+                        ),
+                        format!("let {}_ingressor = {}.ingressor;", &symbol, &symbol,),
+                        format!(
+                            "let mut {}_egressors = {}.egressors.into_iter();",
+                            &symbol, &symbol,
+                        ),
+                    ];
+                    classify_decls.append(&mut egressors);
+                    classify_decls.join("\n")
+                }
+                Link::Join(feeders) => {
+                    let egressor_symbol = format!("{}_egressor", &symbol);
+                    link_decls_map.insert((id.to_owned(), None), egressor_symbol.clone());
+                    let mut feeders_decls = vec![];
+                    let mut ingressors = vec![];
+                    for feeder_index in 0..(feeders.len()) {
+                        feeders_decls.push(codegen::box_expr(map_get_with_panic(
+                            &link_decls_map,
+                            &feeders.get(feeder_index).unwrap(),
+                        )));
+                        let ingressor_symbol =
+                            unspool_channels(&symbol, &mut ingressors, feeder_index, "ingressor");
+                        drivers.push(ingressor_symbol.clone());
+                    }
+                    let mut join_decls = vec![
+                        codegen::let_new(
+                            symbol.clone(),
+                            "JoinLink",
+                            vec![
+                                format!("vec![{}]", feeders_decls.join(", ")),
+                                String::from("10"),
+                            ],
+                        ),
+                        format!("let {}_egressor = {}.egressor;", &symbol, &symbol,),
+                        format!(
+                            "let mut {}_ingressors = {}.ingressors.into_iter();",
+                            &symbol, &symbol,
+                        ),
+                    ];
+                    join_decls.append(&mut ingressors);
+                    join_decls.join("\n")
+                }
+            }
         })
         .collect();
-    (decls.join("\n"), link_decls_map)
+    (decls.join("\n\n"), drivers)
 }
 
-fn gen_tokio_run(drivers: Vec<String>, link_decls: HashMap<String, String>) -> String {
+fn gen_tokio_run(drivers: Vec<String>) -> String {
     let spawns: Vec<String> = drivers
         .iter()
-        .map(|d| format!("tokio::spawn({});", link_decls.get(d).unwrap()))
+        .map(|d| format!("tokio::spawn({});", d))
         .collect();
     [
-        String::from("tokio::run(lazy (|| {"),
+        String::from("tokio::run(lazy (move || {"),
         codegen::indent("    ", spawns.join("\n")),
         codegen::indent("    ", "Ok(())"),
         String::from("}));"),
     ]
     .join("\n")
+}
+
+fn expand_join_link<'a>(
+    feeders: &[&&EdgeData],
+    links: &mut Vec<(String, Link)>,
+    orig_xml_node_id: &str,
+    link_builder: Box<dyn Fn(XmlNodeId, Option<String>) -> Link + 'a>,
+) {
+    if feeders.len() == 1 {
+        links.push((
+            orig_xml_node_id.to_owned(),
+            link_builder(feeders[0].source.to_owned(), feeders[0].label.to_owned()),
+        ))
+    } else {
+        let join_xml_node_id = ["join", &orig_xml_node_id].join("_");
+        let join_feeders = feeders
+            .iter()
+            .map(|f| (f.source.to_owned(), f.label.to_owned()))
+            .collect::<Vec<(XmlNodeId, Option<String>)>>();
+        links.push((join_xml_node_id.to_owned(), Link::Join(join_feeders)));
+        links.push((
+            orig_xml_node_id.to_owned(),
+            link_builder(join_xml_node_id, None),
+        ));
+    }
 }
 
 fn gen_run_body(
@@ -132,48 +274,58 @@ fn gen_run_body(
 ) -> String {
     let mut elements = vec![];
     let mut links = vec![];
-    let mut drivers = vec![];
 
     for nd in nodes {
+        let feeders: Vec<&&EdgeData> = edges
+            .iter()
+            .filter(|e| e.target == nd.xml_node_id)
+            .collect();
         match &nd.node_kind {
             NodeKind::IO => {
                 if nd.xml_node_id == input_node.xml_node_id {
-                    links.push((&nd.xml_node_id, Link::Input));
+                    links.push((nd.xml_node_id.to_owned(), Link::Input));
                 } else if nd.xml_node_id == output_node.xml_node_id {
-                    let feeders: Vec<&&EdgeData> = edges
-                        .iter()
-                        .filter(|e| e.target == nd.xml_node_id)
-                        .collect();
-                    assert_eq!(feeders.len(), 1);
-                    links.push((&nd.xml_node_id, Link::Output(feeders[0].source.to_owned())));
-                    drivers.push(nd.xml_node_id.to_owned());
+                    expand_join_link(
+                        &feeders,
+                        &mut links,
+                        &nd.xml_node_id,
+                        Box::new(|xni, label| Link::Output((xni, label))),
+                    );
                 } else {
                     panic!("{:?} is IO but not input_node or output_node", nd)
                 }
             }
             NodeKind::Element => {
-                let feeders: Vec<&&EdgeData> = edges
-                    .iter()
-                    .filter(|e| e.target == nd.xml_node_id)
-                    .collect();
-                assert_eq!(feeders.len(), 1);
                 elements.push(nd);
-                links.push((
+                expand_join_link(
+                    &feeders,
+                    &mut links,
                     &nd.xml_node_id,
-                    Link::Sync(feeders[0].source.to_owned(), nd.xml_node_id.to_owned()),
-                ));
+                    Box::new(|xni, label| Link::Sync((xni, label), nd.xml_node_id.to_owned())),
+                );
+            }
+            NodeKind::Classifier => {
+                let outlets: Vec<String> = edges
+                    .iter()
+                    .filter(|e| e.source == nd.xml_node_id)
+                    .map(|e| e.label.clone().unwrap())
+                    .collect();
+                elements.push(nd);
+                expand_join_link(
+                    &feeders,
+                    &mut links,
+                    &nd.xml_node_id,
+                    Box::new(|xni, label| {
+                        Link::Classify((xni, label), nd.xml_node_id.to_owned(), outlets.to_owned())
+                    }),
+                );
             }
         }
     }
 
     let (element_decls_str, element_decls_map) = gen_element_decls(&elements);
-    let (link_decls_str, link_decls_map) = gen_link_decls(&links, element_decls_map);
-    [
-        element_decls_str,
-        link_decls_str,
-        gen_tokio_run(drivers, link_decls_map),
-    ]
-    .join("\n\n")
+    let (link_decls_str, drivers) = gen_link_decls(&links, element_decls_map);
+    [element_decls_str, link_decls_str, gen_tokio_run(drivers)].join("\n\n")
 }
 
 fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
@@ -206,7 +358,8 @@ fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
 
 fn generate_pipeline_source(
     source_graph_path: PathBuf,
-    modules: Vec<&str>,
+    local_modules: Vec<&str>,
+    runtime_modules: Vec<&str>,
     nodes: Vec<&NodeData>,
     edges: Vec<&EdgeData>,
 ) -> String {
@@ -216,7 +369,7 @@ fn generate_pipeline_source(
              Source graph: {}",
             source_graph_path.as_path().display()
         )),
-        gen_source_imports(modules),
+        gen_source_imports(local_modules, runtime_modules),
         gen_source_pipeline(nodes, edges),
     ]
     .join("\n\n")
@@ -281,12 +434,20 @@ fn main() {
                 .help("Run rustfmt on output file"),
         )
         .arg(
-            Arg::with_name("modules")
+            Arg::with_name("local-modules")
                 .short("m")
-                .long("modules")
-                .value_name("MODULES")
+                .long("local-modules")
+                .value_name("LOCAL_MODULES")
                 .takes_value(true)
                 .default_value("packets,elements"), // TODO: Validate that the modules exist in the target crate
+        )
+        .arg(
+            Arg::with_name("runtime-modules")
+                .short("r")
+                .long("runtime-modules")
+                .value_name("RUNTIME_MODULES")
+                .takes_value(true)
+                .default_value("element,link"), // TODO: Validate that the modules exist in our crate
         )
         .get_matches();
 
@@ -295,13 +456,20 @@ fn main() {
     let graph_xml = EventReader::new(BufReader::new(graph_file));
     let graph = PipelineGraph::new(graph_xml);
 
-    let modules: Vec<&str> = get_array_arg(&app, "modules");
+    let local_modules: Vec<&str> = get_array_arg(&app, "local-modules");
+    let runtime_modules: Vec<&str> = get_array_arg(&app, "runtime-modules");
 
     let ordered_nodes = graph.ordered_nodes();
     let edges = graph.edges();
 
     let output_file_path = get_pathbuf_arg(&app, "output");
-    let pipeline_source = generate_pipeline_source(graph_file_path, modules, ordered_nodes, edges);
+    let pipeline_source = generate_pipeline_source(
+        graph_file_path,
+        local_modules,
+        runtime_modules,
+        ordered_nodes,
+        edges,
+    );
     let mut output_file = File::create(&output_file_path).unwrap();
     output_file.write_all(pipeline_source.as_bytes()).unwrap();
     if app.is_present("rustfmt") {
