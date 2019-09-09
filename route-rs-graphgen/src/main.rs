@@ -4,7 +4,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
 extern crate clap;
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches};
 
 extern crate xml;
 use xml::reader::EventReader;
@@ -223,6 +223,14 @@ fn generate_pipeline_source(
         + "\n"
 }
 
+fn get_array_arg<'a>(arg_matches: &'a ArgMatches, name: &str) -> Vec<&'a str> {
+    arg_matches.value_of(name).unwrap().split(',').collect()
+}
+
+fn get_pathbuf_arg(arg_matches: &ArgMatches, name: &str) -> PathBuf {
+    Path::new(arg_matches.value_of(name).unwrap()).to_path_buf()
+}
+
 fn main() {
     let app = App::new("route-rs graphgen")
         .version("0.1.0")
@@ -282,17 +290,17 @@ fn main() {
         )
         .get_matches();
 
-    let graph_file_path = Path::new(&app.value_of("graph").unwrap()).to_path_buf();
+    let graph_file_path = get_pathbuf_arg(&app, "graph");
     let graph_file = File::open(&graph_file_path).unwrap();
     let graph_xml = EventReader::new(BufReader::new(graph_file));
     let graph = PipelineGraph::new(graph_xml);
 
-    let modules: Vec<&str> = app.value_of("modules").unwrap().split(',').collect();
+    let modules: Vec<&str> = get_array_arg(&app, "modules");
 
     let ordered_nodes = graph.ordered_nodes();
     let edges = graph.edges();
 
-    let output_file_path = Path::new(&app.value_of("output").unwrap()).to_path_buf();
+    let output_file_path = get_pathbuf_arg(&app, "output");
     let pipeline_source = generate_pipeline_source(graph_file_path, modules, ordered_nodes, edges);
     let mut output_file = File::create(&output_file_path).unwrap();
     output_file.write_all(pipeline_source.as_bytes()).unwrap();
