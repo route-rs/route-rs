@@ -377,10 +377,10 @@ mod tests {
         }));
 
         let join0_output: Vec<_> = join0_collector_output.iter().collect();
-        assert_eq!(
-            join0_output,
-            vec![0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        );
+
+        // Test early elements contain an even mix of 1s and 0s
+        // expect four (all) 1s within first 10 elements
+        assert_eq!(join0_output[0..10].iter().sum::<usize>(), 4);
     }
 
     #[test]
