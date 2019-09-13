@@ -9,6 +9,6 @@ license = "MIT"
 
 [dependencies]
 route-rs-runtime = { path = "../../route-rs-runtime" }
-tokio = "*"
-futures = "*"
-crossbeam = "*"
+tokio = "0.1.22"
+futures = "0.1.29"
+crossbeam = "0.7.2"
