@@ -7,39 +7,39 @@ use crossbeam::crossbeam_channel::{Receiver, Sender};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-pub struct ClassifyLink<'a, E: Classifier> {
-    pub ingressor: ClassifyIngressor<'a, E>,
-    pub egressors: Vec<AsyncEgressor<E::Packet>>,
+pub struct ClassifyLink<'a, C: Classifier> {
+    pub ingressor: ClassifyIngressor<'a, C>,
+    pub egressors: Vec<AsyncEgressor<C::Packet>>,
 }
 
-impl<'a, E: Classifier> ClassifyLink<'a, E> {
+impl<'a, C: Classifier> ClassifyLink<'a, C> {
     pub fn new(
-        input_stream: PacketStream<E::Packet>,
-        element: E,
-        dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
+        input_stream: PacketStream<C::Packet>,
+        classifier: C,
+        dispatcher: Box<dyn Fn(C::Class) -> usize + Send + Sync + 'a>,
         queue_capacity: usize,
         branches: usize,
     ) -> Self {
         assert!(
             branches <= 1000,
-            format!("Classify Element branches: {} > 1000", branches)
+            format!("ClassifyLink branches: {} > 1000", branches)
         );
         assert!(
             queue_capacity <= 1000,
-            format!("Classify Element queue_capacity: {} > 1000", queue_capacity)
+            format!("ClassifyLink queue_capacity: {} > 1000", queue_capacity)
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        let mut to_egressors: Vec<Sender<Option<E::Packet>>> = Vec::new();
-        let mut egressors: Vec<AsyncEgressor<E::Packet>> = Vec::new();
+        let mut to_egressors: Vec<Sender<Option<C::Packet>>> = Vec::new();
+        let mut egressors: Vec<AsyncEgressor<C::Packet>> = Vec::new();
 
-        let mut from_ingressors: Vec<Receiver<Option<E::Packet>>> = Vec::new();
+        let mut from_ingressors: Vec<Receiver<Option<C::Packet>>> = Vec::new();
 
         let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
         for _ in 0..branches {
             let (to_egressor, from_ingressor) =
-                crossbeam_channel::bounded::<Option<E::Packet>>(queue_capacity);
+                crossbeam_channel::bounded::<Option<C::Packet>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
             let provider = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
@@ -55,7 +55,7 @@ impl<'a, E: Classifier> ClassifyLink<'a, E> {
                 input_stream,
                 dispatcher,
                 to_egressors,
-                element,
+                classifier,
                 task_parks,
             ),
             egressors,
@@ -63,33 +63,33 @@ impl<'a, E: Classifier> ClassifyLink<'a, E> {
     }
 }
 
-pub struct ClassifyIngressor<'a, E: Classifier> {
-    input_stream: PacketStream<E::Packet>,
-    dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
-    to_egressors: Vec<Sender<Option<E::Packet>>>,
-    element: E,
+pub struct ClassifyIngressor<'a, C: Classifier> {
+    input_stream: PacketStream<C::Packet>,
+    dispatcher: Box<dyn Fn(C::Class) -> usize + Send + Sync + 'a>,
+    to_egressors: Vec<Sender<Option<C::Packet>>>,
+    classifier: C,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
-impl<'a, E: Classifier> ClassifyIngressor<'a, E> {
+impl<'a, C: Classifier> ClassifyIngressor<'a, C> {
     fn new(
-        input_stream: PacketStream<E::Packet>,
-        dispatcher: Box<dyn Fn(E::Class) -> usize + Send + Sync + 'a>,
-        to_egressors: Vec<Sender<Option<E::Packet>>>,
-        element: E,
+        input_stream: PacketStream<C::Packet>,
+        dispatcher: Box<dyn Fn(C::Class) -> usize + Send + Sync + 'a>,
+        to_egressors: Vec<Sender<Option<C::Packet>>>,
+        classifier: C,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
         ClassifyIngressor {
             input_stream,
             dispatcher,
             to_egressors,
-            element,
+            classifier,
             task_parks,
         }
     }
 }
 
-impl<'a, E: Classifier> Drop for ClassifyIngressor<'a, E> {
+impl<'a, C: Classifier> Drop for ClassifyIngressor<'a, C> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
@@ -103,7 +103,7 @@ impl<'a, E: Classifier> Drop for ClassifyIngressor<'a, E> {
     }
 }
 
-impl<'a, E: Classifier> Future for ClassifyIngressor<'a, E> {
+impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
     type Item = ();
     type Error = ();
 
@@ -119,12 +119,12 @@ impl<'a, E: Classifier> Future for ClassifyIngressor<'a, E> {
                     return Ok(Async::NotReady);
                 }
             }
-            let packet_option: Option<E::Packet> = try_ready!(self.input_stream.poll());
+            let packet_option: Option<C::Packet> = try_ready!(self.input_stream.poll());
 
             match packet_option {
                 None => return Ok(Async::Ready(())),
                 Some(packet) => {
-                    let class = self.element.classify(&packet);
+                    let class = self.classifier.classify(&packet);
                     let port = (self.dispatcher)(class);
                     if port >= self.to_egressors.len() {
                         panic!("Tried to access invalid port: {}", port);
