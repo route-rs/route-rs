@@ -2,12 +2,12 @@ pub trait Element {
     type Input: Sized;
     type Output: Sized;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output;
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output>;
 }
 
 pub trait AsyncElement {
     type Input: Sized;
     type Output: Sized;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output;
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output>;
 }

@@ -18,16 +18,17 @@ impl SetInterfaceByDestination {
     }
 }
 
+// NOTE: Should SetInterfaceByDestination be a WAN/LAN Classifier instead of an Element?
 impl Element for SetInterfaceByDestination {
     type Input = (Interface, SimplePacket);
     type Output = (Interface, SimplePacket);
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
         let dest_ip = packet.1.destination.ip;
         if (dest_ip & self.lan_subnet_mask) == self.lan_subnet_prefix {
-            (Interface::LAN, packet.1)
+            Some((Interface::LAN, packet.1))
         } else {
-            (Interface::WAN, packet.1)
+            Some((Interface::WAN, packet.1))
         }
     }
 }
@@ -77,20 +78,21 @@ impl Element for LocalDNSInterceptor {
     type Input = (Interface, SimplePacket);
     type Output = (Interface, SimplePacket);
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
-        match (
-            &packet.0,
-            self.intercept_rules.get(&packet.1.payload.to_string()),
-        ) {
-            (Interface::WAN, Some(address)) => (
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        let (in_interface, in_packet) = packet;
+        let maybe_lan_address = self.intercept_rules.get(&in_packet.payload.to_string());
+
+        let (out_interface, out_packet) = match (&in_interface, maybe_lan_address) {
+            (Interface::WAN, Some(lan_address)) => (
                 Interface::LAN,
                 SimplePacket {
-                    source: packet.1.destination,
-                    destination: packet.1.source,
-                    payload: address.to_string(),
+                    source: in_packet.destination,
+                    destination: in_packet.source,
+                    payload: lan_address.to_string(),
                 },
             ),
-            _ => packet,
-        }
+            _ => (in_interface, in_packet),
+        };
+        Some((out_interface, out_packet))
     }
 }
