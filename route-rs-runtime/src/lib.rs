@@ -25,6 +25,8 @@ pub mod link;
 /// program takes the user provided graph, and generates a pipeline. It connects input and output channels to the pipe, so that it can be
 /// hooked up to packet sources and sinks, and drops the pipeline into the runtime. Generally can be abstracted to the concept, router.
 pub mod pipeline;
+pub mod packet;
+
 
 /// Utility module
 mod utils;
