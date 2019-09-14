@@ -173,37 +173,37 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let elem0 = ClassifyEvenness::new();
+        let even_classifier = ClassifyEvenness::new();
 
-        let mut elem0_link = ClassifyLink::new(
+        let mut even_link = ClassifyLink::new(
             packet_generator,
-            elem0,
+            even_classifier,
             Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
-        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
+        let (s1, even_port1_collector_output) = crossbeam_channel::unbounded();
 
-        let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
+        let even_port1_collector =
+            ExhaustiveCollector::new(0, Box::new(even_link.egressors.pop().unwrap()), s1);
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
+        let (s0, even_port0_collector_output) = crossbeam_channel::unbounded();
 
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let even_port0_collector =
+            ExhaustiveCollector::new(0, Box::new(even_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_link.ingressor);
-            tokio::spawn(elem0_port0_collector);
-            tokio::spawn(elem0_port1_collector);
+            tokio::spawn(even_link.ingressor);
+            tokio::spawn(even_port0_collector);
+            tokio::spawn(even_port1_collector);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(elem0_port0_output, vec![0, 2, 420, 4, 6, 8]);
+        let even_port0_output: Vec<_> = even_port0_collector_output.iter().collect();
+        assert_eq!(even_port0_output, vec![0, 2, 420, 4, 6, 8]);
 
-        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
+        let even_port1_output: Vec<_> = even_port1_collector_output.iter().collect();
+        assert_eq!(even_port1_output, vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
@@ -212,37 +212,37 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let elem0 = ClassifyEvenness::new();
+        let classifier = ClassifyEvenness::new();
 
-        let mut elem0_link = ClassifyLink::new(
+        let mut link = ClassifyLink::new(
             Box::new(packet_generator),
-            elem0,
+            classifier,
             Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
-        let elem0_drain = elem0_link.ingressor;
+        let drain = link.ingressor;
 
-        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
+        let (s1, port1_collector_output) = crossbeam_channel::unbounded();
+        let port1_collector =
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let (s0, port0_collector_output) = crossbeam_channel::unbounded();
+        let port0_collector =
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
-            tokio::spawn(elem0_port1_collector);
+            tokio::spawn(drain);
+            tokio::spawn(port0_collector);
+            tokio::spawn(port1_collector);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert!(elem0_port0_output.is_empty());
+        let port0_output: Vec<_> = port0_collector_output.iter().collect();
+        assert!(port0_output.is_empty());
 
-        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
+        let port1_output: Vec<_> = port1_collector_output.iter().collect();
+        assert_eq!(port1_output, vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
@@ -251,27 +251,27 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(0..2000);
 
-        let even_odd_elem = ClassifyEvenness::new();
+        let classifier = ClassifyEvenness::new();
 
-        let mut even_odd_link = ClassifyLink::new(
+        let mut link = ClassifyLink::new(
             Box::new(packet_generator),
-            even_odd_elem,
+            classifier,
             Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
-        let even_odd_drain = even_odd_link.ingressor;
+        let drain = link.ingressor;
 
         let (s1, odd_collector_output) = crossbeam_channel::unbounded();
         let odd_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_link.egressors.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
 
         let (s0, even_collector_output) = crossbeam_channel::unbounded();
         let even_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_link.egressors.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(even_odd_drain);
+            tokio::spawn(drain);
             tokio::spawn(even_collector);
             tokio::spawn(odd_collector);
             Ok(())
@@ -321,11 +321,11 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = immediate_stream(0..=30);
 
-        let elem = ClassifyFizzBuzz::new();
+        let classifier = ClassifyFizzBuzz::new();
 
-        let mut elem_link = ClassifyLink::new(
+        let mut link = ClassifyLink::new(
             Box::new(packet_generator),
-            elem,
+            classifier,
             Box::new(|fb| match fb {
                 FizzBuzz::FizzBuzz => 0,
                 FizzBuzz::Fizz => 1,
@@ -335,26 +335,26 @@ mod tests {
             default_channel_size,
             4,
         );
-        let elem_drain = elem_link.ingressor;
+        let drain = link.ingressor;
 
         let (s3, other_output) = crossbeam_channel::unbounded();
         let port3_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s3);
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s3);
 
         let (s2, buzz_output) = crossbeam_channel::unbounded();
         let port2_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s2);
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s2);
 
         let (s1, fizz_output) = crossbeam_channel::unbounded();
         let port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
 
         let (s0, fizz_buzz_output) = crossbeam_channel::unbounded();
         let port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem_link.egressors.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem_drain);
+            tokio::spawn(drain);
             tokio::spawn(port0_collector);
             tokio::spawn(port1_collector);
             tokio::spawn(port2_collector);
@@ -384,11 +384,11 @@ mod tests {
         let default_channel_size = 10;
         let packet_generator = immediate_stream(0..=30);
 
-        let fizz_buzz_elem = ClassifyFizzBuzz::new();
+        let fizz_buzz_classifier = ClassifyFizzBuzz::new();
 
-        let mut fizz_buzz_elem_link: ClassifyLink<ClassifyFizzBuzz> = ClassifyLink::new(
+        let mut fizz_buzz_link: ClassifyLink<ClassifyFizzBuzz> = ClassifyLink::new(
             Box::new(packet_generator),
-            fizz_buzz_elem,
+            fizz_buzz_classifier,
             Box::new(|fb| match fb {
                 FizzBuzz::FizzBuzz => 0,
                 FizzBuzz::Fizz => 1,
@@ -398,27 +398,27 @@ mod tests {
             default_channel_size,
             4,
         );
-        let fizz_buzz_drain = fizz_buzz_elem_link.ingressor;
+        let fizz_buzz_drain = fizz_buzz_link.ingressor;
 
-        let even_odd_elem = ClassifyEvenness::new();
+        let even_odd_classifier = ClassifyEvenness::new();
 
-        let mut even_odd_elem_link: ClassifyLink<ClassifyEvenness> = ClassifyLink::new(
-            Box::new(fizz_buzz_elem_link.egressors.pop().unwrap()),
-            even_odd_elem,
+        let mut even_odd_link: ClassifyLink<ClassifyEvenness> = ClassifyLink::new(
+            Box::new(fizz_buzz_link.egressors.pop().unwrap()),
+            even_odd_classifier,
             Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             2,
         );
 
-        let even_odd_drain = even_odd_elem_link.ingressor;
+        let even_odd_drain = even_odd_link.ingressor;
 
         let (s1, odd_collector_output) = crossbeam_channel::unbounded();
         let odd_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.egressors.pop().unwrap()), s1);
+            ExhaustiveCollector::new(0, Box::new(even_odd_link.egressors.pop().unwrap()), s1);
 
         let (s0, even_collector_output) = crossbeam_channel::unbounded();
         let even_collector =
-            ExhaustiveCollector::new(0, Box::new(even_odd_elem_link.egressors.pop().unwrap()), s0);
+            ExhaustiveCollector::new(0, Box::new(even_odd_link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
             tokio::spawn(fizz_buzz_drain);
@@ -445,38 +445,38 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem0 = ClassifyEvenness::new();
+        let classifier = ClassifyEvenness::new();
 
-        let mut elem0_link = ClassifyLink::new(
+        let mut link = ClassifyLink::new(
             Box::new(packet_generator),
-            elem0,
+            classifier,
             Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
         );
 
-        let elem0_drain = elem0_link.ingressor;
+        let drain = link.ingressor;
 
-        let (s1, elem0_port1_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s1);
+        let (s1, port1_collector_output) = crossbeam_channel::unbounded();
+        let port1_collector =
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
 
-        let (s0, elem0_port0_collector_output) = crossbeam_channel::unbounded();
-        let elem0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(elem0_link.egressors.pop().unwrap()), s0);
+        let (s0, port0_collector_output) = crossbeam_channel::unbounded();
+        let port0_collector =
+            ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
 
         tokio::run(lazy(|| {
-            tokio::spawn(elem0_drain);
-            tokio::spawn(elem0_port0_collector);
-            tokio::spawn(elem0_port1_collector);
+            tokio::spawn(drain);
+            tokio::spawn(port0_collector);
+            tokio::spawn(port1_collector);
             Ok(())
         }));
 
-        let elem0_port0_output: Vec<_> = elem0_port0_collector_output.iter().collect();
-        assert_eq!(elem0_port0_output, vec![0, 2, 420, 4, 6, 8]);
+        let port0_output: Vec<_> = port0_collector_output.iter().collect();
+        assert_eq!(port0_output, vec![0, 2, 420, 4, 6, 8]);
 
-        let elem0_port1_output: Vec<_> = elem0_port1_collector_output.iter().collect();
-        assert_eq!(elem0_port1_output, vec![1, 1337, 3, 5, 7, 9]);
+        let port1_output: Vec<_> = port1_collector_output.iter().collect();
+        assert_eq!(port1_output, vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
@@ -486,11 +486,11 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![]);
 
-        let elem0 = ClassifyEvenness::new();
+        let classifier = ClassifyEvenness::new();
 
-        let mut _elem0_link = ClassifyLink::new(
+        let mut _link = ClassifyLink::new(
             Box::new(packet_generator),
-            elem0,
+            classifier,
             Box::new(|evenness| if evenness { 0 } else { 1 }),
             default_channel_size,
             number_branches,
