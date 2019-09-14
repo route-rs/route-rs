@@ -25,8 +25,8 @@ impl<A, B: From<A>> Element for TransformElement<A, B> {
     type Input = A;
     type Output = B;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
-        Self::Output::from(packet)
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        Some(Self::Output::from(packet))
     }
 }
 
@@ -34,7 +34,7 @@ impl<A, B: From<A>> AsyncElement for TransformElement<A, B> {
     type Input = A;
     type Output = B;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
-        Self::Output::from(packet)
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        Some(Self::Output::from(packet))
     }
 }

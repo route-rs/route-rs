@@ -21,8 +21,8 @@ impl<A> Element for IdentityElement<A> {
     type Input = A;
     type Output = A;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
-        packet
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        Some(packet)
     }
 }
 
@@ -46,7 +46,7 @@ impl<A> AsyncElement for AsyncIdentityElement<A> {
     type Input = A;
     type Output = A;
 
-    fn process(&mut self, packet: Self::Input) -> Self::Output {
-        packet
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        Some(packet)
     }
 }

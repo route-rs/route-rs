@@ -95,21 +95,28 @@ impl<E: AsyncElement> Future for AsyncIngressor<E> {
 
     /// Implement Poll for Future for AsyncIngressor
     ///
-    /// Note that this function works a bit different, it continues to process
+    /// This function continues to process
     /// packets off it's input queue until it reaches a point where it can not
-    /// make forward progress. There are three cases:
+    /// make forward progress. There are several cases:
     /// ###
     /// #1 The to_egressor queue is full, we notify the Egressor that we need
-    /// awaking when there is work to do, and go to sleep.
+    /// awaking when there is work to do, and go to sleep by returning `Async::NotReady`.
     ///
     /// #2 The input_stream returns a NotReady, we sleep, with the assumption
     /// that whomever produced the NotReady will awaken the task in the Future.
     ///
     /// #3 We get a Ready(None), in which case we push a None onto the to_Egressor
     /// queue and then return Ready(()), which means we enter tear-down, since there
-    /// is no futher work to complete.
-    /// ###
-    /// By Sleep, we mean we return a NotReady to the runtime which will sleep the task.
+    /// is no further work to complete.
+    ///
+    /// #4 If our upstream `PacketStream` has a packet for us, we pass it to our `element`
+    /// for `process`ing. Most of the time, it will yield a `Some(output_packet)` that has
+    /// been transformed in some way. We pass that on to our egress channel and notify
+    /// our `Egressor` that it has work to do, and continue polling our upstream `PacketStream`.
+    ///
+    /// #5 `element`s may also choose to "drop" packets by returning `None`, so we do nothing
+    /// and poll our upstream `PacketStream` again.
+    ///
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             if self.to_egressor.is_full() {
@@ -121,11 +128,12 @@ impl<E: AsyncElement> Future for AsyncIngressor<E> {
             match input_packet_option {
                 None => return Ok(Async::Ready(())),
                 Some(input_packet) => {
-                    let output_packet: E::Output = self.element.process(input_packet);
-                    self.to_egressor
-                        .try_send(Some(output_packet))
-                        .expect("AsyncIngressor::Poll: try_send to_egressor shouldn't fail");
-                    unpark_and_notify(&self.task_park);
+                    if let Some(output_packet) = self.element.process(input_packet) {
+                        self.to_egressor
+                            .try_send(Some(output_packet))
+                            .expect("AsyncIngressor::Poll: try_send to_egressor shouldn't fail");
+                        unpark_and_notify(&self.task_park);
+                    }
                 }
             }
         }
@@ -206,7 +214,7 @@ impl<Packet: Sized> Stream for AsyncEgressor<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::{AsyncIdentityElement, IdentityElement, TransformElement};
+    use crate::element::{AsyncIdentityElement, DropElement, IdentityElement, TransformElement};
     use crate::link::sync_link::SyncLink;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
@@ -432,5 +440,28 @@ mod tests {
         let output: Vec<u32> = r.iter().collect();
         let expected: Vec<u32> = packets.map(|p| p.into()).collect();
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn drop_element() {
+        let default_channel_size = 10;
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packet_generator = immediate_stream(packets.clone());
+
+        let elem0 = DropElement::new();
+
+        let link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
+        let (s, r) = crossbeam::crossbeam_channel::unbounded();
+        let drain = link.ingressor;
+        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+
+        tokio::run(lazy(|| {
+            tokio::spawn(drain);
+            tokio::spawn(collector);
+            Ok(())
+        }));
+
+        let router_output: Vec<u32> = r.iter().collect();
+        assert_eq!(router_output, []);
     }
 }

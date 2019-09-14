@@ -15,12 +15,12 @@ impl Element for DecIpv4HopLimit {
     type Input = Ipv4Packet<Vec<u8>>;
     type Output = Ipv4Packet<Vec<u8>>;
 
-    fn process(&mut self, mut packet: Self::Input) -> Self::Output {
+    fn process(&mut self, mut packet: Self::Input) -> Option<Self::Output> {
         match packet.hop_limit() {
-            0 => packet,
+            0 => Some(packet),
             ttl => {
                 packet.set_hop_limit(ttl - 1);
-                packet
+                Some(packet)
             }
         }
     }
@@ -40,12 +40,12 @@ impl Element for DecIpv6HopLimit {
     type Input = Ipv6Packet<Vec<u8>>;
     type Output = Ipv6Packet<Vec<u8>>;
 
-    fn process(&mut self, mut packet: Self::Input) -> Self::Output {
+    fn process(&mut self, mut packet: Self::Input) -> Option<Self::Output> {
         match packet.hop_limit() {
-            0 => packet,
+            0 => Some(packet),
             ttl => {
                 packet.set_hop_limit(ttl - 1);
-                packet
+                Some(packet)
             }
         }
     }
@@ -72,7 +72,7 @@ mod tests {
 
         let mut elem = DecIpv4HopLimit::new();
 
-        let packet = elem.process(packet);
+        let packet = elem.process(packet).unwrap();
 
         assert_eq!(packet.hop_limit(), init_ttl - 1);
     }
@@ -92,7 +92,7 @@ mod tests {
 
         let mut elem = DecIpv4HopLimit::new();
 
-        let packet = elem.process(packet);
+        let packet = elem.process(packet).unwrap();
 
         assert_eq!(packet.hop_limit(), 0);
     }
@@ -113,7 +113,7 @@ mod tests {
 
         let mut elem = DecIpv6HopLimit::new();
 
-        let packet = elem.process(packet);
+        let packet = elem.process(packet).unwrap();
 
         assert_eq!(packet.hop_limit(), init_ttl - 1);
     }
@@ -133,7 +133,7 @@ mod tests {
 
         let mut elem = DecIpv6HopLimit::new();
 
-        let packet = elem.process(packet);
+        let packet = elem.process(packet).unwrap();
 
         assert_eq!(packet.hop_limit(), 0);
     }
