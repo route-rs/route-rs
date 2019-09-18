@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::convert::TryFrom;
 use crate::packet::*;
 
 pub struct EthernetFrame<'packet> {
@@ -28,25 +29,25 @@ impl<'frame> EthernetFrame<'frame> {
     }
 
     pub fn dest_mac(&self) -> MacAddr {
-        MacAddr::new(
-            self.data[0],
-            self.data[1],
-            self.data[2],
-            self.data[3],
-            self.data[4],
-            self.data[5],
-        )
+        let bytes = <[u8; 6]>::try_from(&self.data[0..6]).unwrap();
+        MacAddr::new(bytes)
     }
 
     pub fn src_mac(&self) -> MacAddr {
-        MacAddr::new(
-            self.data[6],
-            self.data[7],
-            self.data[8],
-            self.data[9],
-            self.data[10],
-            self.data[11],
-        )
+        let bytes = <[u8; 6]>::try_from(&self.data[6..12]).unwrap();
+        MacAddr::new(bytes)
+    }
+
+    pub fn set_dest_mac(&mut self, mac: MacAddr) {
+        for i in 0..6 {
+            self.data[i] = mac.bytes[i];
+        }
+    }
+
+    pub fn set_src_mac(&mut self, mac: MacAddr) {
+        for i in 0..6 {
+            self.data[6 + i] = mac.bytes[i];
+        }
     }
 
     pub fn payload_len(&self) -> u16 {
@@ -66,25 +67,6 @@ impl<'frame> EthernetFrame<'frame> {
         self.data.reserve_exact(payload_len as usize + 2); //Reserve room for payload and len field.
         self.data.extend(payload_len_bytes.iter());
         self.data.extend(payload);
-    }
-
-    // This is super uggo but I don't care right now, I'm sure this is a cleaner way to do it.
-    pub fn set_dest_mac(&mut self, mac: MacAddr) {
-        self.data[0] = mac.b0;
-        self.data[1] = mac.b1;
-        self.data[2] = mac.b2;
-        self.data[3] = mac.b3;
-        self.data[4] = mac.b4;
-        self.data[5] = mac.b5;
-    }
-
-    pub fn set_src_mac(&mut self, mac: MacAddr) {
-        self.data[6] = mac.b0;
-        self.data[7] = mac.b1;
-        self.data[8] = mac.b2;
-        self.data[9] = mac.b3;
-        self.data[10] = mac.b4;
-        self.data[11] = mac.b5;
     }
 }
 
