@@ -1,8 +1,10 @@
 use crate::packet::*;
+use std::convert::TryFrom;
 
 
 pub struct Ipv4Packet<'packet> {
     pub data: PacketData<'packet>,
+    payload_offset: usize,
 }
 
 impl<'packet> Ipv4Packet<'packet> {
@@ -25,8 +27,34 @@ impl<'packet> Ipv4Packet<'packet> {
             return Err("Packet has invalid total len field");
         }
 
-        Ok(Ipv4Packet { data: packet })
+        Ok(Ipv4Packet { data: packet, payload_offset: 14 + 20 })
     }
+
+    //MAGIC ALERT, src addr offset (12) and Ipv4 header offset
+    pub fn src_addr(&self) -> Ipv4Addr {
+        let bytes = <[u8; 4]>::try_from(&self.data[(14+12)..(14+15)]).unwrap();
+        Ipv4Addr::new(bytes)
+    }
+
+    pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
+        for i in 0..4 {
+            self.data[14 + 12 + i] = addr.bytes[i];
+        }
+    }
+
+    //MAGIC ALERT, dest addr offset (16) and Ipv4 header offset
+    pub fn dest_addr(&self) -> Ipv4Addr {
+        //This makes us an array from a slice.
+        let bytes = <[u8; 4]>::try_from(&self.data[(14+16)..(14+19)]).unwrap();
+        Ipv4Addr::new(bytes)
+    }
+
+    pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
+        for i in 0..4 {
+            self.data[14 + 16 + i] = addr.bytes[i];
+        }        
+    }
+
 
     //Version u4 -> should be 0100, for ipv4
     //HeaderLen u4 -> header length in 32bit words, min total 20bytes
