@@ -1,9 +1,10 @@
 use crate::packet::*;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 
 pub struct Ipv4Packet<'packet> {
     pub data: PacketData<'packet>,
-    payload_offset: usize,
+    header_length: usize,
 }
 
 impl<'packet> Ipv4Packet<'packet> {
@@ -28,14 +29,17 @@ impl<'packet> Ipv4Packet<'packet> {
 
         //This is the header length in 32bit words
         let internet_header_len = (packet[14] & 0x0F) as usize;
-        let payload_offset = (internet_header_len*4) + 14;
+        let header_length = (internet_header_len * 4) + 14;
 
-        Ok(Ipv4Packet { data: packet, payload_offset: payload_offset})
+        Ok(Ipv4Packet {
+            data: packet,
+            header_length: header_length,
+        })
     }
 
     //MAGIC ALERT, src addr offset (12) and Ipv4 header offset
     pub fn src_addr(&self) -> Ipv4Addr {
-        let bytes = <[u8; 4]>::try_from(&self.data[(14+12)..(14+15)]).unwrap();
+        let bytes = <[u8; 4]>::try_from(&self.data[(14 + 12)..(14 + 15)]).unwrap();
         Ipv4Addr::new(bytes)
     }
 
@@ -47,20 +51,44 @@ impl<'packet> Ipv4Packet<'packet> {
 
     //MAGIC ALERT, dest addr offset (16) and Ipv4 header offset
     pub fn dest_addr(&self) -> Ipv4Addr {
-        let bytes = <[u8; 4]>::try_from(&self.data[(14+16)..(14+19)]).unwrap();
+        let bytes = <[u8; 4]>::try_from(&self.data[(14 + 16)..(14 + 19)]).unwrap();
         Ipv4Addr::new(bytes)
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
         for i in 0..4 {
             self.data[14 + 16 + i] = addr.bytes[i];
-        }     
+        }
     }
 
-    pub fn header_len(&self) -> u8 {
-        self.data[14] & 0x0F
+    /// Returns header length in bytes
+    pub fn header_length(&self) -> usize {
+        self.header_length
     }
 
+    pub fn payload(&self) -> Cow<[u8]> {
+        Cow::from(&self.data[14 + self.header_length..])
+    }
+
+    pub fn set_payload(&mut self, payload: &[u8]) {
+        let payload_len = payload.len() as u16;
+
+        self.data.truncate(self.header_length);
+
+        let total_len = (payload_len + self.header_length as u16).to_be_bytes();
+        self.data[14 + 2] = total_len[0];
+        self.data[14 + 3] = total_len[1];
+
+        self.data.reserve_exact(payload_len as usize);
+        self.data.extend(payload);
+    }
+
+    pub fn options(&self) -> Option<Cow<[u8]>> {
+        if self.header_length > 20 {
+            return None;
+        }
+        Some(Cow::from(&self.data[14 + 20..14 + self.header_length]))
+    }
 
     //TypeofService u8 ->  RFC2474, some QoS stuff
     //TotalLen u16 -> total length in bytes, min is 20 bytes, max is 65353, since well 16 bits
@@ -69,14 +97,11 @@ impl<'packet> Ipv4Packet<'packet> {
     //TTL u8 -> Should be dropped it zero
     //Protocol u8 -> 1 ICMP, 6 TCP, 17 UDP, 41 IPv6 tun over ipv4
     //Header Checksum u16 -> Ones compliment of the ones complement sum of all 16 bit words in the header
-    //options (0 - 40 bytes), this will be annoying, hardly ever used "in the wild"
-    //Payload
 
     //Validate_header
     //Validate_length
     //Validate Versoin
     //Get Protocol enum
-    //payload_offset
     //from(EthernetFrame)
 }
 

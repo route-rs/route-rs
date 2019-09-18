@@ -8,12 +8,9 @@ pub struct MacAddr {
 
 impl MacAddr {
     pub fn new(bytes: [u8; 6]) -> MacAddr {
-        MacAddr {
-            bytes,
-        }
+        MacAddr { bytes }
     }
 }
-
 
 //Most significant byte is 0th
 #[derive(Eq, Clone, Copy, Hash, PartialEq)]
@@ -23,8 +20,6 @@ pub struct Ipv4Addr {
 
 impl Ipv4Addr {
     pub fn new(bytes: [u8; 4]) -> Ipv4Addr {
-        Ipv4Addr {
-            bytes,
-        }
+        Ipv4Addr { bytes }
     }
 }
