@@ -90,6 +90,15 @@ impl<'packet> Ipv4Packet<'packet> {
         Some(Cow::from(&self.data[14 + 20..14 + self.header_length]))
     }
 
+    pub fn protocol(&self) -> IpProtocol {
+        let num = self.data[14 + 9];
+        IpProtocol::from(num)
+    }
+
+    pub fn total_len(&self) -> u16 {
+        u16::from_be_bytes([self.data[14 + 2], self.data[14 + 3]])
+    }
+
     //TypeofService u8 ->  RFC2474, some QoS stuff
     //TotalLen u16 -> total length in bytes, min is 20 bytes, max is 65353, since well 16 bits
     //Identification u16 -> Fragment ID, identifies fragmented IP for reassembly later.
