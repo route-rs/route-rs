@@ -44,7 +44,7 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
-        self.data[14 + 12..14 + 4].clone_from_slice(&addr.bytes[..4]);
+        self.data[14 + 12..14 + 4].copy_from_slice(&addr.bytes[..4]);
     }
 
     //MAGIC ALERT, dest addr offset (16) and Ipv4 header offset
@@ -54,7 +54,7 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
-        self.data[14 + 16..14 + 20].clone_from_slice(&addr.bytes[..4]);
+        self.data[14 + 16..14 + 20].copy_from_slice(&addr.bytes[..4]);
     }
 
     /// Returns header length in bytes
