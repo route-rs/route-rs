@@ -1,5 +1,6 @@
 use crate::packet::*;
 
+#[allow(dead_code)]
 pub struct UdpSegment<'packet> {
     pub data: PacketData<'packet>,
     segment_header_offset: usize,
