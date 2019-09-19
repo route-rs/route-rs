@@ -1,5 +1,6 @@
 use crate::packet::*;
 
+#[allow(dead_code)]
 pub struct Ipv6Packet<'packet> {
     pub data: PacketData<'packet>,
     // There may be various "Extension Headers", so we should figure out the actual offset and store it here for
