@@ -39,15 +39,11 @@ impl<'frame> EthernetFrame<'frame> {
     }
 
     pub fn set_dest_mac(&mut self, mac: MacAddr) {
-        for i in 0..6 {
-            self.data[i] = mac.bytes[i];
-        }
+        self.data[..6].clone_from_slice(&mac.bytes[..6]);
     }
 
     pub fn set_src_mac(&mut self, mac: MacAddr) {
-        for i in 0..6 {
-            self.data[6 + i] = mac.bytes[i];
-        }
+        self.data[6..12].clone_from_slice(&mac.bytes[..6]);
     }
 
     pub fn payload_len(&self) -> u16 {

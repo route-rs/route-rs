@@ -1,8 +1,5 @@
-///The common datatype that all packet structures share to repreasent their data
-pub type PacketData<'packet> = &'packet mut Vec<u8>;
-
-mod packet;
-pub use self::packet::*;
+mod types;
+pub use self::types::*;
 
 mod ethernet;
 pub use self::ethernet::*;

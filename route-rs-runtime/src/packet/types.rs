@@ -1,5 +1,8 @@
 //Let's use this area for now to declare common structs, constants, and common helper functions.
 
+///The common datatype that all packet structures share to repreasent their data
+pub type PacketData<'packet> = &'packet mut Vec<u8>;
+
 //Most significant byte is 0th
 #[derive(Eq, Clone, Copy, Hash, PartialEq)]
 pub struct MacAddr {
