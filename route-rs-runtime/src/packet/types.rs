@@ -1,4 +1,5 @@
 //Let's use this area for now to declare common structs, constants, and common helper functions.
+use std::fmt;
 
 ///The common datatype that all packet structures share to repreasent their data
 pub type PacketData<'packet> = &'packet mut Vec<u8>;
@@ -15,8 +16,23 @@ impl MacAddr {
     }
 }
 
+impl fmt::Display for MacAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            " {:X}::{:X}::{:X}::{:X}::{:X}::{:X} ",
+            self.bytes[0],
+            self.bytes[1],
+            self.bytes[2],
+            self.bytes[3],
+            self.bytes[4],
+            self.bytes[5]
+        )
+    }
+}
+
 //Most significant byte is 0th
-#[derive(Eq, Clone, Copy, Hash, PartialEq)]
+#[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
 pub struct Ipv4Addr {
     pub bytes: [u8; 4],
 }
@@ -27,7 +43,18 @@ impl Ipv4Addr {
     }
 }
 
+impl fmt::Display for Ipv4Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            " {}.{}.{}.{} ",
+            self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3]
+        )
+    }
+}
+
 #[allow(non_camel_case_types)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IpProtocol {
     HOPOPT,
     ICMP,

@@ -25,12 +25,12 @@ impl<'packet> Ipv4Packet<'packet> {
         // TotalLen is the 3rd and 4th byte of the IP Header
         let total_len = u16::from_be_bytes([packet[14 + 2], packet[14 + 3]]) as usize;
         if packet.len() != total_len + 14 {
-            return Err("Packet has invalid total len field");
+            return Err("Packet has invalid total length field");
         }
 
         //This is the header length in 32bit words
         let internet_header_len = (packet[14] & 0x0F) as usize;
-        let header_length = (internet_header_len * 4) + 14;
+        let header_length = internet_header_len * 4;
 
         Ok(Ipv4Packet {
             data: packet,
@@ -41,7 +41,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
     //MAGIC ALERT, src addr offset (12) and Ipv4 header offset
     pub fn src_addr(&self) -> Ipv4Addr {
-        let bytes = <[u8; 4]>::try_from(&self.data[(14 + 12)..(14 + 15)]).unwrap();
+        let bytes = <[u8; 4]>::try_from(&self.data[(14 + 12)..(14 + 16)]).unwrap();
         Ipv4Addr::new(bytes)
     }
 
@@ -52,7 +52,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
     //MAGIC ALERT, dest addr offset (16) and Ipv4 header offset
     pub fn dest_addr(&self) -> Ipv4Addr {
-        let bytes = <[u8; 4]>::try_from(&self.data[(14 + 16)..(14 + 19)]).unwrap();
+        let bytes = <[u8; 4]>::try_from(&self.data[(14 + 16)..(14 + 20)]).unwrap();
         Ipv4Addr::new(bytes)
     }
 
@@ -85,7 +85,7 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
-        if self.header_length > 20 {
+        if self.header_length <= 20 {
             return None;
         }
         Some(Cow::from(&self.data[14 + 20..14 + self.header_length]))
@@ -183,20 +183,56 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 }
 
-impl<'packet> From<EthernetFrame<'packet>> for Result<Ipv4Packet<'packet>, &'static str> {
+pub type Ipv4PacketResult<'packet> = Result<Ipv4Packet<'packet>, &'static str>;
+
+impl<'packet> From<EthernetFrame<'packet>> for Ipv4PacketResult<'packet> {
     fn from(frame: EthernetFrame<'packet>) -> Self {
         Ipv4Packet::new(frame.data)
     }
 }
 
-impl<'packet> From<TcpSegment<'packet>> for Result<Ipv4Packet<'packet>, &'static str> {
+impl<'packet> From<TcpSegment<'packet>> for Ipv4PacketResult<'packet> {
     fn from(segment: TcpSegment<'packet>) -> Self {
         Ipv4Packet::new(segment.data)
     }
 }
 
-impl<'packet> From<UdpSegment<'packet>> for Result<Ipv4Packet<'packet>, &'static str> {
+impl<'packet> From<UdpSegment<'packet>> for Ipv4PacketResult<'packet> {
     fn from(segment: UdpSegment<'packet>) -> Self {
         Ipv4Packet::new(segment.data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::vec::Vec;
+
+    #[test]
+    fn ipv4_packet() {
+        //Example frame with 0 payload
+        let mut mac_data: Vec<u8> =
+            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let ip_data: Vec<u8> = vec![
+            0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+        ];
+        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        frame.set_payload(&ip_data);
+        let packet: Ipv4PacketResult = frame.into();
+        let packet = packet.unwrap();
+        assert_eq!(packet.src_addr(), Ipv4Addr::new([192, 178, 128, 0]));
+        assert_eq!(packet.dest_addr(), Ipv4Addr::new([10, 0, 0, 1]));
+        assert_eq!(packet.header_length(), 20);
+        assert_eq!(packet.payload().len(), 0);
+        assert_eq!(packet.options(), None);
+        assert_eq!(packet.protocol(), IpProtocol::UDP);
+        assert_eq!(packet.total_len(), 20);
+        assert_eq!(packet.ttl(), 64);
+        assert_eq!(packet.header_checksum(), 0);
+        assert_eq!(packet.dcsp(), 0);
+        assert_eq!(packet.ecn(), 0);
+        assert_eq!(packet.indentification(), 0);
+        assert_eq!(packet.fragment_offet(), 0);
+        assert_eq!(packet.flags(), (false, false));
     }
 }
