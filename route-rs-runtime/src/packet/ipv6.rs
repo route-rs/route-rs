@@ -38,19 +38,21 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 }
 
-impl<'packet> From<EthernetFrame<'packet>> for Result<Ipv6Packet<'packet>, &'static str> {
+pub type Ipv6PacketResult<'packet> = Result<Ipv6Packet<'packet>, &'static str>;
+
+impl<'packet> From<EthernetFrame<'packet>> for Ipv6PacketResult<'packet> {
     fn from(frame: EthernetFrame<'packet>) -> Self {
         Ipv6Packet::new(frame.data)
     }
 }
 
-impl<'packet> From<TcpSegment<'packet>> for Result<Ipv6Packet<'packet>, &'static str> {
+impl<'packet> From<TcpSegment<'packet>> for Ipv6PacketResult<'packet> {
     fn from(segment: TcpSegment<'packet>) -> Self {
         Ipv6Packet::new(segment.data)
     }
 }
 
-impl<'packet> From<UdpSegment<'packet>> for Result<Ipv6Packet<'packet>, &'static str> {
+impl<'packet> From<UdpSegment<'packet>> for Ipv6PacketResult<'packet> {
     fn from(segment: UdpSegment<'packet>) -> Self {
         Ipv6Packet::new(segment.data)
     }
