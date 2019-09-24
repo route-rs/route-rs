@@ -216,10 +216,12 @@ mod tests {
         let ip_data: Vec<u8> = vec![
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
+
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&ip_data);
-        let packet: Ipv4PacketResult = frame.into();
-        let packet = packet.unwrap();
+
+        let packet = Ipv4PacketResult::from(frame).unwrap();
+
         assert_eq!(packet.src_addr(), Ipv4Addr::new([192, 178, 128, 0]));
         assert_eq!(packet.dest_addr(), Ipv4Addr::new([10, 0, 0, 1]));
         assert_eq!(packet.header_length(), 20);
