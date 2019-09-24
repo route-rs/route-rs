@@ -88,3 +88,71 @@ impl<'packet> From<Ipv6Packet<'packet>> for Result<EthernetFrame<'packet>, &'sta
         EthernetFrame::new(packet.data)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::vec::Vec;
+
+    #[test]
+    fn ethernet_frame() {
+        //Example frame with 0 payload
+        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let frame = EthernetFrame::new(&mut data).unwrap();
+        assert_eq!(
+            frame.dest_mac(),
+            MacAddr::new([0xde, 0xad, 0xbe, 0xef, 0xff, 0xff])
+        );
+        assert_eq!(frame.src_mac(), MacAddr::new([1, 2, 3, 4, 5, 6]));
+        assert_eq!(frame.payload_len(), 0);
+        assert_eq!(frame.payload().len(), 0);
+    }
+
+    #[test]
+    fn set_payload() {
+        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        assert_eq!(frame.payload_len(), 0);
+        assert_eq!(frame.payload().len(), 0);
+
+        let new_payload: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        frame.set_payload(&new_payload);
+        assert_eq!(frame.payload_len(), new_payload.len() as u16);
+        assert_eq!(frame.payload(), new_payload);
+        assert_eq!(frame.payload()[2], 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "Frame is less than the minimum of 14 bytes")]
+    fn invalid_data_length() {
+        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6];
+        let _frame = EthernetFrame::new(&mut data).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Frame has invalivd payload len field")]
+    fn invalid_payload_length() {
+        let mut data: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0xff, 1, 2,
+        ];
+        let _frame = EthernetFrame::new(&mut data).unwrap();
+    }
+
+    #[test]
+    fn set_dest_mac() {
+        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        let new_dest = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
+        frame.set_dest_mac(new_dest);
+        assert_eq!(frame.dest_mac(), new_dest);
+    }
+
+    #[test]
+    fn set_src_mac() {
+        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        let new_src = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
+        frame.set_src_mac(new_src);
+        assert_eq!(frame.src_mac(), new_src);
+    }
+}

@@ -4,7 +4,7 @@
 pub type PacketData<'packet> = &'packet mut Vec<u8>;
 
 //Most significant byte is 0th
-#[derive(Eq, Clone, Copy, Hash, PartialEq)]
+#[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
 pub struct MacAddr {
     pub bytes: [u8; 6],
 }
