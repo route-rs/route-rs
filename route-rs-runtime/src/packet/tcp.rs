@@ -52,19 +52,21 @@ impl<'packet> TcpSegment<'packet> {
     }
 }
 
-impl<'packet> From<EthernetFrame<'packet>> for Result<TcpSegment<'packet>, &'static str> {
+pub type TcpSegmentResult<'packet> = Result<TcpSegment<'packet>, &'static str>;
+
+impl<'packet> From<EthernetFrame<'packet>> for TcpSegmentResult<'packet> {
     fn from(frame: EthernetFrame<'packet>) -> Self {
         TcpSegment::new(frame.data)
     }
 }
 
-impl<'packet> From<Ipv4Packet<'packet>> for Result<TcpSegment<'packet>, &'static str> {
+impl<'packet> From<Ipv4Packet<'packet>> for TcpSegmentResult<'packet> {
     fn from(packet: Ipv4Packet<'packet>) -> Self {
         TcpSegment::new(packet.data)
     }
 }
 
-impl<'packet> From<Ipv6Packet<'packet>> for Result<TcpSegment<'packet>, &'static str> {
+impl<'packet> From<Ipv6Packet<'packet>> for TcpSegmentResult<'packet> {
     fn from(packet: Ipv6Packet<'packet>) -> Self {
         TcpSegment::new(packet.data)
     }

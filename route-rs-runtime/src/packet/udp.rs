@@ -52,19 +52,20 @@ impl<'packet> UdpSegment<'packet> {
     }
 }
 
-impl<'packet> From<EthernetFrame<'packet>> for Result<UdpSegment<'packet>, &'static str> {
+pub type UdpSegmentResult<'packet> = Result<UdpSegment<'packet>, &'static str>;
+impl<'packet> From<EthernetFrame<'packet>> for UdpSegmentResult<'packet> {
     fn from(frame: EthernetFrame<'packet>) -> Self {
         UdpSegment::new(frame.data)
     }
 }
 
-impl<'packet> From<Ipv4Packet<'packet>> for Result<UdpSegment<'packet>, &'static str> {
+impl<'packet> From<Ipv4Packet<'packet>> for UdpSegmentResult<'packet> {
     fn from(packet: Ipv4Packet<'packet>) -> Self {
         UdpSegment::new(packet.data)
     }
 }
 
-impl<'packet> From<Ipv6Packet<'packet>> for Result<UdpSegment<'packet>, &'static str> {
+impl<'packet> From<Ipv6Packet<'packet>> for UdpSegmentResult<'packet> {
     fn from(packet: Ipv6Packet<'packet>) -> Self {
         UdpSegment::new(packet.data)
     }

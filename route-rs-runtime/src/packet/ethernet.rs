@@ -65,25 +65,27 @@ impl<'frame> EthernetFrame<'frame> {
     }
 }
 
-impl<'packet> From<TcpSegment<'packet>> for Result<EthernetFrame<'packet>, &'static str> {
+pub type EthernetFrameResult<'packet> = Result<EthernetFrame<'packet>, &'static str>;
+
+impl<'packet> From<TcpSegment<'packet>> for EthernetFrameResult<'packet> {
     fn from(segment: TcpSegment<'packet>) -> Self {
         EthernetFrame::new(segment.data)
     }
 }
 
-impl<'packet> From<UdpSegment<'packet>> for Result<EthernetFrame<'packet>, &'static str> {
+impl<'packet> From<UdpSegment<'packet>> for EthernetFrameResult<'packet> {
     fn from(segment: UdpSegment<'packet>) -> Self {
         EthernetFrame::new(segment.data)
     }
 }
 
-impl<'packet> From<Ipv4Packet<'packet>> for Result<EthernetFrame<'packet>, &'static str> {
+impl<'packet> From<Ipv4Packet<'packet>> for EthernetFrameResult<'packet> {
     fn from(packet: Ipv4Packet<'packet>) -> Self {
         EthernetFrame::new(packet.data)
     }
 }
 
-impl<'packet> From<Ipv6Packet<'packet>> for Result<EthernetFrame<'packet>, &'static str> {
+impl<'packet> From<Ipv6Packet<'packet>> for EthernetFrameResult<'packet> {
     fn from(packet: Ipv6Packet<'packet>) -> Self {
         EthernetFrame::new(packet.data)
     }
