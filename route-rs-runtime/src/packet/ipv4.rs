@@ -141,43 +141,53 @@ impl<'packet> Ipv4Packet<'packet> {
     /// Verifies the IP header checksum, returns the value and also sets
     /// the internal bookeeping field. As such we need a mutable reference.
     pub fn validate_checksum(&mut self) -> bool {
-        let full_sum = &self.data[0..self.header_length()]
+        let full_sum = &self.data[14..14 + self.header_length()]
             .iter()
-            .fold(0, |acc: u32, x| acc + u32::from(*x));
-        let (carry, mut sum) = (((full_sum & 0xFF00) >> 16), (full_sum & 0x00FF));
+            .enumerate()
+            .fold(0, |acc: u32, x| {
+                if (x.0 % 2) == 0 {
+                    // Even index means most sig byte, so it needs to be shifted to right by 8
+                    acc + (u32::from(*x.1) << 8)
+                } else {
+                    acc + u32::from(*x.1)
+                }
+            });
+        let (carry, mut sum) = (((full_sum & 0xFFFF_0000) >> 16), (full_sum & 0x0000_FFFF));
         sum += carry;
-        //If adding carry to sum generates another carry, we must add another 1
-        if sum & 0xFF00 != 0 {
-            sum += 1;
-        }
         //Take ones complement and confirm value is zero.
-        self.valid_checksum = 0 == !(sum & 0x00FF);
+        self.valid_checksum = 0 == (!sum & 0xFFFF);
         self.valid_checksum
     }
 
     /// Calculates what the checksum should be set to given the current header
     pub fn caclulate_checksum(&self) -> u16 {
-        let full_sum = &self.data[0..self.header_length()]
+        let full_sum = &self.data[14..14 + self.header_length()]
             .iter()
             .enumerate()
             .filter(|x| (x.0 != 10) & (x.0 != 11))
-            .fold(0, |acc: u32, x| acc + u32::from(*x.1));
-
-        let (carry, mut sum) = (((full_sum & 0xFF00) >> 16), (full_sum & 0x00FF));
+            .fold(0, |acc: u32, x| {
+                if (x.0 % 2) == 0 {
+                    // Even index means most sig byte, so it needs to be shifted to right by 8
+                    acc + (u32::from(*x.1) << 8)
+                } else {
+                    acc + u32::from(*x.1)
+                }
+            });
+        let (carry, mut sum) = (((full_sum & 0xFFFF_0000) >> 16), (full_sum & 0x0000_FFFF));
         sum += carry;
         //If adding carry to sum generates another carry, we must add another 1
-        if sum & 0xFF00 != 0 {
+        if sum & 0xFFFF_0000 != 0 {
             sum += 1;
         }
         //Take ones complement
-        sum = !(sum & 0x00FF);
+        sum = !sum & 0xFFFF;
         sum as u16
     }
 
     /// Sets checksum field to valid value
     pub fn set_checksum(&mut self) {
         let new_checksum = self.caclulate_checksum();
-        self.data[14 + 10] = (new_checksum & 0xFF00 >> 8) as u8;
+        self.data[14 + 10] = ((new_checksum & 0xFF00) >> 8) as u8;
         self.data[14 + 11] = (new_checksum & 0x00FF) as u8;
         self.valid_checksum = true;
     }
@@ -236,5 +246,44 @@ mod tests {
         assert_eq!(packet.indentification(), 0);
         assert_eq!(packet.fragment_offet(), 0);
         assert_eq!(packet.flags(), (false, false));
+    }
+
+    #[test]
+    fn validate_checksum() {
+        let mut mac_data: Vec<u8> =
+            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let invalid_checksum_data: Vec<u8> = vec![
+            0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
+            0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
+        ];
+        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        frame.set_payload(&invalid_checksum_data);
+        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        assert!(!packet.validate_checksum());
+
+        let valid_checksum_data: Vec<u8> = vec![
+            0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0xc0, 0xc0, 0xa8,
+            0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
+        ];
+        let mut frame = EthernetFrameResult::from(packet).unwrap();
+        frame.set_payload(&valid_checksum_data);
+        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        assert!(packet.validate_checksum());
+    }
+
+    #[test]
+    fn set_checksum() {
+        let mut mac_data: Vec<u8> =
+            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let ip_data: Vec<u8> = vec![
+            0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
+            0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
+        ];
+        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        frame.set_payload(&ip_data);
+        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        assert!(!packet.validate_checksum());
+        packet.set_checksum();
+        assert!(packet.validate_checksum());
     }
 }
