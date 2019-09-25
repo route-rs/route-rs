@@ -142,19 +142,12 @@ impl<'packet> Ipv4Packet<'packet> {
     /// the internal bookeeping field. As such we need a mutable reference.
     pub fn validate_checksum(&mut self) -> bool {
         let full_sum = &self.data[14..14 + self.header_length()]
-            .iter()
-            .enumerate()
+            .chunks_exact(2)
             .fold(0, |acc: u32, x| {
-                if (x.0 % 2) == 0 {
-                    // Even index means most sig byte, so it needs to be shifted to right by 8
-                    acc + (u32::from(*x.1) << 8)
-                } else {
-                    acc + u32::from(*x.1)
-                }
+                acc + u32::from(u16::from_be_bytes([x[0], x[1]]))
             });
         let (carry, mut sum) = (((full_sum & 0xFFFF_0000) >> 16), (full_sum & 0x0000_FFFF));
         sum += carry;
-        //Take ones complement and confirm value is zero.
         self.valid_checksum = 0 == (!sum & 0xFFFF);
         self.valid_checksum
     }
@@ -162,24 +155,17 @@ impl<'packet> Ipv4Packet<'packet> {
     /// Calculates what the checksum should be set to given the current header
     pub fn caclulate_checksum(&self) -> u16 {
         let full_sum = &self.data[14..14 + self.header_length()]
-            .iter()
+            .chunks_exact(2)
             .enumerate()
-            .filter(|x| (x.0 != 10) & (x.0 != 11))
+            .filter(|x| x.0 != 5)
             .fold(0, |acc: u32, x| {
-                if (x.0 % 2) == 0 {
-                    // Even index means most sig byte, so it needs to be shifted to right by 8
-                    acc + (u32::from(*x.1) << 8)
-                } else {
-                    acc + u32::from(*x.1)
-                }
+                acc + u32::from(u16::from_be_bytes([x.1[0], x.1[1]]))
             });
         let (carry, mut sum) = (((full_sum & 0xFFFF_0000) >> 16), (full_sum & 0x0000_FFFF));
         sum += carry;
-        //If adding carry to sum generates another carry, we must add another 1
         if sum & 0xFFFF_0000 != 0 {
             sum += 1;
         }
-        //Take ones complement
         sum = !sum & 0xFFFF;
         sum as u16
     }
