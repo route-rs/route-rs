@@ -1,4 +1,4 @@
-use futures::Stream;
+use futures::{Future, Stream};
 
 /// A simple pull based link.  It is pull based in the sense that packets are only fetched on the input
 /// when a packet is requested from the output. This link does not have the abilty store packets internally,
@@ -32,8 +32,25 @@ pub use self::tee_link::*;
 mod blackhole_link;
 pub use self::blackhole_link::*;
 
-/// The type that all links take as input, or provide as output. This allows links to be combinatorial
-pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
+/// All Links communicate through streams of packets. This allows them to be composable.
+pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + 'static + Send>;
+/// Some Links may need to be driven by Tokio. This represents a handle to something Tokio can run.
+pub type TokioRunnable = Box<dyn Future<Item = (), Error = ()> + 'static + Send>;
+
+/// All *Link's should implement Link in order to be composable with each other.
+///
+/// The two type parameters, A and B, refer to the input and output types of the Link.
+/// You can tell because the ingress/egress streams are of type `PacketStream<Input>`/`PacketStream<Output>` respectively.
+pub trait Link<Input, Output> {
+    /// Links need a way to receive input from upstream.
+    /// Some Links such as `SyncLink` will only need at most 1, but others can accept many.
+    fn ingressors(&self, ingress_streams: Vec<PacketStream<Input>>) -> Self;
+
+    /// Provides any tokio-driven Futures needed to drive the Link, as well as handles for downstream
+    /// `Link`s to use. This method consumes the `Link` since we want to move ownership of a `Link`'s
+    /// runnables and egressors to the caller.
+    fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
+}
 
 /// Task Park is a structure for tasks to place their task handles when sleeping, and where they can
 /// check for other tasks that need to be awoken.  As an example, the ingressor and egressor side of
