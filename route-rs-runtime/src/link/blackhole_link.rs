@@ -1,26 +1,26 @@
-use crate::link::{Link, PacketStream, TokioRunnable};
+use crate::link::{Link, LinkBuilder, PacketStream};
 use futures::{Async, Future, Poll};
 
 /// Link that drops all packets ingressed.
 #[derive(Default)]
-pub struct BlackHoleLink<Packet: Sized> {
+pub struct BlackHoleLinkBuilder<Packet: Sized> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
 }
 
-impl<Packet> BlackHoleLink<Packet> {
+impl<Packet> BlackHoleLinkBuilder<Packet> {
     pub fn new() -> Self {
-        BlackHoleLink { in_streams: None }
+        BlackHoleLinkBuilder { in_streams: None }
     }
 }
 
-impl<Packet: Sized + 'static> Link<Packet, ()> for BlackHoleLink<Packet> {
+impl<Packet: Sized + 'static> LinkBuilder<Packet, ()> for BlackHoleLinkBuilder<Packet> {
     fn ingressors(self, ingress_streams: Vec<PacketStream<Packet>>) -> Self {
-        BlackHoleLink {
+        BlackHoleLinkBuilder {
             in_streams: Some(ingress_streams),
         }
     }
 
-    fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<()>>) {
+    fn build_link(self) -> Link<()> {
         if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input streams");
         } else {
@@ -61,7 +61,7 @@ impl<Packet: Sized> Future for BlackHole<Packet> {
 mod tests {
     use super::*;
     use crate::element::Classifier;
-    use crate::link::ClassifyLink;
+    use crate::link::{ClassifyLink, TokioRunnable};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_if_improperly_built() {
-        BlackHoleLink::<i32>::new().build_link();
+        BlackHoleLinkBuilder::<i32>::new().build_link();
     }
 
     #[test]
@@ -105,7 +105,7 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let (runnables, _) = BlackHoleLink::new()
+        let (runnables, _) = BlackHoleLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
 
@@ -122,7 +122,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let (runnables, _) = BlackHoleLink::new()
+        let (runnables, _) = BlackHoleLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
 
@@ -149,7 +149,7 @@ mod tests {
 
         let drain0 = link0.ingressor;
 
-        let (mut black_hole_runnables, _) = BlackHoleLink::new()
+        let (mut black_hole_runnables, _) = BlackHoleLinkBuilder::new()
             .ingressors(vec![Box::new(link0.egressors.pop().unwrap())])
             .build_link();
 

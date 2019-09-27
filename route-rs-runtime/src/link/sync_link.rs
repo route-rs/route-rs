@@ -1,15 +1,16 @@
 use crate::element::Element;
-use crate::link::{ElementLink, Link, PacketStream, TokioRunnable};
+use crate::link::{ElementLinkBuilder, Link, LinkBuilder, PacketStream};
 use futures::{Async, Poll, Stream};
 
-pub struct SyncLink<E: Element> {
+#[derive(Default)]
+pub struct SyncLinkBuilder<E: Element> {
     in_streams: Option<Vec<PacketStream<E::Input>>>,
     element: Option<E>,
 }
 
-impl<E: Element> SyncLink<E> {
+impl<E: Element> SyncLinkBuilder<E> {
     pub fn new() -> Self {
-        SyncLink {
+        SyncLinkBuilder {
             in_streams: None,
             element: None,
         }
@@ -20,17 +21,17 @@ impl<E: Element> SyncLink<E> {
 /// may only have one ingress and egress stream since it lacks some kind of queue
 /// storage. In the future we might decide to restrict the interface for this link
 /// for clearer intent.
-impl<E: Element + Send + 'static> Link<E::Input, E::Output> for SyncLink<E> {
+impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for SyncLinkBuilder<E> {
     fn ingressors(self, in_streams: Vec<PacketStream<E::Input>>) -> Self {
         assert_eq!(in_streams.len(), 1, "SyncLink may only take 1 input stream");
 
-        SyncLink {
+        SyncLinkBuilder {
             in_streams: Some(in_streams),
             element: self.element,
         }
     }
 
-    fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<E::Output>>) {
+    fn build_link(self) -> Link<E::Output> {
         if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input streams");
         } else if self.element.is_none() {
@@ -42,9 +43,9 @@ impl<E: Element + Send + 'static> Link<E::Input, E::Output> for SyncLink<E> {
     }
 }
 
-impl<E: Element + Send + 'static> ElementLink<E> for SyncLink<E> {
+impl<E: Element + Send + 'static> ElementLinkBuilder<E> for SyncLinkBuilder<E> {
     fn element(self, element: E) -> Self {
-        SyncLink {
+        SyncLinkBuilder {
             in_streams: self.in_streams,
             element: Some(element),
         }
@@ -121,7 +122,9 @@ mod tests {
     fn panics_when_built_without_input_streams() {
         let identity_element: IdentityElement<i32> = IdentityElement::new();
 
-        SyncLink::new().element(identity_element).build_link();
+        SyncLinkBuilder::new()
+            .element(identity_element)
+            .build_link();
     }
 
     #[test]
@@ -130,7 +133,7 @@ mod tests {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
-        SyncLink::<IdentityElement<i32>>::new()
+        SyncLinkBuilder::<IdentityElement<i32>>::new()
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
     }
@@ -142,7 +145,7 @@ mod tests {
         let packet_generator0 = immediate_stream(packets.clone());
         let identity_element0 = IdentityElement::new();
 
-        SyncLink::new()
+        SyncLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator0)])
             .element(identity_element0)
             .build_link();
@@ -150,7 +153,7 @@ mod tests {
         let packet_generator1 = immediate_stream(packets.clone());
         let identity_element1 = IdentityElement::new();
 
-        SyncLink::new()
+        SyncLinkBuilder::new()
             .element(identity_element1)
             .ingressors(vec![Box::new(packet_generator1)])
             .build_link();
@@ -163,7 +166,7 @@ mod tests {
 
         let identity_element = IdentityElement::new();
 
-        let (_, mut identity_egressors) = SyncLink::new()
+        let (_, mut identity_egressors) = SyncLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(identity_element)
             .build_link();
@@ -187,7 +190,7 @@ mod tests {
 
         let identity_element = IdentityElement::new();
 
-        let (_, mut identity_egressors) = SyncLink::new()
+        let (_, mut identity_egressors) = SyncLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(identity_element)
             .build_link();
@@ -208,7 +211,7 @@ mod tests {
 
         let transform_element = TransformElement::new();
 
-        let (_, mut transform_egressors) = SyncLink::new()
+        let (_, mut transform_egressors) = SyncLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(transform_element)
             .build_link();
@@ -230,7 +233,7 @@ mod tests {
 
         let drop_element = DropElement::new();
 
-        let (_, mut drop_egressors) = SyncLink::new()
+        let (_, mut drop_egressors) = SyncLinkBuilder::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(drop_element)
             .build_link();
