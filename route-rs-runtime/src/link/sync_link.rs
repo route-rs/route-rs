@@ -1,22 +1,72 @@
 use crate::element::Element;
-use crate::link::PacketStream;
+use crate::link::{ElementLink, Link, PacketStream, TokioRunnable};
 use futures::{Async, Poll, Stream};
 
 pub struct SyncLink<E: Element> {
-    input_stream: PacketStream<E::Input>,
-    element: E,
+    in_streams: Option<Vec<PacketStream<E::Input>>>,
+    element: Option<E>,
 }
 
 impl<E: Element> SyncLink<E> {
-    pub fn new(input_stream: PacketStream<E::Input>, element: E) -> Self {
+    pub fn new() -> Self {
         SyncLink {
-            input_stream,
+            in_streams: None,
+            element: None,
+        }
+    }
+}
+
+/// Although `Link` allows an arbitrary number of ingressors and egressors, `SyncLink`
+/// may only have one ingress and egress stream since it lacks some kind of queue
+/// storage. In the future we might decide to restrict the interface for this link
+/// for clearer intent.
+impl<E: Element + Send + 'static> Link<E::Input, E::Output> for SyncLink<E> {
+    fn ingressors(self, in_streams: Vec<PacketStream<E::Input>>) -> Self {
+        assert_eq!(in_streams.len(), 1, "SyncLink may only take 1 input stream");
+
+        SyncLink {
+            in_streams: Some(in_streams),
+            element: self.element,
+        }
+    }
+
+    fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<E::Output>>) {
+        if self.in_streams.is_none() {
+            panic!("Cannot build link! Missing input streams");
+        } else if self.element.is_none() {
+            panic!("Cannot build link! Missing element");
+        } else {
+            let processor = SyncProcessor::new(self.in_streams.unwrap(), self.element.unwrap());
+            (vec![], vec![Box::new(processor)])
+        }
+    }
+}
+
+impl<E: Element + Send + 'static> ElementLink<E> for SyncLink<E> {
+    fn element(self, element: E) -> Self {
+        SyncLink {
+            in_streams: self.in_streams,
+            element: Some(element),
+        }
+    }
+}
+
+/// The single egressor of SyncLink
+struct SyncProcessor<E: Element> {
+    in_streams: Vec<PacketStream<E::Input>>,
+    element: E,
+}
+
+impl<E: Element> SyncProcessor<E> {
+    fn new(in_streams: Vec<PacketStream<E::Input>>, element: E) -> Self {
+        SyncProcessor {
+            in_streams,
             element,
         }
     }
 }
 
-impl<E: Element> Stream for SyncLink<E> {
+impl<E: Element> Stream for SyncProcessor<E> {
     type Item = E::Output;
     type Error = ();
 
@@ -42,13 +92,15 @@ impl<E: Element> Stream for SyncLink<E> {
     ///
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
-            let input_packet_option: Option<E::Input> = try_ready!(self.input_stream.poll());
-            match input_packet_option {
-                None => return Ok(Async::Ready(None)),
-                Some(input_packet) => {
-                    // if `element.process` returns None, do nothing, loop around and try polling again.
-                    if let Some(output_packet) = self.element.process(input_packet) {
-                        return Ok(Async::Ready(Some(output_packet)));
+            for ingress_stream in self.in_streams.iter_mut() {
+                let input_packet_option: Option<E::Input> = try_ready!(ingress_stream.poll());
+                match input_packet_option {
+                    None => return Ok(Async::Ready(None)),
+                    Some(input_packet) => {
+                        // if `element.process` returns None, do nothing, loop around and try polling again.
+                        if let Some(output_packet) = self.element.process(input_packet) {
+                            return Ok(Async::Ready(Some(output_packet)));
+                        }
                     }
                 }
             }
@@ -64,22 +116,60 @@ mod tests {
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
-    /// One Synchronous Element, sourced with an interval yield
-    ///
-    /// This test creates one Sync element, and uses the LinearIntervalGenerator to test whether
-    /// the element responds correctly to an upstream source providing a series of valid packets,
-    /// interleaved with Async::NotReady values, finalized by a Async::Ready(None)
+    #[test]
+    #[should_panic]
+    fn panics_when_built_without_input_streams() {
+        let identity_element: IdentityElement<i32> = IdentityElement::new();
+
+        SyncLink::new().element(identity_element).build_link();
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_when_built_without_element() {
+        let packets: Vec<i32> = vec![];
+        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
+
+        SyncLink::<IdentityElement<i32>>::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .build_link();
+    }
+
+    #[test]
+    fn builder_methods_work_in_any_order() {
+        let packets: Vec<i32> = vec![];
+
+        let packet_generator0 = immediate_stream(packets.clone());
+        let identity_element0 = IdentityElement::new();
+
+        SyncLink::new()
+            .ingressors(vec![Box::new(packet_generator0)])
+            .element(identity_element0)
+            .build_link();
+
+        let packet_generator1 = immediate_stream(packets.clone());
+        let identity_element1 = IdentityElement::new();
+
+        SyncLink::new()
+            .element(identity_element1)
+            .ingressors(vec![Box::new(packet_generator1)])
+            .build_link();
+    }
+
     #[test]
     fn sync_link() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = IdentityElement::new();
+        let identity_element = IdentityElement::new();
 
-        let link0 = SyncLink::new(Box::new(packet_generator), elem0);
+        let (_, mut identity_egressors) = SyncLink::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(identity_element)
+            .build_link();
 
         let (s, r) = crossbeam::crossbeam_channel::unbounded();
-        let consumer = ExhaustiveCollector::new(1, Box::new(link0), s);
+        let consumer = ExhaustiveCollector::new(1, identity_egressors.remove(0), s);
 
         tokio::run(consumer);
 
@@ -95,12 +185,15 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem0 = IdentityElement::new();
+        let identity_element = IdentityElement::new();
 
-        let link0 = SyncLink::new(Box::new(packet_generator), elem0);
+        let (_, mut identity_egressors) = SyncLink::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(identity_element)
+            .build_link();
 
         let (s, r) = crossbeam::crossbeam_channel::unbounded();
-        let consumer = ExhaustiveCollector::new(1, Box::new(link0), s);
+        let consumer = ExhaustiveCollector::new(1, identity_egressors.remove(0), s);
 
         tokio::run(consumer);
 
@@ -113,12 +206,15 @@ mod tests {
         let packets = "route-rs".chars();
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = TransformElement::new();
+        let transform_element = TransformElement::new();
 
-        let link0 = SyncLink::new(Box::new(packet_generator), elem0);
+        let (_, mut transform_egressors) = SyncLink::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(transform_element)
+            .build_link();
 
         let (s, r) = crossbeam::crossbeam_channel::unbounded();
-        let consumer = ExhaustiveCollector::new(1, Box::new(link0), s);
+        let consumer = ExhaustiveCollector::new(1, transform_egressors.remove(0), s);
 
         tokio::run(consumer);
 
@@ -132,12 +228,15 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = DropElement::new();
+        let drop_element = DropElement::new();
 
-        let link0 = SyncLink::new(Box::new(packet_generator), elem0);
+        let (_, mut drop_egressors) = SyncLink::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(drop_element)
+            .build_link();
 
         let (s, r) = crossbeam::crossbeam_channel::unbounded();
-        let consumer = ExhaustiveCollector::new(1, Box::new(link0), s);
+        let consumer = ExhaustiveCollector::new(1, drop_egressors.remove(0), s);
 
         tokio::run(consumer);
 

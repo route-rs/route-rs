@@ -216,6 +216,7 @@ mod tests {
     use super::*;
     use crate::element::{AsyncIdentityElement, DropElement, IdentityElement, TransformElement};
     use crate::link::sync_link::SyncLink;
+    use crate::link::{ElementLink, Link};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -368,10 +369,19 @@ mod tests {
         let elem2 = IdentityElement::new();
         let elem3 = AsyncIdentityElement::new();
 
-        let link0 = SyncLink::new(Box::new(packet_generator), elem0);
-        let link1 = AsyncLink::new(Box::new(link0), elem1, default_channel_size);
-        let link2 = SyncLink::new(Box::new(link1.egressor), elem2);
-        let link3 = AsyncLink::new(Box::new(link2), elem3, default_channel_size);
+        let (_, mut egressors0) = SyncLink::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem0)
+            .build_link();
+
+        let link1 = AsyncLink::new(egressors0.remove(0), elem1, default_channel_size);
+
+        let (_, mut egressors2) = SyncLink::new()
+            .ingressors(vec![Box::new(link1.egressor)])
+            .element(elem2)
+            .build_link();
+
+        let link3 = AsyncLink::new(egressors2.remove(0), elem3, default_channel_size);
 
         let drain1 = link1.ingressor;
         let drain3 = link3.ingressor;

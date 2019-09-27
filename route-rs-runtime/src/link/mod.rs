@@ -31,6 +31,7 @@ pub use self::tee_link::*;
 /// Drops all packets that are ingressed, asynchronous.
 mod blackhole_link;
 pub use self::blackhole_link::*;
+use crate::element::Element;
 
 /// All Links communicate through streams of packets. This allows them to be composable.
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + 'static + Send>;
@@ -44,12 +45,18 @@ pub type TokioRunnable = Box<dyn Future<Item = (), Error = ()> + 'static + Send>
 pub trait Link<Input, Output> {
     /// Links need a way to receive input from upstream.
     /// Some Links such as `SyncLink` will only need at most 1, but others can accept many.
-    fn ingressors(&self, ingress_streams: Vec<PacketStream<Input>>) -> Self;
+    fn ingressors(self, in_streams: Vec<PacketStream<Input>>) -> Self;
 
     /// Provides any tokio-driven Futures needed to drive the Link, as well as handles for downstream
     /// `Link`s to use. This method consumes the `Link` since we want to move ownership of a `Link`'s
     /// runnables and egressors to the caller.
     fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
+}
+
+/// `SyncLink` and `AsyncLink` should impl `ElementLink`, since they are required to have their
+/// Inputs and Outputs match that of their `Element`.
+pub trait ElementLink<E: Element>: Link<E::Input, E::Output> {
+    fn element(self, element: E) -> Self;
 }
 
 /// Task Park is a structure for tasks to place their task handles when sleeping, and where they can
