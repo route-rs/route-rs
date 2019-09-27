@@ -14,7 +14,7 @@ impl<Packet> BlackHoleLink<Packet> {
 }
 
 impl<Packet: Sized + 'static> Link<Packet, ()> for BlackHoleLink<Packet> {
-    fn ingressors(&self, ingress_streams: Vec<PacketStream<Packet>>) -> Self {
+    fn ingressors(self, ingress_streams: Vec<PacketStream<Packet>>) -> Self {
         BlackHoleLink {
             hole: Some(BlackHole::new(ingress_streams)),
         }
@@ -22,20 +22,20 @@ impl<Packet: Sized + 'static> Link<Packet, ()> for BlackHoleLink<Packet> {
 
     fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<()>>) {
         if self.hole.is_none() {
-            panic!("Cannot build link! Missing ingress streams")
+            panic!("Cannot build link! Missing input streams");
+        } else {
+            (vec![Box::new(self.hole.unwrap())], vec![])
         }
-
-        (vec![Box::new(self.hole.unwrap())], vec![])
     }
 }
 
-pub struct BlackHole<Packet> {
-    ingress_streams: Vec<PacketStream<Packet>>,
+struct BlackHole<Packet> {
+    in_streams: Vec<PacketStream<Packet>>,
 }
 
 impl<Packet: Sized> BlackHole<Packet> {
-    fn new(ingress_streams: Vec<PacketStream<Packet>>) -> Self {
-        BlackHole { ingress_streams }
+    fn new(in_streams: Vec<PacketStream<Packet>>) -> Self {
+        BlackHole { in_streams }
     }
 }
 
@@ -45,8 +45,8 @@ impl<Packet: Sized> Future for BlackHole<Packet> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            for ingress_stream in self.ingress_streams.iter_mut() {
-                if try_ready!(ingress_stream.poll()).is_none() {
+            for in_stream in self.in_streams.iter_mut() {
+                if try_ready!(in_stream.poll()).is_none() {
                     return Ok(Async::Ready(()));
                 }
             }
