@@ -4,48 +4,53 @@ use futures::{Async, Future, Poll};
 /// Link that drops all packets ingressed.
 #[derive(Default)]
 pub struct BlackHoleLink<Packet: Sized> {
-    ingress_streams: Option<Vec<PacketStream<Packet>>>,
+    hole: Option<BlackHole<Packet>>,
 }
 
 impl<Packet> BlackHoleLink<Packet> {
     pub fn new() -> Self {
-        BlackHoleLink {
-            ingress_streams: None,
-        }
-    }
-}
-
-impl<Packet: Sized> Future for BlackHoleLink<Packet> {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.ingress_streams.as_mut() {
-            None => panic!("Cannot poll! Missing ingress streams"),
-            Some(ingress_streams) => loop {
-                for ingress_stream in ingress_streams.iter_mut() {
-                    if try_ready!(ingress_stream.poll()).is_none() {
-                        return Ok(Async::Ready(()));
-                    }
-                }
-            },
-        }
+        BlackHoleLink { hole: None }
     }
 }
 
 impl<Packet: Sized + 'static> Link<Packet, ()> for BlackHoleLink<Packet> {
     fn ingressors(&self, ingress_streams: Vec<PacketStream<Packet>>) -> Self {
         BlackHoleLink {
-            ingress_streams: Some(ingress_streams),
+            hole: Some(BlackHole::new(ingress_streams)),
         }
     }
 
     fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<()>>) {
-        if self.ingress_streams.is_none() {
+        if self.hole.is_none() {
             panic!("Cannot build link! Missing ingress streams")
         }
 
-        (vec![Box::new(self)], vec![])
+        (vec![Box::new(self.hole.unwrap())], vec![])
+    }
+}
+
+pub struct BlackHole<Packet> {
+    ingress_streams: Vec<PacketStream<Packet>>,
+}
+
+impl<Packet: Sized> BlackHole<Packet> {
+    fn new(ingress_streams: Vec<PacketStream<Packet>>) -> Self {
+        BlackHole { ingress_streams }
+    }
+}
+
+impl<Packet: Sized> Future for BlackHole<Packet> {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            for ingress_stream in self.ingress_streams.iter_mut() {
+                if try_ready!(ingress_stream.poll()).is_none() {
+                    return Ok(Async::Ready(()));
+                }
+            }
+        }
     }
 }
 
@@ -141,18 +146,20 @@ mod tests {
 
         let drain0 = link0.ingressor;
 
-        let link1 = BlackHoleLink::new().ingressors(vec![Box::new(link0.egressors.pop().unwrap())]);
+        let (mut black_hole_runnables, _) = BlackHoleLink::new()
+            .ingressors(vec![Box::new(link0.egressors.pop().unwrap())])
+            .build_link();
 
         let (s0, link0_port0_collector_output) = crossbeam_channel::unbounded();
         let link0_port0_collector =
             ExhaustiveCollector::new(0, Box::new(link0.egressors.pop().unwrap()), s0);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain0);
-            tokio::spawn(link0_port0_collector);
-            tokio::spawn(link1);
-            Ok(())
-        }));
+        let mut runnables: Vec<TokioRunnable> = Vec::new();
+        runnables.push(Box::new(drain0));
+        runnables.push(Box::new(link0_port0_collector));
+        runnables.append(&mut black_hole_runnables);
+
+        run_tokio(runnables);
 
         let elem0_port0_output: Vec<_> = link0_port0_collector_output.iter().collect();
         assert_eq!(elem0_port0_output, vec![0, 2, 420, 4, 6, 8]);
