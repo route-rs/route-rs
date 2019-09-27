@@ -37,12 +37,15 @@ use crate::element::Element;
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + 'static + Send>;
 /// Some Links may need to be driven by Tokio. This represents a handle to something Tokio can run.
 pub type TokioRunnable = Box<dyn Future<Item = (), Error = ()> + 'static + Send>;
+/// LinkBuilders build this.
+pub type Link<Output> = (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
 
-/// All *Link's should implement Link in order to be composable with each other.
+/// `LinkBuilder` applies a builder pattern to create `Links`! `Links` should be created this way
+/// so they can be composed together
 ///
-/// The two type parameters, A and B, refer to the input and output types of the Link.
+/// The two type parameters, Input and Output, refer to the input and output types of the Link.
 /// You can tell because the ingress/egress streams are of type `PacketStream<Input>`/`PacketStream<Output>` respectively.
-pub trait Link<Input, Output> {
+pub trait LinkBuilder<Input, Output> {
     /// Links need a way to receive input from upstream.
     /// Some Links such as `SyncLink` will only need at most 1, but others can accept many.
     fn ingressors(self, in_streams: Vec<PacketStream<Input>>) -> Self;
@@ -50,12 +53,12 @@ pub trait Link<Input, Output> {
     /// Provides any tokio-driven Futures needed to drive the Link, as well as handles for downstream
     /// `Link`s to use. This method consumes the `Link` since we want to move ownership of a `Link`'s
     /// runnables and egressors to the caller.
-    fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
+    fn build_link(self) -> Link<Output>;
 }
 
 /// `SyncLink` and `AsyncLink` should impl `ElementLink`, since they are required to have their
 /// Inputs and Outputs match that of their `Element`.
-pub trait ElementLink<E: Element>: Link<E::Input, E::Output> {
+pub trait ElementLinkBuilder<E: Element>: LinkBuilder<E::Input, E::Output> {
     fn element(self, element: E) -> Self;
 }
 
