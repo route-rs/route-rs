@@ -4,27 +4,30 @@ use futures::{Async, Future, Poll};
 /// Link that drops all packets ingressed.
 #[derive(Default)]
 pub struct BlackHoleLink<Packet: Sized> {
-    hole: Option<BlackHole<Packet>>,
+    in_streams: Option<Vec<PacketStream<Packet>>>,
 }
 
 impl<Packet> BlackHoleLink<Packet> {
     pub fn new() -> Self {
-        BlackHoleLink { hole: None }
+        BlackHoleLink { in_streams: None }
     }
 }
 
 impl<Packet: Sized + 'static> Link<Packet, ()> for BlackHoleLink<Packet> {
     fn ingressors(self, ingress_streams: Vec<PacketStream<Packet>>) -> Self {
         BlackHoleLink {
-            hole: Some(BlackHole::new(ingress_streams)),
+            in_streams: Some(ingress_streams),
         }
     }
 
     fn build_link(self) -> (Vec<TokioRunnable>, Vec<PacketStream<()>>) {
-        if self.hole.is_none() {
+        if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input streams");
         } else {
-            (vec![Box::new(self.hole.unwrap())], vec![])
+            (
+                vec![Box::new(BlackHole::new(self.in_streams.unwrap()))],
+                vec![],
+            )
         }
     }
 }
