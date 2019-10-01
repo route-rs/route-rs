@@ -94,8 +94,7 @@ impl<'packet> Ipv4Packet<'packet> {
     //set_options
 
     pub fn protocol(&self) -> IpProtocol {
-        let num = self.data[14 + 9];
-        IpProtocol::from(num)
+        IpProtocol::from(self.data[14 + 9])
     }
 
     pub fn total_len(&self) -> u16 {
