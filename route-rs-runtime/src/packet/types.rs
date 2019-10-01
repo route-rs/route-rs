@@ -53,6 +53,47 @@ impl fmt::Display for Ipv4Addr {
     }
 }
 
+#[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
+pub struct Ipv6Addr {
+    pub words: [u16; 8],
+}
+
+impl Ipv6Addr {
+    pub fn new(words: [u16; 8]) -> Ipv6Addr {
+        Ipv6Addr { words }
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Ipv6Addr> {
+        let words: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|x| u16::from_be_bytes([x[0], x[1]]))
+            .collect();
+        if words.len() != 8 {
+            return None;
+        }
+        let mut addr: [u16; 8] = [0; 8];
+        addr.copy_from_slice(&words);
+        Some(Ipv6Addr::new(addr))
+    }
+}
+
+impl fmt::Display for Ipv6Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}:{}:{}:{}:{}:{}:{}:{}",
+            self.words[0],
+            self.words[1],
+            self.words[2],
+            self.words[3],
+            self.words[4],
+            self.words[5],
+            self.words[6],
+            self.words[7],
+        )
+    }
+}
+
 #[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq, Debug)]
 pub enum IpProtocol {
