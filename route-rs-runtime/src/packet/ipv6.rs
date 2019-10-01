@@ -11,7 +11,7 @@ pub struct Ipv6Packet<'packet> {
 impl<'packet> Ipv6Packet<'packet> {
     fn new(packet: PacketData) -> Result<Ipv6Packet, &'static str> {
         //Header of Ethernet Frame: 14bytes
-        //Haeder of IPv6 Frame: 40bytes
+        //Haeder of IPv6 Frame: 40bytes minimum
         if packet.len() < 14 + 40 {
             return Err("Packet is too short to be an Ipv6Packet");
         }
@@ -25,16 +25,43 @@ impl<'packet> Ipv6Packet<'packet> {
         // Note, there is a special unhandled edge case here, if the payload len is 0, there may
         // be a hop-by-hop extension header, that means we may have a jumbo packet. Not going to
         // handle this edge case for now, but it is needed before shipping.
+        // This may also not be true if there are extension headers, so we just check that we will not
+        // overrun our array trying to access the entire payload.
         let payload_len = u16::from_be_bytes([packet[14 + 4], packet[14 + 5]]) as usize;
-        if payload_len + 14 + 40 != packet.len() {
+        let packet_len = packet.len();
+        if payload_len + 14 + 40 <= packet_len {
             return Err("Packet has invalid payload len field");
         }
 
-        //Unhandled edge case where the offset may be different due to extension headers
         Ok(Ipv6Packet {
             data: packet,
-            payload_offset: 54,
+            payload_offset: packet_len - payload_len,
         })
+    }
+
+    pub fn traffic_class(&self) -> u8 {
+        ((self.data[14] & 0x0F) << 4) + (self.data[14 + 1] & 0xF0 >> 4)
+    }
+
+    pub fn flow_label(&self) -> u32 {
+        u32::from_be_bytes([
+            0,
+            self.data[14 + 1] & 0x0F,
+            self.data[14 + 2],
+            self.data[14 + 3],
+        ])
+    }
+
+    pub fn payload_length(&self) -> u16 {
+        u16::from_be_bytes([self.data[14 + 4], self.data[14 + 5]])
+    }
+
+    pub fn next_header(&self) -> IpProtocol {
+        IpProtocol::from(self.data[14 + 6])
+    }
+
+    pub fn hop_limit(&self) -> u8 {
+        self.data[14 + 7]
     }
 }
 
