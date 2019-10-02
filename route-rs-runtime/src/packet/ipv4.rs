@@ -46,7 +46,7 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
-        self.data[14 + 12..14 + 4].copy_from_slice(&addr.bytes[..4]);
+        self.data[14 + 12..14 + 4].copy_from_slice(&addr.bytes[..]);
         self.valid_checksum = false;
     }
 
@@ -57,7 +57,7 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
-        self.data[14 + 16..14 + 20].copy_from_slice(&addr.bytes[..4]);
+        self.data[14 + 16..14 + 20].copy_from_slice(&addr.bytes[..]);
         self.valid_checksum = false;
     }
 
