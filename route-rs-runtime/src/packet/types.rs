@@ -41,6 +41,16 @@ impl Ipv4Addr {
     pub fn new(bytes: [u8; 4]) -> Ipv4Addr {
         Ipv4Addr { bytes }
     }
+
+    pub fn from_byte_slice(bytes: &[u8]) -> Result<Ipv4Addr, &'static str> {
+        if bytes.len() != 4 {
+            return Err("Slice of length is not 4");
+        }
+
+        let mut addr: [u8; 4] = [0; 4];
+        addr.copy_from_slice(bytes);
+        Ok(Ipv4Addr::new(addr))
+    }
 }
 
 impl fmt::Display for Ipv4Addr {
@@ -63,17 +73,35 @@ impl Ipv6Addr {
         Ipv6Addr { words }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Option<Ipv6Addr> {
+    pub fn from_byte_slice(bytes: &[u8]) -> Result<Ipv6Addr, &'static str> {
         let words: Vec<u16> = bytes
             .chunks_exact(2)
             .map(|x| u16::from_be_bytes([x[0], x[1]]))
             .collect();
         if words.len() != 8 {
-            return None;
+            return Err("Could not parse bytes into word slice of length 8");
         }
         let mut addr: [u16; 8] = [0; 8];
         addr.copy_from_slice(&words);
-        Some(Ipv6Addr::new(addr))
+        Ok(Ipv6Addr::new(addr))
+    }
+
+    pub fn from_word_slice(words: &[u16]) -> Result<Ipv6Addr, &'static str> {
+        if words.len() != 8 {
+            return Err("Word slice is not of length 8");
+        }
+        let mut addr: [u16; 8] = [0; 8];
+        addr.copy_from_slice(words);
+        Ok(Ipv6Addr::new(addr))
+    }
+
+    pub fn bytes(&self) -> [u8; 16] {
+        let mut bytes = [0; 16];
+        for (i, word) in self.words.iter().enumerate() {
+            bytes[i * 2] = ((word >> 8) & 0xFF as u16) as u8;
+            bytes[(i * 2) + 1] = (word & 0xFF as u16) as u8;
+        }
+        bytes
     }
 }
 

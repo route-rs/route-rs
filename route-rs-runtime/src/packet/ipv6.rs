@@ -1,4 +1,5 @@
 use crate::packet::*;
+use std::borrow::Cow;
 
 #[allow(dead_code)]
 pub struct Ipv6Packet<'packet> {
@@ -62,6 +63,26 @@ impl<'packet> Ipv6Packet<'packet> {
 
     pub fn hop_limit(&self) -> u8 {
         self.data[14 + 7]
+    }
+
+    pub fn payload(&self) -> Cow<[u8]> {
+        Cow::from(&self.data[self.payload_offset..])
+    }
+
+    pub fn src_addr(&self) -> Ipv6Addr {
+        Ipv6Addr::from_byte_slice(&self.data[14 + 8..14 + 24]).unwrap()
+    }
+
+    pub fn dest_addr(&self) -> Ipv6Addr {
+        Ipv6Addr::from_byte_slice(&self.data[14 + 24..14 + 40]).unwrap()
+    }
+
+    pub fn set_src_addr(&mut self, addr: Ipv6Addr) {
+        self.data[14 + 8..14 + 24].copy_from_slice(&addr.bytes()[..]);
+    }
+
+    pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
+        self.data[14 + 24..14 + 40].copy_from_slice(&addr.bytes()[..]);
     }
 }
 
