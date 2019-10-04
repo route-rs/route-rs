@@ -71,15 +71,14 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn set_payload(&mut self, payload: &[u8]) {
-        let payload_len = payload.len() as u16;
+        let payload_len = payload.len();
 
         self.data.truncate(self.header_length);
 
-        let total_len = (payload_len + self.header_length as u16).to_be_bytes();
-        self.data[14 + 2] = total_len[0];
-        self.data[14 + 3] = total_len[1];
+        let total_len = (payload_len as u16 + self.header_length as u16).to_be_bytes();
+        self.data[14 + 2..14 + 3].copy_from_slice(&total_len);
 
-        self.data.reserve_exact(payload_len as usize);
+        self.data.reserve_exact(payload_len);
         self.data.extend(payload);
         self.valid_checksum = false;
     }
@@ -130,7 +129,7 @@ impl<'packet> Ipv4Packet<'packet> {
         u16::from_be_bytes([self.data[14 + 6] & 0x1F, self.data[14 + 7]])
     }
 
-    ///Returns tuple of (Don't Fragment, More Fragments)
+    /// Returns tuple of (Don't Fragment, More Fragments)
     pub fn flags(&self) -> (bool, bool) {
         let df = (self.data[14 + 6] & 0x40) != 0;
         let mf = (self.data[14 + 6] & 0x20) != 0;
