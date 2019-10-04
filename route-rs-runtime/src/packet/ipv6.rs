@@ -30,7 +30,7 @@ impl<'packet> Ipv6Packet<'packet> {
         // overrun our array trying to access the entire payload.
         let payload_len = u16::from_be_bytes([packet[14 + 4], packet[14 + 5]]) as usize;
         let packet_len = packet.len();
-        if payload_len + 14 + 40 <= packet_len {
+        if payload_len + 14 + 40 > packet_len {
             return Err("Packet has invalid payload len field");
         }
 
@@ -103,5 +103,91 @@ impl<'packet> From<TcpSegment<'packet>> for Ipv6PacketResult<'packet> {
 impl<'packet> From<UdpSegment<'packet>> for Ipv6PacketResult<'packet> {
     fn from(segment: UdpSegment<'packet>) -> Self {
         Ipv6Packet::new(segment.data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::vec::Vec;
+
+    #[test]
+    fn ipv6_packet() {
+        let mut mac_data: Vec<u8> =
+            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let ip_data: Vec<u8> = vec![
+            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+            14, 15, 0xa, 0xb, 0xc, 0xd,
+        ];
+
+        let src_addr = Ipv6Addr::new([
+            0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
+        ]);
+        let dest_addr = Ipv6Addr::new([
+            0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
+        ]);
+
+        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        frame.set_payload(&ip_data);
+
+        let packet = Ipv6PacketResult::from(frame).unwrap();
+        assert_eq!(packet.traffic_class(), 0);
+        assert_eq!(packet.flow_label(), 0);
+        assert_eq!(packet.payload_length(), 4);
+        assert_eq!(packet.next_header(), IpProtocol::UDP);
+        assert_eq!(packet.hop_limit(), 64);
+        assert_eq!(packet.payload().len(), 4);
+        assert_eq!(packet.payload()[2], 0xc);
+        assert_eq!(packet.src_addr(), src_addr);
+        assert_eq!(packet.dest_addr(), dest_addr);
+    }
+
+    #[test]
+    fn set_src_addr() {
+        let mut data: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0,
+            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+            14, 15, 0xa, 0xb, 0xc, 0xd,
+        ];
+
+        let src_addr = Ipv6Addr::new([
+            0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
+        ]);
+
+        let new_src_addr = Ipv6Addr::new([
+            0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
+        ]);
+
+        let mut packet = Ipv6Packet::new(&mut data).unwrap();
+
+        assert_eq!(packet.src_addr(), src_addr);
+        packet.set_src_addr(new_src_addr.clone());
+        assert_eq!(packet.src_addr(), new_src_addr);
+    }
+
+    #[test]
+    fn set_dest_addr() {
+        let mut data: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0,
+            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+            14, 15, 0xa, 0xb, 0xc, 0xd,
+        ];
+
+        let dest_addr = Ipv6Addr::new([
+            0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
+        ]);
+
+        let new_dest_addr = Ipv6Addr::new([
+            0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
+        ]);
+
+        let mut packet = Ipv6Packet::new(&mut data).unwrap();
+
+        assert_eq!(packet.dest_addr(), dest_addr);
+        packet.set_dest_addr(new_dest_addr.clone());
+        assert_eq!(packet.dest_addr(), new_dest_addr);
     }
 }
