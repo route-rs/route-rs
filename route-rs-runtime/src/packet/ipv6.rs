@@ -69,6 +69,17 @@ impl<'packet> Ipv6Packet<'packet> {
         Cow::from(&self.data[self.payload_offset..])
     }
 
+    pub fn set_payload(&mut self, payload: &[u8]) {
+        let new_payload_len = payload.len();
+        self.data.truncate(self.payload_offset);
+
+        let payload_len = new_payload_len.to_be_bytes();
+        self.data[14+4..14+5].copy_from_slice(&payload_len);
+
+        self.data.reserve_exact(new_payload_len);
+        self.data.extend(payload);
+    }
+
     pub fn src_addr(&self) -> Ipv6Addr {
         Ipv6Addr::from_byte_slice(&self.data[14 + 8..14 + 24]).unwrap()
     }
@@ -83,6 +94,44 @@ impl<'packet> Ipv6Packet<'packet> {
 
     pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
         self.data[14 + 24..14 + 40].copy_from_slice(&addr.bytes()[..]);
+    }
+
+    pub fn extension_headers(&self) -> Vec<Cow<[u8]>> {
+
+        let mut headers = Vec::<Cow<[u8]>>::new();
+        let mut next_header = self.next_header();
+        let mut header_ext_len;
+        let mut offset = 14 + 40; //First byte of first header
+        loop { 
+            match next_header {
+                IpProtocol::HOPOPT |
+                IpProtocol::IPv6_Opts |
+                IpProtocol::IPv6_route|
+                IpProtocol::IPv6_frag |
+                IpProtocol::AH |
+                IpProtocol::ESP |
+                IpProtocol::Mobility_Header |
+                IpProtocol::HIP |
+                IpProtocol::Shim6 |
+                IpProtocol::Use_for_expiramentation_and_testing => {
+                    header_ext_len = self.data[offset + 1];
+                    if header_ext_len == 0 {
+                        //fragments have the minimum of 8, but it set to zero for some dumb reason
+                        header_ext_len = 8;
+                    }
+                    headers.push(
+                        Cow::from(
+                            &self.data[offset..offset+header_ext_len as usize]
+                        )
+                    );
+                    next_header = IpProtocol::from(self.data[offset]);
+                    offset += header_ext_len as usize;
+                }
+                _ => { return headers; }
+
+            }
+        }
+
     }
 }
 
