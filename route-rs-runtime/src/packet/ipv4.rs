@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 pub struct Ipv4Packet<'packet> {
     pub data: PacketData<'packet>,
-    header_length: usize,
+    payload_offset: usize,
     valid_checksum: bool,
 }
 
@@ -29,12 +29,12 @@ impl<'packet> Ipv4Packet<'packet> {
         }
 
         //This is the header length in 32bit words
-        let internet_header_len = (packet[14] & 0x0F) as usize;
-        let header_length = internet_header_len * 4;
+        let ihl = (packet[14] & 0x0F) as usize;
+        let payload_offset = 14 + (ihl * 4);
 
         Ok(Ipv4Packet {
             data: packet,
-            header_length,
+            payload_offset,
             valid_checksum: true,
         })
     }
@@ -61,21 +61,25 @@ impl<'packet> Ipv4Packet<'packet> {
         self.valid_checksum = false;
     }
 
-    /// Returns header length in bytes
-    pub fn header_length(&self) -> usize {
-        self.header_length
+    pub fn ihl(&self) -> u8 {
+        self.data[14] & 0x0F
+    }
+
+    pub fn set_ihl(&mut self, header_length: usize) {
+        self.data[14] &= 0xF0; //Clear least sig 4 bits
+        self.data[14] |= 0x0F & ((header_length / 4) as u8);
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
-        Cow::from(&self.data[14 + self.header_length..])
+        Cow::from(&self.data[self.payload_offset..])
     }
 
     pub fn set_payload(&mut self, payload: &[u8]) {
         let payload_len = payload.len();
 
-        self.data.truncate(self.header_length);
+        self.data.truncate(self.payload_offset);
 
-        let total_len = (payload_len as u16 + self.header_length as u16).to_be_bytes();
+        let total_len = (payload_len as u16 + (self.ihl() * 4) as u16).to_be_bytes();
         self.data[14 + 2..14 + 3].copy_from_slice(&total_len);
 
         self.data.reserve_exact(payload_len);
@@ -84,13 +88,24 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
-        if self.header_length <= 20 {
+        if self.ihl() <= 5 {
             return None;
         }
-        Some(Cow::from(&self.data[14 + 20..14 + self.header_length]))
+        Some(Cow::from(&self.data[14 + 20..self.payload_offset]))
     }
 
-    //set_options
+    /// Sets the options of the Ipv4 packet to the provided array, also
+    /// sets the IHL field of the packet, and the internal header_length
+    /// field.
+    pub fn set_options(&mut self, options: &[u8]) {
+        let payload = self.data.split_off(self.payload_offset);
+        self.data.truncate(14 + 20);
+        self.data.reserve_exact(payload.len() + options.len());
+        self.data.extend(options);
+        self.data.extend(payload);
+        self.set_ihl(options.len() + 20);
+        self.valid_checksum = false;
+    }
 
     pub fn protocol(&self) -> IpProtocol {
         IpProtocol::from(self.data[14 + 9])
@@ -139,7 +154,7 @@ impl<'packet> Ipv4Packet<'packet> {
     /// Verifies the IP header checksum, returns the value and also sets
     /// the internal bookeeping field. As such we need a mutable reference.
     pub fn validate_checksum(&mut self) -> bool {
-        let full_sum = &self.data[14..14 + self.header_length()]
+        let full_sum = &self.data[14..self.payload_offset]
             .chunks_exact(2)
             .fold(0, |acc: u32, x| {
                 acc + u32::from(u16::from_be_bytes([x[0], x[1]]))
@@ -152,7 +167,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
     /// Calculates what the checksum should be set to given the current header
     pub fn caclulate_checksum(&self) -> u16 {
-        let full_sum = &self.data[14..14 + self.header_length()]
+        let full_sum = &self.data[14..self.payload_offset]
             .chunks_exact(2)
             .enumerate()
             .filter(|x| x.0 != 5)
@@ -218,7 +233,7 @@ mod tests {
 
         assert_eq!(packet.src_addr(), Ipv4Addr::new([192, 178, 128, 0]));
         assert_eq!(packet.dest_addr(), Ipv4Addr::new([10, 0, 0, 1]));
-        assert_eq!(packet.header_length(), 20);
+        assert_eq!(packet.ihl(), 5);
         assert_eq!(packet.payload().len(), 0);
         assert_eq!(packet.options(), None);
         assert_eq!(packet.protocol(), IpProtocol::UDP);
@@ -269,5 +284,18 @@ mod tests {
         assert!(!packet.validate_checksum());
         packet.set_checksum();
         assert!(packet.validate_checksum());
+    }
+
+    #[test]
+    fn set_ihl() {
+        let mut data: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x45, 0, 0, 20, 0, 0, 0, 0,
+            64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+        ];
+
+        let mut packet = Ipv4Packet::new(&mut data).unwrap();
+        assert_eq!(packet.ihl(), 5);
+        packet.set_ihl(24);
+        assert_eq!(packet.ihl(), 6);
     }
 }
