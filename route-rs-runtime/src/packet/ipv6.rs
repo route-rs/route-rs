@@ -61,6 +61,10 @@ impl<'packet> Ipv6Packet<'packet> {
         IpProtocol::from(self.data[14 + 6])
     }
 
+    pub fn set_next_header(&mut self, header: u8) {
+        self.data[14+6] = header;
+    }
+
     pub fn hop_limit(&self) -> u8 {
         self.data[14 + 7]
     }
@@ -97,6 +101,7 @@ impl<'packet> Ipv6Packet<'packet> {
         self.data[14 + 24..14 + 40].copy_from_slice(&addr.bytes()[..]);
     }
 
+    //TODO: Test the get and set for extension headers.
     pub fn extension_headers(&self) -> Vec<Cow<[u8]>> {
         let mut headers = Vec::<Cow<[u8]>>::new();
         let mut next_header = self.next_header();
@@ -129,6 +134,25 @@ impl<'packet> Ipv6Packet<'packet> {
                     return headers;
                 }
             }
+        }
+    }
+
+    /// This function sets new extension headers. Because we are inserting into the middle
+    /// of the vector, this is not a particularly performant operation. The caller should prvoide
+    /// both the vector of headers, the type of the first header, as an IpProtocol. The caller is also
+    /// required to ensure that the next_header field of their last extension header is a set to the 
+    /// IpProtocol of the payload.
+    /// If the provided vector does not contain any headers, the header field is cleared, and the
+    /// first_header field should be the IpProtocol of the payload.
+    pub fn set_extension_headers(&mut self, headers: Vec<&[u8]>, first_header: IpProtocol) {
+        let payload = self.data.split_off(self.payload_offset);
+        self.data.truncate(14+40);
+        for header in headers.iter() {
+            self.data.extend(*header);
+        }
+        self.data.extend(payload);
+        if headers.len() > 0 {
+            self.set_next_header(first_header as u8);
         }
     }
 }
