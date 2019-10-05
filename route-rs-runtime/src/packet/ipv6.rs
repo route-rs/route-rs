@@ -69,6 +69,8 @@ impl<'packet> Ipv6Packet<'packet> {
         self.data[14 + 7]
     }
 
+    // Is there a bug here if there is no payload? wonder if
+    // self.payload_offset would overrun the array, and cause a panic
     pub fn payload(&self) -> Cow<[u8]> {
         Cow::from(&self.data[self.payload_offset..])
     }
