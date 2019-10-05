@@ -73,11 +73,12 @@ impl<'packet> Ipv6Packet<'packet> {
         let new_payload_len = payload.len();
         self.data.truncate(self.payload_offset);
 
-        let payload_len = new_payload_len.to_be_bytes();
-        self.data[14+4..14+5].copy_from_slice(&payload_len);
+        let payload_len = (new_payload_len as u16).to_be_bytes();
+        self.data[14 + 4..14 + 6].copy_from_slice(&payload_len);
 
         self.data.reserve_exact(new_payload_len);
         self.data.extend(payload);
+        self.payload_offset = self.data.len() - payload.len();
     }
 
     pub fn src_addr(&self) -> Ipv6Addr {
@@ -97,41 +98,38 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 
     pub fn extension_headers(&self) -> Vec<Cow<[u8]>> {
-
         let mut headers = Vec::<Cow<[u8]>>::new();
         let mut next_header = self.next_header();
         let mut header_ext_len;
         let mut offset = 14 + 40; //First byte of first header
-        loop { 
+        loop {
             match next_header {
-                IpProtocol::HOPOPT |
-                IpProtocol::IPv6_Opts |
-                IpProtocol::IPv6_route|
-                IpProtocol::IPv6_frag |
-                IpProtocol::AH |
-                IpProtocol::ESP |
-                IpProtocol::Mobility_Header |
-                IpProtocol::HIP |
-                IpProtocol::Shim6 |
-                IpProtocol::Use_for_expiramentation_and_testing => {
+                IpProtocol::HOPOPT
+                | IpProtocol::IPv6_Opts
+                | IpProtocol::IPv6_route
+                | IpProtocol::IPv6_frag
+                | IpProtocol::AH
+                | IpProtocol::ESP
+                | IpProtocol::Mobility_Header
+                | IpProtocol::HIP
+                | IpProtocol::Shim6
+                | IpProtocol::Use_for_expiramentation_and_testing => {
                     header_ext_len = self.data[offset + 1];
                     if header_ext_len == 0 {
                         //fragments have the minimum of 8, but it set to zero for some dumb reason
                         header_ext_len = 8;
                     }
-                    headers.push(
-                        Cow::from(
-                            &self.data[offset..offset+header_ext_len as usize]
-                        )
-                    );
+                    headers.push(Cow::from(
+                        &self.data[offset..offset + header_ext_len as usize],
+                    ));
                     next_header = IpProtocol::from(self.data[offset]);
                     offset += header_ext_len as usize;
                 }
-                _ => { return headers; }
-
+                _ => {
+                    return headers;
+                }
             }
         }
-
     }
 }
 
@@ -195,10 +193,9 @@ mod tests {
     #[test]
     fn set_src_addr() {
         let mut data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0,
-            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
-            0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-            14, 15, 0xa, 0xb, 0xc, 0xd,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x60, 0, 0, 0, 0, 4, 17,
+            64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
+            0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
         let src_addr = Ipv6Addr::new([
@@ -219,10 +216,9 @@ mod tests {
     #[test]
     fn set_dest_addr() {
         let mut data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0,
-            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
-            0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-            14, 15, 0xa, 0xb, 0xc, 0xd,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x60, 0, 0, 0, 0, 4, 17,
+            64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
+            0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
         let dest_addr = Ipv6Addr::new([
@@ -238,5 +234,25 @@ mod tests {
         assert_eq!(packet.dest_addr(), dest_addr);
         packet.set_dest_addr(new_dest_addr.clone());
         assert_eq!(packet.dest_addr(), new_dest_addr);
+    }
+
+    #[test]
+    fn set_payload() {
+        let mut data: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x60, 0, 0, 0, 0, 4, 17,
+            64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
+            0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
+        ];
+
+        let mut packet = Ipv6Packet::new(&mut data).unwrap();
+
+        assert_eq!(packet.data[packet.payload_offset], 0xa);
+
+        let new_payload: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+        packet.set_payload(&new_payload);
+
+        assert_eq!(packet.payload()[3], 4);
+        assert_eq!(packet.payload().len(), 10);
     }
 }
