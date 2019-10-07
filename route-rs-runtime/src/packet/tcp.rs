@@ -17,17 +17,14 @@ impl<'packet> TcpSegment<'packet> {
         }
 
         let protocol;
+        // This also requires reaching into the packet. Not ideal
         let ip_version = segment[packet_offset] & 0xF0 >> 4;
         match ip_version {
             4 => {
-                protocol = segment[packet_offset + 9];
+                protocol = get_ipv4_payload_type(segment, packet_offset);
             }
             6 => {
-                // There is an unhandled edge case here, this could specify either the
-                // protocol such as TCP, or it could specify the next extension header, which
-                // we would have to parse to determine the protocol. Will need some helper functions
-                // to support extension headers.
-                protocol = segment[packet_offset + 6];
+                protocol = get_ipv6_payload_type(segment, packet_offset);
             }
             _ => {
                 return Err("IP Header has invalid version number");
@@ -35,7 +32,7 @@ impl<'packet> TcpSegment<'packet> {
         }
 
         // See the other note about how we are not Ipv6 compatible yet :(
-        if protocol != 6 {
+        if protocol != IpProtocol::TCP {
             return Err("Protocol is incorrect, since it isn't six");
         }
 

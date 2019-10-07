@@ -6,7 +6,6 @@ pub struct UdpSegment<'packet> {
     pub data: PacketData<'packet>,
     pub packet_offset: usize,
     pub segment_offset: usize,
-    ip_version: u8,
     validated_checksum: bool,
 }
 
@@ -21,14 +20,10 @@ impl<'packet> UdpSegment<'packet> {
         let ip_version = segment[packet_offset] & 0xF0 >> 4;
         match ip_version {
             4 => {
-                protocol = IpProtocol::from(segment[packet_offset + 9]);
+                protocol = get_ipv4_payload_type(segment, packet_offset);
             }
             6 => {
-                // There is an unhandled edge case here, this could specify either the
-                // protocol such as TCP, or it could specify the next extension header, which
-                // we would have to parse to determine the protocol. Will need some helper functions
-                // to support extension headers.
-                protocol = IpProtocol::from(segment[packet_offset + 6]);
+                protocol = get_ipv6_payload_type(segment, packet_offset);
             }
             _ => {
                 return Err("IP Header has invalid version number");
@@ -52,7 +47,6 @@ impl<'packet> UdpSegment<'packet> {
             data: segment,
             packet_offset,
             segment_offset,
-            ip_version,
             validated_checksum: false,
         })
     }
