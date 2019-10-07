@@ -169,6 +169,48 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 }
 
+/// Returns Ipv6 payload type, reads the header information to get the type
+/// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
+pub fn get_ipv6_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
+    if data.len() < packet_offset + 40 || data[packet_offset] & 0xF0 != 0x60 {
+        // In the case of error, we return the reserved as an error. 
+        return IpProtocol::Reserved;
+    }
+
+    let mut header = IpProtocol::from(data[packet_offset + 6]); 
+    let mut header_ext_len;
+    let mut offset = packet_offset + 40; //First byte of first header
+    loop {
+        match header {
+            IpProtocol::HOPOPT
+            | IpProtocol::IPv6_Opts
+            | IpProtocol::IPv6_route
+            | IpProtocol::IPv6_frag
+            | IpProtocol::AH
+            | IpProtocol::ESP
+            | IpProtocol::Mobility_Header
+            | IpProtocol::HIP
+            | IpProtocol::Shim6
+            | IpProtocol::Use_for_expiramentation_and_testing => {
+                if data.len() <= offset + 1 {
+                    // Check for length overrun
+                    return IpProtocol::Reserved
+                }
+                header_ext_len = data[offset + 1];
+                if header_ext_len == 0 {
+                    //fragments have the minimum of 8, but it set to zero for some dumb reason
+                    header_ext_len = 8;
+                }
+                header = IpProtocol::from(data[offset]);
+                offset += header_ext_len as usize;
+            }
+            _ => {
+                return header;
+            }
+        }
+    }
+}
+
 pub type Ipv6PacketResult<'packet> = Result<Ipv6Packet<'packet>, &'static str>;
 
 impl<'packet> From<EthernetFrame<'packet>> for Ipv6PacketResult<'packet> {

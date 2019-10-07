@@ -41,7 +41,6 @@ impl<'packet> Ipv4Packet<'packet> {
         })
     }
 
-    //MAGIC ALERT, src addr offset (12) and Ipv4 header offset
     pub fn src_addr(&self) -> Ipv4Addr {
         let bytes =
             <[u8; 4]>::try_from(&self.data[(self.packet_offset + 12)..(self.packet_offset + 16)])
@@ -54,7 +53,6 @@ impl<'packet> Ipv4Packet<'packet> {
         self.validated_checksum = false;
     }
 
-    //MAGIC ALERT, dest addr offset (16) and Ipv4 header offset
     pub fn dest_addr(&self) -> Ipv4Addr {
         let bytes =
             <[u8; 4]>::try_from(&self.data[(self.packet_offset + 16)..(self.packet_offset + 20)])
@@ -211,6 +209,17 @@ impl<'packet> Ipv4Packet<'packet> {
         self.data[self.packet_offset + 11] = (new_checksum & 0x00FF) as u8;
         self.validated_checksum = true;
     }
+}
+
+/// Returns Ipv4 payload type, reads the header information to get the type
+/// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
+pub fn get_ipv4_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
+    if data.len() <= packet_offset + 9 || (data[packet_offset] & 0xF0) != 0x40 {
+        // Either data isn't big enough, or the version field does not indicate this is
+        // an Ipv4 packet. 
+        return IpProtocol::Reserved;
+    }
+    IpProtocol::from(data[packet_offset + 9])
 }
 
 pub type Ipv4PacketResult<'packet> = Result<Ipv4Packet<'packet>, &'static str>;
