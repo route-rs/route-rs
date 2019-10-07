@@ -6,6 +6,7 @@ pub struct Ipv6Packet<'packet> {
     pub data: PacketData<'packet>,
     // There may be various "Extension Headers", so we should figure out the actual offset and store it here for
     // easy access in the helper functions.
+    packet_offset: usize,
     payload_offset: usize,
 }
 
@@ -36,37 +37,42 @@ impl<'packet> Ipv6Packet<'packet> {
 
         Ok(Ipv6Packet {
             data: packet,
+            packet_offset: 14,
             payload_offset: packet_len - payload_len,
         })
     }
 
     pub fn traffic_class(&self) -> u8 {
-        ((self.data[14] & 0x0F) << 4) + (self.data[14 + 1] & 0xF0 >> 4)
+        ((self.data[self.packet_offset] & 0x0F) << 4)
+            + (self.data[self.packet_offset + 1] & 0xF0 >> 4)
     }
 
     pub fn flow_label(&self) -> u32 {
         u32::from_be_bytes([
             0,
-            self.data[14 + 1] & 0x0F,
-            self.data[14 + 2],
-            self.data[14 + 3],
+            self.data[self.packet_offset + 1] & 0x0F,
+            self.data[self.packet_offset + 2],
+            self.data[self.packet_offset + 3],
         ])
     }
 
     pub fn payload_length(&self) -> u16 {
-        u16::from_be_bytes([self.data[14 + 4], self.data[14 + 5]])
+        u16::from_be_bytes([
+            self.data[self.packet_offset + 4],
+            self.data[self.packet_offset + 5],
+        ])
     }
 
     pub fn next_header(&self) -> IpProtocol {
-        IpProtocol::from(self.data[14 + 6])
+        IpProtocol::from(self.data[self.packet_offset + 6])
     }
 
     pub fn set_next_header(&mut self, header: u8) {
-        self.data[14 + 6] = header;
+        self.data[self.packet_offset + 6] = header;
     }
 
     pub fn hop_limit(&self) -> u8 {
-        self.data[14 + 7]
+        self.data[self.packet_offset + 7]
     }
 
     // Is there a bug here if there is no payload? wonder if
@@ -80,7 +86,7 @@ impl<'packet> Ipv6Packet<'packet> {
         self.data.truncate(self.payload_offset);
 
         let payload_len = (new_payload_len as u16).to_be_bytes();
-        self.data[14 + 4..14 + 6].copy_from_slice(&payload_len);
+        self.data[self.packet_offset + 4..self.packet_offset + 6].copy_from_slice(&payload_len);
 
         self.data.reserve_exact(new_payload_len);
         self.data.extend(payload);
@@ -88,19 +94,23 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 
     pub fn src_addr(&self) -> Ipv6Addr {
-        Ipv6Addr::from_byte_slice(&self.data[14 + 8..14 + 24]).unwrap()
+        Ipv6Addr::from_byte_slice(&self.data[self.packet_offset + 8..self.packet_offset + 24])
+            .unwrap()
     }
 
     pub fn dest_addr(&self) -> Ipv6Addr {
-        Ipv6Addr::from_byte_slice(&self.data[14 + 24..14 + 40]).unwrap()
+        Ipv6Addr::from_byte_slice(&self.data[self.packet_offset + 24..self.packet_offset + 40])
+            .unwrap()
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv6Addr) {
-        self.data[14 + 8..14 + 24].copy_from_slice(&addr.bytes()[..]);
+        self.data[self.packet_offset + 8..self.packet_offset + 24]
+            .copy_from_slice(&addr.bytes()[..]);
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
-        self.data[14 + 24..14 + 40].copy_from_slice(&addr.bytes()[..]);
+        self.data[self.packet_offset + 24..self.packet_offset + 40]
+            .copy_from_slice(&addr.bytes()[..]);
     }
 
     //TODO: Test the get and set for extension headers.
@@ -108,7 +118,7 @@ impl<'packet> Ipv6Packet<'packet> {
         let mut headers = Vec::<Cow<[u8]>>::new();
         let mut next_header = self.next_header();
         let mut header_ext_len;
-        let mut offset = 14 + 40; //First byte of first header
+        let mut offset = self.packet_offset + 40; //First byte of first header
         loop {
             match next_header {
                 IpProtocol::HOPOPT
@@ -148,7 +158,7 @@ impl<'packet> Ipv6Packet<'packet> {
     /// first_header field should be the IpProtocol of the payload.
     pub fn set_extension_headers(&mut self, headers: Vec<&[u8]>, first_header: IpProtocol) {
         let payload = self.data.split_off(self.payload_offset);
-        self.data.truncate(14 + 40);
+        self.data.truncate(self.packet_offset + 40);
         for header in headers.iter() {
             self.data.extend(*header);
         }
