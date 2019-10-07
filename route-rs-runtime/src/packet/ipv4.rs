@@ -4,40 +4,40 @@ use std::convert::TryFrom;
 
 pub struct Ipv4Packet<'packet> {
     pub data: PacketData<'packet>,
-    packet_offset: usize,
-    payload_offset: usize,
-    valid_checksum: bool,
+    pub packet_offset: usize,
+    pub payload_offset: usize,
+    validated_checksum: bool,
 }
 
 impl<'packet> Ipv4Packet<'packet> {
-    fn new(packet: PacketData) -> Result<Ipv4Packet, &'static str> {
+    fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv4Packet, &'static str> {
         //Header of Ethernet Frame: 14 bytes
         //Header of IPv4 Frame: 20 bytes
-        if packet.len() < 14 + 20 {
+        if packet.len() < packet_offset + 20 {
             return Err("Data is too short to be an IPv4 Packet");
         }
 
         //Check version number
-        let version: u8 = (packet[14] & 0xF0) >> 4;
+        let version: u8 = (packet[packet_offset] & 0xF0) >> 4;
         if version != 4 {
             return Err("Packet has incorrect version, is not Ipv4Packet");
         }
 
         // TotalLen is the 3rd and 4th byte of the IP Header
-        let total_len = u16::from_be_bytes([packet[14 + 2], packet[14 + 3]]) as usize;
-        if packet.len() != total_len + 14 {
+        let total_len = u16::from_be_bytes([packet[packet_offset + 2], packet[packet_offset + 3]]) as usize;
+        if packet.len() != total_len + packet_offset {
             return Err("Packet has invalid total length field");
         }
 
         //This is the header length in 32bit words
-        let ihl = (packet[14] & 0x0F) as usize;
-        let payload_offset = 14 + (ihl * 4);
+        let ihl = (packet[packet_offset] & 0x0F) as usize;
+        let payload_offset = packet_offset + (ihl * 4);
 
         Ok(Ipv4Packet {
             data: packet,
-            packet_offset: 14,
+            packet_offset,
             payload_offset,
-            valid_checksum: true,
+            validated_checksum: false,
         })
     }
 
@@ -51,7 +51,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
     pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
         self.data[self.packet_offset + 12..self.packet_offset + 4].copy_from_slice(&addr.bytes[..]);
-        self.valid_checksum = false;
+        self.validated_checksum = false;
     }
 
     //MAGIC ALERT, dest addr offset (16) and Ipv4 header offset
@@ -65,7 +65,7 @@ impl<'packet> Ipv4Packet<'packet> {
     pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
         self.data[self.packet_offset + 16..self.packet_offset + 20]
             .copy_from_slice(&addr.bytes[..]);
-        self.valid_checksum = false;
+        self.validated_checksum = false;
     }
 
     pub fn ihl(&self) -> u8 {
@@ -91,7 +91,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
-        self.valid_checksum = false;
+        self.validated_checksum = false;
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
@@ -113,7 +113,7 @@ impl<'packet> Ipv4Packet<'packet> {
         self.data.extend(options);
         self.data.extend(payload);
         self.set_ihl(options.len() + 20);
-        self.valid_checksum = false;
+        self.validated_checksum = false;
     }
 
     pub fn protocol(&self) -> IpProtocol {
@@ -133,7 +133,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
     pub fn set_ttl(&mut self, ttl: u8) {
         self.data[self.packet_offset + 8] = ttl;
-        self.valid_checksum = false;
+        self.validated_checksum = false;
     }
 
     pub fn header_checksum(&self) -> u16 {
@@ -182,8 +182,8 @@ impl<'packet> Ipv4Packet<'packet> {
             });
         let (carry, mut sum) = (((full_sum & 0xFFFF_0000) >> 16), (full_sum & 0x0000_FFFF));
         sum += carry;
-        self.valid_checksum = 0 == (!sum & 0xFFFF);
-        self.valid_checksum
+        self.validated_checksum = 0 == (!sum & 0xFFFF);
+        self.validated_checksum
     }
 
     /// Calculates what the checksum should be set to given the current header
@@ -209,7 +209,7 @@ impl<'packet> Ipv4Packet<'packet> {
         let new_checksum = self.caclulate_checksum();
         self.data[self.packet_offset + 10] = ((new_checksum & 0xFF00) >> 8) as u8;
         self.data[self.packet_offset + 11] = (new_checksum & 0x00FF) as u8;
-        self.valid_checksum = true;
+        self.validated_checksum = true;
     }
 }
 
@@ -217,19 +217,19 @@ pub type Ipv4PacketResult<'packet> = Result<Ipv4Packet<'packet>, &'static str>;
 
 impl<'packet> From<EthernetFrame<'packet>> for Ipv4PacketResult<'packet> {
     fn from(frame: EthernetFrame<'packet>) -> Self {
-        Ipv4Packet::new(frame.data)
+        Ipv4Packet::new(frame.data, frame.payload_offset)
     }
 }
 
 impl<'packet> From<TcpSegment<'packet>> for Ipv4PacketResult<'packet> {
     fn from(segment: TcpSegment<'packet>) -> Self {
-        Ipv4Packet::new(segment.data)
+        Ipv4Packet::new(segment.data, segment.packet_offset)
     }
 }
 
 impl<'packet> From<UdpSegment<'packet>> for Ipv4PacketResult<'packet> {
     fn from(segment: UdpSegment<'packet>) -> Self {
-        Ipv4Packet::new(segment.data)
+        Ipv4Packet::new(segment.data, segment.packet_offset)
     }
 }
 
@@ -314,7 +314,7 @@ mod tests {
             64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut packet = Ipv4Packet::new(&mut data).unwrap();
+        let mut packet = Ipv4Packet::new(&mut data, 14).unwrap();
         assert_eq!(packet.ihl(), 5);
         packet.set_ihl(24);
         assert_eq!(packet.ihl(), 6);
