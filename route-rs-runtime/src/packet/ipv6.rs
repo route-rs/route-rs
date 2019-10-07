@@ -6,8 +6,8 @@ pub struct Ipv6Packet<'packet> {
     pub data: PacketData<'packet>,
     // There may be various "Extension Headers", so we should figure out the actual offset and store it here for
     // easy access in the helper functions.
-    packet_offset: usize,
-    payload_offset: usize,
+    pub packet_offset: usize,
+    pub payload_offset: usize,
 }
 
 impl<'packet> Ipv6Packet<'packet> {

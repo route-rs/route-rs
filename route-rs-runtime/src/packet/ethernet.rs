@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 
 pub struct EthernetFrame<'packet> {
     pub data: PacketData<'packet>,
+    pub payload_offset: usize,
 }
 
 impl<'frame> EthernetFrame<'frame> {
@@ -25,7 +26,7 @@ impl<'frame> EthernetFrame<'frame> {
             return Err("Frame has invalivd payload len field");
         }
 
-        Ok(EthernetFrame { data: frame })
+        Ok(EthernetFrame { data: frame, payload_offset: 14 })
     }
 
     pub fn dest_mac(&self) -> MacAddr {
@@ -52,12 +53,12 @@ impl<'frame> EthernetFrame<'frame> {
 
     //This gives you a cow of a slice of the payload.
     pub fn payload(&self) -> Cow<[u8]> {
-        Cow::from(&self.data[14..])
+        Cow::from(&self.data[self.payload_offset..])
     }
 
     pub fn set_payload(&mut self, payload: &[u8]) {
         let payload_len = payload.len() as u16;
-        self.data.truncate(12); //Cut off and drop the entire payload and payload_len
+        self.data.truncate(self.payload_offset-2); //Cut off and drop the entire payload and payload_len
         let payload_len_bytes = payload_len.to_be_bytes();
         self.data.reserve_exact(payload_len as usize + 2); //Reserve room for payload and len field.
         self.data.extend(payload_len_bytes.iter());
