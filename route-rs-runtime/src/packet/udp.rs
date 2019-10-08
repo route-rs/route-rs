@@ -17,7 +17,7 @@ impl<'packet> UdpSegment<'packet> {
         }
 
         let protocol;
-        let ip_version = segment[packet_offset] & 0xF0 >> 4;
+        let ip_version = (segment[packet_offset] & 0xF0) >> 4;
         match ip_version {
             4 => {
                 protocol = get_ipv4_payload_type(segment, packet_offset);
@@ -39,7 +39,8 @@ impl<'packet> UdpSegment<'packet> {
             segment[segment_offset + 4],
             segment[segment_offset + 5],
         ]);
-        if segment.len() > segment_offset + length as usize {
+    
+        if segment.len() < segment_offset + length as usize {
             return Err("Segment is not correct length as given by it's length field");
         }
 
@@ -105,5 +106,36 @@ impl<'packet> From<Ipv4Packet<'packet>> for UdpSegmentResult<'packet> {
 impl<'packet> From<Ipv6Packet<'packet>> for UdpSegmentResult<'packet> {
     fn from(packet: Ipv6Packet<'packet>) -> Self {
         UdpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::vec::Vec;
+
+    #[test]
+    fn udp_segment() {
+        let mut mac_data: Vec<u8> =
+            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let ipv4_data: Vec<u8> = vec![
+            0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+        ];
+        let udp_data: Vec<u8> = vec![
+            0, 99, 0 , 88, 0, 19, 0xDE, 0xAD, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+        ];
+
+        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        frame.set_payload(&ipv4_data);
+        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        packet.set_payload(&udp_data);
+        let segment = UdpSegmentResult::from(packet).unwrap();
+
+        assert_eq!(segment.src_port(), 99);
+        assert_eq!(segment.dest_port(), 88);
+        assert_eq!(segment.length(), 19);
+        assert_eq!(segment.checksum(), 0xDEAD);
+        assert_eq!(segment.payload().len(), 11);
+        assert_eq!(segment.payload()[0], 0);
     }
 }
