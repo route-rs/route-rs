@@ -73,6 +73,8 @@ impl<'packet> Ipv4Packet<'packet> {
     pub fn set_ihl(&mut self, header_length: usize) {
         self.data[self.packet_offset] &= 0xF0; //Clear least sig 4 bits
         self.data[self.packet_offset] |= 0x0F & ((header_length / 4) as u8);
+        self.payload_offset = header_length;
+        self.validated_checksum = false;
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
@@ -85,7 +87,7 @@ impl<'packet> Ipv4Packet<'packet> {
         self.data.truncate(self.payload_offset);
 
         let total_len = (payload_len as u16 + (self.ihl() * 4) as u16).to_be_bytes();
-        self.data[self.packet_offset + 2..self.packet_offset + 3].copy_from_slice(&total_len);
+        self.data[self.packet_offset + 2..=self.packet_offset + 3].copy_from_slice(&total_len);
 
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
@@ -102,8 +104,9 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     /// Sets the options of the Ipv4 packet to the provided array, also
-    /// sets the IHL field of the packet, and the internal header_length
+    /// sets the IHL field of the packet, and the internal payload_offset
     /// field.
+    /// Note: The user should provide options that are padded to a 32bit length.
     pub fn set_options(&mut self, options: &[u8]) {
         let payload = self.data.split_off(self.payload_offset);
         self.data.truncate(self.packet_offset + 20);
@@ -134,7 +137,7 @@ impl<'packet> Ipv4Packet<'packet> {
         self.validated_checksum = false;
     }
 
-    pub fn header_checksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         u16::from_be_bytes([
             self.data[self.packet_offset + 10],
             self.data[self.packet_offset + 11],
@@ -269,7 +272,7 @@ mod tests {
         assert_eq!(packet.protocol(), IpProtocol::UDP);
         assert_eq!(packet.total_len(), 20);
         assert_eq!(packet.ttl(), 64);
-        assert_eq!(packet.header_checksum(), 0);
+        assert_eq!(packet.checksum(), 0);
         assert_eq!(packet.dcsp(), 0);
         assert_eq!(packet.ecn(), 0);
         assert_eq!(packet.indentification(), 0);
