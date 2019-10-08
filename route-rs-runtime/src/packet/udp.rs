@@ -10,7 +10,11 @@ pub struct UdpSegment<'packet> {
 }
 
 impl<'packet> UdpSegment<'packet> {
-    fn new(segment: PacketData, packet_offset: usize, segment_offset: usize) -> Result<UdpSegment, &'static str> {
+    fn new(
+        segment: PacketData,
+        packet_offset: usize,
+        segment_offset: usize,
+    ) -> Result<UdpSegment, &'static str> {
         // First let's check that the Frame and IP Header is present
         if segment.len() < packet_offset + 20 {
             return Err("Segment to short to contain valid IP Header");
@@ -35,11 +39,8 @@ impl<'packet> UdpSegment<'packet> {
             return Err("Protocol is incorrect, since it isn't UDP");
         }
 
-        let length = u16::from_be_bytes([
-            segment[segment_offset + 4],
-            segment[segment_offset + 5],
-        ]);
-    
+        let length = u16::from_be_bytes([segment[segment_offset + 4], segment[segment_offset + 5]]);
+
         if segment.len() < segment_offset + length as usize {
             return Err("Segment is not correct length as given by it's length field");
         }
@@ -122,7 +123,7 @@ mod tests {
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let udp_data: Vec<u8> = vec![
-            0, 99, 0 , 88, 0, 19, 0xDE, 0xAD, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+            0, 99, 0, 88, 0, 19, 0xDE, 0xAD, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
         ];
 
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();

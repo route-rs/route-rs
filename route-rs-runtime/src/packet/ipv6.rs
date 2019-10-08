@@ -163,7 +163,7 @@ impl<'packet> Ipv6Packet<'packet> {
             self.data.extend(*header);
         }
         self.data.extend(payload);
-        if headers.len() > 0 {
+        if !headers.is_empty() {
             self.set_next_header(first_header as u8);
         }
     }
@@ -173,11 +173,11 @@ impl<'packet> Ipv6Packet<'packet> {
 /// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
 pub fn get_ipv6_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
     if data.len() < packet_offset + 40 || data[packet_offset] & 0xF0 != 0x60 {
-        // In the case of error, we return the reserved as an error. 
+        // In the case of error, we return the reserved as an error.
         return IpProtocol::Reserved;
     }
 
-    let mut header = IpProtocol::from(data[packet_offset + 6]); 
+    let mut header = IpProtocol::from(data[packet_offset + 6]);
     let mut header_ext_len;
     let mut offset = packet_offset + 40; //First byte of first header
     loop {
@@ -194,7 +194,7 @@ pub fn get_ipv6_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
             | IpProtocol::Use_for_expiramentation_and_testing => {
                 if data.len() <= offset + 1 {
                     // Check for length overrun
-                    return IpProtocol::Reserved
+                    return IpProtocol::Reserved;
                 }
                 header_ext_len = data[offset + 1];
                 if header_ext_len == 0 {

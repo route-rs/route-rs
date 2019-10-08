@@ -24,7 +24,8 @@ impl<'packet> Ipv4Packet<'packet> {
         }
 
         // TotalLen is the 3rd and 4th byte of the IP Header
-        let total_len = u16::from_be_bytes([packet[packet_offset + 2], packet[packet_offset + 3]]) as usize;
+        let total_len =
+            u16::from_be_bytes([packet[packet_offset + 2], packet[packet_offset + 3]]) as usize;
         if packet.len() != total_len + packet_offset {
             return Err("Packet has invalid total length field");
         }
@@ -86,7 +87,7 @@ impl<'packet> Ipv4Packet<'packet> {
 
         self.data.truncate(self.payload_offset);
 
-        let total_len = (payload_len as u16 + (self.ihl() * 4) as u16).to_be_bytes();
+        let total_len = (payload_len as u16 + u16::from(self.ihl() * 4)).to_be_bytes();
         self.data[self.packet_offset + 2..=self.packet_offset + 3].copy_from_slice(&total_len);
 
         self.data.reserve_exact(payload_len);
@@ -219,7 +220,7 @@ impl<'packet> Ipv4Packet<'packet> {
 pub fn get_ipv4_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
     if data.len() <= packet_offset + 9 || (data[packet_offset] & 0xF0) != 0x40 {
         // Either data isn't big enough, or the version field does not indicate this is
-        // an Ipv4 packet. 
+        // an Ipv4 packet.
         return IpProtocol::Reserved;
     }
     IpProtocol::from(data[packet_offset + 9])
