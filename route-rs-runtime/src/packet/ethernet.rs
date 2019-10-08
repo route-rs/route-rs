@@ -26,7 +26,10 @@ impl<'frame> EthernetFrame<'frame> {
             return Err("Frame has invalivd payload len field");
         }
 
-        Ok(EthernetFrame { data: frame, payload_offset: 14 })
+        Ok(EthernetFrame {
+            data: frame,
+            payload_offset: 14,
+        })
     }
 
     pub fn dest_mac(&self) -> MacAddr {
@@ -58,7 +61,7 @@ impl<'frame> EthernetFrame<'frame> {
 
     pub fn set_payload(&mut self, payload: &[u8]) {
         let payload_len = payload.len() as u16;
-        self.data.truncate(self.payload_offset-2); //Cut off and drop the entire payload and payload_len
+        self.data.truncate(self.payload_offset - 2); //Cut off and drop the entire payload and payload_len
         let payload_len_bytes = payload_len.to_be_bytes();
         self.data.reserve_exact(payload_len as usize + 2); //Reserve room for payload and len field.
         self.data.extend(payload_len_bytes.iter());

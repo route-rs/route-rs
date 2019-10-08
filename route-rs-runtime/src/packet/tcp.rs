@@ -12,7 +12,11 @@ pub struct TcpSegment<'packet> {
 }
 
 impl<'packet> TcpSegment<'packet> {
-    fn new(segment: PacketData, packet_offset: usize, segment_offset: usize) -> Result<TcpSegment, &'static str> {
+    fn new(
+        segment: PacketData,
+        packet_offset: usize,
+        segment_offset: usize,
+    ) -> Result<TcpSegment, &'static str> {
         // First let's check that the Frame and IP Header is present
         if segment.len() < packet_offset + 20 {
             return Err("Segment to short to contain valid IP Header");
@@ -41,7 +45,8 @@ impl<'packet> TcpSegment<'packet> {
             return Err("Segment is too short to have valid TCP Header");
         }
 
-        let payload_offset = segment_offset + (((segment[segment_offset + 12] & 0xF0) >> 4) as usize * 4); 
+        let payload_offset =
+            segment_offset + (((segment[segment_offset + 12] & 0xF0) >> 4) as usize * 4);
 
         Ok(TcpSegment {
             data: segment,
@@ -87,12 +92,12 @@ impl<'packet> TcpSegment<'packet> {
     }
 
     pub fn acknowledgment_number(&self) -> u32 {
-         u32::from_be_bytes([
+        u32::from_be_bytes([
             self.data[self.segment_offset + 8],
             self.data[self.segment_offset + 9],
             self.data[self.segment_offset + 10],
             self.data[self.segment_offset + 11],
-        ])       
+        ])
     }
 
     pub fn data_offset(&self) -> u8 {
@@ -174,7 +179,7 @@ impl<'packet> TcpSegment<'packet> {
         self.validated_checksum = false;
     }
 
-    //TODO: Create functions to calculate and set checksum. 
+    //TODO: Create functions to calculate and set checksum.
 }
 
 pub type TcpSegmentResult<'packet> = Result<TcpSegment<'packet>, &'static str>;
@@ -191,7 +196,6 @@ impl<'packet> From<Ipv6Packet<'packet>> for TcpSegmentResult<'packet> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,7 +209,8 @@ mod tests {
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 6, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let tcp_data: Vec<u8> = vec![
-            0, 99, 0 , 88, 0, 0, 0, 2, 0, 0, 0, 8, 0x50, 0xFF, 0, 16, 0xDE, 0xAD, 0xBE, 0xEF, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+            0, 99, 0, 88, 0, 0, 0, 2, 0, 0, 0, 8, 0x50, 0xFF, 0, 16, 0xDE, 0xAD, 0xBE, 0xEF, 0, 1,
+            2, 3, 4, 5, 6, 7, 8, 9, 10,
         ];
 
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
