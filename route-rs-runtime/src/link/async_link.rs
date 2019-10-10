@@ -370,14 +370,14 @@ mod tests {
         let elem3 = AsyncIdentityElement::new();
 
         let (_, mut egressors0) = SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem0)
             .build_link();
 
         let link1 = AsyncLink::new(egressors0.remove(0), elem1, default_channel_size);
 
         let (_, mut egressors2) = SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(link1.egressor)])
+            .ingressor(Box::new(link1.egressor))
             .element(elem2)
             .build_link();
 

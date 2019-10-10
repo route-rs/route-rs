@@ -4,15 +4,22 @@ use futures::{Async, Poll, Stream};
 
 #[derive(Default)]
 pub struct SyncLinkBuilder<E: Element> {
-    in_streams: Option<Vec<PacketStream<E::Input>>>,
+    in_stream: Option<PacketStream<E::Input>>,
     element: Option<E>,
 }
 
 impl<E: Element> SyncLinkBuilder<E> {
     pub fn new() -> Self {
         SyncLinkBuilder {
-            in_streams: None,
+            in_stream: None,
             element: None,
+        }
+    }
+
+    pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
+        SyncLinkBuilder {
+            in_stream: Some(in_stream),
+            element: self.element,
         }
     }
 }
@@ -22,22 +29,22 @@ impl<E: Element> SyncLinkBuilder<E> {
 /// storage. In the future we might decide to restrict the interface for this link
 /// for clearer intent.
 impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for SyncLinkBuilder<E> {
-    fn ingressors(self, in_streams: Vec<PacketStream<E::Input>>) -> Self {
+    fn ingressors(self, mut in_streams: Vec<PacketStream<E::Input>>) -> Self {
         assert_eq!(in_streams.len(), 1, "SyncLink may only take 1 input stream");
 
         SyncLinkBuilder {
-            in_streams: Some(in_streams),
+            in_stream: Some(in_streams.remove(0)),
             element: self.element,
         }
     }
 
     fn build_link(self) -> Link<E::Output> {
-        if self.in_streams.is_none() {
+        if self.in_stream.is_none() {
             panic!("Cannot build link! Missing input streams");
         } else if self.element.is_none() {
             panic!("Cannot build link! Missing element");
         } else {
-            let processor = SyncProcessor::new(self.in_streams.unwrap(), self.element.unwrap());
+            let processor = SyncProcessor::new(self.in_stream.unwrap(), self.element.unwrap());
             (vec![], vec![Box::new(processor)])
         }
     }
@@ -46,7 +53,7 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for SyncLinkB
 impl<E: Element + Send + 'static> ElementLinkBuilder<E> for SyncLinkBuilder<E> {
     fn element(self, element: E) -> Self {
         SyncLinkBuilder {
-            in_streams: self.in_streams,
+            in_stream: self.in_stream,
             element: Some(element),
         }
     }
@@ -54,16 +61,13 @@ impl<E: Element + Send + 'static> ElementLinkBuilder<E> for SyncLinkBuilder<E> {
 
 /// The single egressor of SyncLink
 struct SyncProcessor<E: Element> {
-    in_streams: Vec<PacketStream<E::Input>>,
+    in_stream: PacketStream<E::Input>,
     element: E,
 }
 
 impl<E: Element> SyncProcessor<E> {
-    fn new(in_streams: Vec<PacketStream<E::Input>>, element: E) -> Self {
-        SyncProcessor {
-            in_streams,
-            element,
-        }
+    fn new(in_stream: PacketStream<E::Input>, element: E) -> Self {
+        SyncProcessor { in_stream, element }
     }
 }
 
@@ -93,15 +97,12 @@ impl<E: Element> Stream for SyncProcessor<E> {
     ///
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
-            for ingress_stream in self.in_streams.iter_mut() {
-                let input_packet_option: Option<E::Input> = try_ready!(ingress_stream.poll());
-                match input_packet_option {
-                    None => return Ok(Async::Ready(None)),
-                    Some(input_packet) => {
-                        // if `element.process` returns None, do nothing, loop around and try polling again.
-                        if let Some(output_packet) = self.element.process(input_packet) {
-                            return Ok(Async::Ready(Some(output_packet)));
-                        }
+            match try_ready!(self.in_stream.poll()) {
+                None => return Ok(Async::Ready(None)),
+                Some(input_packet) => {
+                    // if `element.process` returns None, do nothing, loop around and try polling again.
+                    if let Some(output_packet) = self.element.process(input_packet) {
+                        return Ok(Async::Ready(Some(output_packet)));
                     }
                 }
             }
@@ -134,7 +135,7 @@ mod tests {
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
         SyncLinkBuilder::<IdentityElement<i32>>::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .build_link();
     }
 
@@ -146,7 +147,7 @@ mod tests {
         let identity_element0 = IdentityElement::new();
 
         SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(packet_generator0)])
+            .ingressor(packet_generator0)
             .element(identity_element0)
             .build_link();
 
@@ -155,7 +156,7 @@ mod tests {
 
         SyncLinkBuilder::new()
             .element(identity_element1)
-            .ingressors(vec![Box::new(packet_generator1)])
+            .ingressor(packet_generator1)
             .build_link();
     }
 
@@ -167,7 +168,7 @@ mod tests {
         let identity_element = IdentityElement::new();
 
         let (_, mut identity_egressors) = SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(identity_element)
             .build_link();
 
@@ -191,7 +192,7 @@ mod tests {
         let identity_element = IdentityElement::new();
 
         let (_, mut identity_egressors) = SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(Box::new(packet_generator))
             .element(identity_element)
             .build_link();
 
@@ -212,7 +213,7 @@ mod tests {
         let transform_element = TransformElement::new();
 
         let (_, mut transform_egressors) = SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(transform_element)
             .build_link();
 
@@ -234,7 +235,7 @@ mod tests {
         let drop_element = DropElement::new();
 
         let (_, mut drop_egressors) = SyncLinkBuilder::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(drop_element)
             .build_link();
 
