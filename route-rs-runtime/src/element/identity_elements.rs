@@ -17,7 +17,10 @@ impl<A> IdentityElement<A> {
     }
 }
 
-impl<A> Element for IdentityElement<A> {
+impl<A> Element for IdentityElement<A>
+where
+    A: std::marker::Send,
+{
     type Input = A;
     type Output = A;
 

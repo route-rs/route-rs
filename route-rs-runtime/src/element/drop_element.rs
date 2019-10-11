@@ -17,7 +17,7 @@ impl<A> DropElement<A> {
     }
 }
 
-impl<A> Element for DropElement<A> {
+impl<A: Send> Element for DropElement<A> {
     type Input = A;
     type Output = A;
 

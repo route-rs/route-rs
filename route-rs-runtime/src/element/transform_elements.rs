@@ -1,6 +1,7 @@
 use crate::element::{AsyncElement, Element};
 use std::convert::From;
 use std::marker::PhantomData;
+use std::marker::Send;
 
 /*
   TransformElement
@@ -21,7 +22,7 @@ impl<A, B> TransformElement<A, B> {
     }
 }
 
-impl<A, B: From<A>> Element for TransformElement<A, B> {
+impl<A: Send, B: From<A> + Send> Element for TransformElement<A, B> {
     type Input = A;
     type Output = B;
 

@@ -1,43 +1,98 @@
-use crate::element::AsyncElement;
+use crate::element::Element;
 use crate::link::task_park::*;
-use crate::link::PacketStream;
+use crate::link::{ElementLinkBuilder, Link, LinkBuilder, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-/// The AsyncLink is a wrapper to create and contain both sides of the
-/// link, the Ingressor, which intakes and processes packets, and the Egressor,
-/// which provides an interface where the next element retrieves the output
-/// packet.
-pub struct AsyncLink<E: AsyncElement> {
-    pub ingressor: AsyncIngressor<E>,
-    pub egressor: AsyncEgressor<E::Output>,
+#[derive(Default)]
+pub struct AsyncLinkBuilder<E: Element> {
+    in_stream: Option<PacketStream<E::Input>>,
+    element: Option<E>,
+    queue_capacity: usize,
 }
 
-impl<E: AsyncElement> AsyncLink<E> {
-    pub fn new(input_stream: PacketStream<E::Input>, element: E, queue_capacity: usize) -> Self {
+impl<E: Element> AsyncLinkBuilder<E> {
+    pub fn new() -> Self {
+        AsyncLinkBuilder {
+            in_stream: None,
+            element: None,
+            queue_capacity: 10,
+        }
+    }
+
+    pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
+        AsyncLinkBuilder {
+            in_stream: Some(in_stream),
+            element: self.element,
+            queue_capacity: self.queue_capacity,
+        }
+    }
+
+    /// Changes queue_capacity, default value is 10.
+    /// Valid range is 1..=1000
+    pub fn queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity <= 1000,
             format!("Async Element queue_capacity: {} > 1000", queue_capacity)
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        let (to_egressor, from_ingressor) =
-            crossbeam_channel::bounded::<Option<E::Output>>(queue_capacity);
-        let task_park: Arc<AtomicCell<TaskParkState>> =
-            Arc::new(AtomicCell::new(TaskParkState::Empty));
+        AsyncLinkBuilder {
+            in_stream: self.in_stream,
+            element: self.element,
+            queue_capacity,
+        }
+    }
+}
 
-        AsyncLink {
-            ingressor: AsyncIngressor::new(
-                input_stream,
+impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for AsyncLinkBuilder<E> {
+    fn ingressors(self, mut in_streams: Vec<PacketStream<E::Input>>) -> Self {
+        assert_eq!(
+            in_streams.len(),
+            1,
+            "AsyncLink may only take 1 input stream"
+        );
+
+        AsyncLinkBuilder {
+            in_stream: Some(in_streams.remove(0)),
+            element: self.element,
+            queue_capacity: self.queue_capacity,
+        }
+    }
+
+    fn build_link(self) -> Link<E::Output> {
+        if self.in_stream.is_none() {
+            panic!("Cannot build link! Missing input stream");
+        } else if self.element.is_none() {
+            panic!("Cannot build link! Missing element");
+        } else {
+            let (to_egressor, from_ingressor) =
+                crossbeam_channel::bounded::<Option<E::Output>>(self.queue_capacity);
+            let task_park: Arc<AtomicCell<TaskParkState>> =
+                Arc::new(AtomicCell::new(TaskParkState::Empty));
+
+            let ingresssor = AsyncIngressor::new(
+                self.in_stream.unwrap(),
                 to_egressor,
-                element,
+                self.element.unwrap(),
                 Arc::clone(&task_park),
-            ),
+            );
+            let egressor = AsyncEgressor::new(from_ingressor, task_park);
 
-            egressor: AsyncEgressor::new(from_ingressor.clone(), task_park),
+            (vec![Box::new(ingresssor)], vec![Box::new(egressor)])
+        }
+    }
+}
+
+impl<E: Element + Send + 'static> ElementLinkBuilder<E> for AsyncLinkBuilder<E> {
+    fn element(self, element: E) -> Self {
+        AsyncLinkBuilder {
+            in_stream: self.in_stream,
+            element: Some(element),
+            queue_capacity: self.queue_capacity,
         }
     }
 }
@@ -48,14 +103,14 @@ impl<E: AsyncElement> AsyncLink<E> {
 /// will continue to pull packets as long as it can make forward progess,
 /// after which it will return NotReady to sleep. This is handed to, and is
 /// polled by the runtime.
-pub struct AsyncIngressor<E: AsyncElement> {
+pub struct AsyncIngressor<E: Element> {
     input_stream: PacketStream<E::Input>,
     to_egressor: Sender<Option<E::Output>>,
     element: E,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: AsyncElement> AsyncIngressor<E> {
+impl<E: Element> AsyncIngressor<E> {
     fn new(
         input_stream: PacketStream<E::Input>,
         to_egressor: Sender<Option<E::Output>>,
@@ -80,7 +135,7 @@ impl<E: AsyncElement> AsyncIngressor<E> {
 /// teardown. We also place a `TaskParkState::Dead` in the task_park
 /// so that the Egressor knows it can not rely on the Ingressor to awaken
 /// it in the future.
-impl<E: AsyncElement> Drop for AsyncIngressor<E> {
+impl<E: Element> Drop for AsyncIngressor<E> {
     fn drop(&mut self) {
         self.to_egressor
             .try_send(None)
@@ -89,7 +144,7 @@ impl<E: AsyncElement> Drop for AsyncIngressor<E> {
     }
 }
 
-impl<E: AsyncElement> Future for AsyncIngressor<E> {
+impl<E: Element> Future for AsyncIngressor<E> {
     type Item = ();
     type Error = ();
 
@@ -214,33 +269,83 @@ impl<Packet: Sized> Stream for AsyncEgressor<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::{AsyncIdentityElement, DropElement, IdentityElement, TransformElement};
+    use crate::element::{DropElement, IdentityElement, TransformElement};
     use crate::link::sync_link::SyncLinkBuilder;
-    use crate::link::{ElementLinkBuilder, LinkBuilder};
+    use crate::link::{ElementLinkBuilder, LinkBuilder, TokioRunnable};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
     use futures::future::lazy;
 
+    fn run_tokio(runnables: Vec<TokioRunnable>) {
+        tokio::run(lazy(|| {
+            for runnable in runnables {
+                tokio::spawn(runnable);
+            }
+            Ok(())
+        }));
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_when_built_without_input_streams() {
+        let identity_element: IdentityElement<i32> = IdentityElement::new();
+
+        AsyncLinkBuilder::new()
+            .element(identity_element)
+            .build_link();
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_when_built_without_element() {
+        let packets: Vec<i32> = vec![];
+        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
+
+        AsyncLinkBuilder::<IdentityElement<i32>>::new()
+            .ingressor(packet_generator)
+            .build_link();
+    }
+
+    #[test]
+    fn builder_methods_work_in_any_order() {
+        let packets: Vec<i32> = vec![];
+
+        let packet_generator0 = immediate_stream(packets.clone());
+        let identity_element0 = IdentityElement::new();
+
+        AsyncLinkBuilder::new()
+            .ingressor(packet_generator0)
+            .element(identity_element0)
+            .build_link();
+
+        let packet_generator1 = immediate_stream(packets.clone());
+        let identity_element1 = IdentityElement::new();
+
+        AsyncLinkBuilder::new()
+            .element(identity_element1)
+            .ingressor(packet_generator1)
+            .build_link();
+    }
+
     #[test]
     fn async_link() {
-        let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem = AsyncIdentityElement::new();
+        let elem = IdentityElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output, packets);
@@ -248,22 +353,21 @@ mod tests {
 
     #[test]
     fn long_stream() {
-        let default_channel_size = 10;
         let packet_generator = immediate_stream(0..2000);
 
-        let elem = AsyncIdentityElement::new();
+        let elem = IdentityElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output.len(), 2000);
@@ -272,34 +376,39 @@ mod tests {
     #[test]
     #[should_panic(expected = "queue capacity must be non-zero")]
     fn empty_channel() {
-        let default_channel_size = 0;
+        let queue_size = 0;
         let packets: Vec<i32> = vec![];
         let packet_generator = immediate_stream(packets);
 
-        let elem = AsyncIdentityElement::new();
+        let elem = IdentityElement::new();
 
-        let _link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (_, _) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .queue_capacity(queue_size)
+            .build_link();
     }
 
     #[test]
     fn small_channel() {
-        let default_channel_size = 1;
+        let queue_size = 1;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem = AsyncIdentityElement::new();
+        let elem = IdentityElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .queue_capacity(queue_size)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output, packets);
@@ -307,23 +416,22 @@ mod tests {
 
     #[test]
     fn empty_stream() {
-        let default_channel_size = 10;
         let packets: Vec<i32> = vec![];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem = AsyncIdentityElement::new();
+        let elem = IdentityElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output, packets);
@@ -331,28 +439,29 @@ mod tests {
 
     #[test]
     fn two_links() {
-        let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = AsyncIdentityElement::new();
-        let elem1 = AsyncIdentityElement::new();
+        let elem0 = IdentityElement::new();
+        let elem1 = IdentityElement::new();
 
-        let link0 = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
-        let link1 = AsyncLink::new(Box::new(link0.egressor), elem1, default_channel_size);
+        let (runnables0, mut egressors0) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem0)
+            .build_link();
 
-        let drain0 = link0.ingressor;
-        let drain1 = link1.ingressor;
+        let (mut runnables1, mut egressors1) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(egressors0.remove(0))])
+            .element(elem1)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(link1.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors1.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain0);
-            tokio::spawn(drain1);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables1.extend(runnables0);
+        runnables1.push(Box::new(collector));
+
+        run_tokio(runnables1);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output, packets);
@@ -360,41 +469,41 @@ mod tests {
 
     #[test]
     fn series_of_sync_and_async_links() {
-        let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
         let elem0 = IdentityElement::new();
-        let elem1 = AsyncIdentityElement::new();
+        let elem1 = IdentityElement::new();
         let elem2 = IdentityElement::new();
-        let elem3 = AsyncIdentityElement::new();
+        let elem3 = IdentityElement::new();
 
         let (_, mut egressors0) = SyncLinkBuilder::new()
             .ingressor(packet_generator)
             .element(elem0)
             .build_link();
 
-        let link1 = AsyncLink::new(egressors0.remove(0), elem1, default_channel_size);
+        let (runnables1, mut egressors1) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(egressors0.remove(0))])
+            .element(elem1)
+            .build_link();
 
         let (_, mut egressors2) = SyncLinkBuilder::new()
-            .ingressor(Box::new(link1.egressor))
+            .ingressor(Box::new(egressors1.remove(0)))
             .element(elem2)
             .build_link();
 
-        let link3 = AsyncLink::new(egressors2.remove(0), elem3, default_channel_size);
-
-        let drain1 = link1.ingressor;
-        let drain3 = link3.ingressor;
+        let (mut runnables3, mut egressors3) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(egressors2.remove(0))])
+            .element(elem3)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(link3.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors3.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain1);
-            tokio::spawn(drain3);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables3.extend(runnables1);
+        runnables3.push(Box::new(collector));
+
+        run_tokio(runnables3);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output, packets);
@@ -402,26 +511,25 @@ mod tests {
 
     #[test]
     fn wait_between_packets() {
-        let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
             packets.clone().into_iter(),
         );
 
-        let elem = AsyncIdentityElement::new();
+        let elem = IdentityElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<_> = r.iter().collect();
         assert_eq!(output, packets);
@@ -429,23 +537,22 @@ mod tests {
 
     #[test]
     fn transform_element() {
-        let default_channel_size = 10;
         let packets = "route-rs".chars();
         let packet_generator = immediate_stream(packets.clone());
 
         let elem = TransformElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem, default_channel_size);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .build_link();
 
         let (s, r) = crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<u32> = r.iter().collect();
         let expected: Vec<u32> = packets.map(|p| p.into()).collect();
@@ -454,22 +561,22 @@ mod tests {
 
     #[test]
     fn drop_element() {
-        let default_channel_size = 10;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let elem0 = DropElement::new();
+        let elem = DropElement::new();
 
-        let link = AsyncLink::new(Box::new(packet_generator), elem0, default_channel_size);
-        let (s, r) = crossbeam::crossbeam_channel::unbounded();
-        let drain = link.ingressor;
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressor), s);
+        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .element(elem)
+            .build_link();
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        let (s, r) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
+
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let router_output: Vec<u32> = r.iter().collect();
         assert_eq!(router_output, []);
