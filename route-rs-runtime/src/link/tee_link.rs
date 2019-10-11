@@ -1,50 +1,103 @@
 use crate::link::task_park::*;
-use crate::link::{AsyncEgressor, PacketStream};
+use crate::link::{AsyncEgressor, Link, LinkBuilder, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
-pub struct TeeLink<P: Sized + Clone> {
-    pub ingressor: TeeIngressor<P>,
-    pub egressors: Vec<AsyncEgressor<P>>,
+#[derive(Default)]
+pub struct TeeLinkBuilder<Packet: Sized + Clone + Send> {
+    in_stream: Option<PacketStream<Packet>>,
+    queue_capacity: usize,
+    branches: Option<usize>,
 }
 
-impl<P: Sized + Clone> TeeLink<P> {
-    pub fn new(input_stream: PacketStream<P>, queue_capacity: usize, branches: usize) -> Self {
+impl<Packet: Sized + Clone + Send> TeeLinkBuilder<Packet> {
+    pub fn new() -> Self {
+        TeeLinkBuilder {
+            in_stream: None,
+            queue_capacity: 10,
+            branches: None,
+        }
+    }
+
+    /// Changes queue_capacity, default value is 10.
+    /// Valid range is 1..=1000
+    pub fn queue_capacity(self, queue_capacity: usize) -> Self {
+        assert!(
+            queue_capacity <= 1000,
+            format!("queue_capacity: {} > 1000", queue_capacity)
+        );
+        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
+
+        TeeLinkBuilder {
+            in_stream: self.in_stream,
+            queue_capacity,
+            branches: self.branches,
+        }
+    }
+
+    pub fn branches(self, branches: usize) -> Self {
         assert!(
             branches <= 1000,
             format!("Tee Link branches: {} > 1000", branches)
         );
-        assert!(
-            queue_capacity <= 1000,
-            format!("Tee Link queue_capacity: {} > 1000", queue_capacity)
-        );
+        assert_ne!(branches, 0, "branches must be non-zero");
 
-        let mut to_egressors: Vec<Sender<Option<P>>> = Vec::new();
-        let mut egressors: Vec<AsyncEgressor<P>> = Vec::new();
-
-        let mut from_ingressors: Vec<Receiver<Option<P>>> = Vec::new();
-
-        let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
-
-        for _ in 0..branches {
-            let (to_egressor, from_ingressor) =
-                crossbeam_channel::bounded::<Option<P>>(queue_capacity);
-            let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
-
-            let egressor = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
-
-            to_egressors.push(to_egressor);
-            egressors.push(egressor);
-            from_ingressors.push(from_ingressor);
-            task_parks.push(task_park);
+        TeeLinkBuilder {
+            in_stream: self.in_stream,
+            queue_capacity: self.queue_capacity,
+            branches: Some(branches),
         }
+    }
+}
 
-        TeeLink {
-            ingressor: TeeIngressor::new(input_stream, to_egressors, task_parks),
-            egressors,
+impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet>
+    for TeeLinkBuilder<Packet>
+{
+    fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
+        assert_eq!(
+            in_streams.len(),
+            1,
+            "Tee links may only take one input stream!"
+        );
+        TeeLinkBuilder {
+            in_stream: Some(in_streams.remove(0)),
+            queue_capacity: self.queue_capacity,
+            branches: self.branches,
+        }
+    }
+
+    fn build_link(self) -> Link<Packet> {
+        if self.in_stream.is_none() {
+            panic!("Cannot build link! Missing input stream");
+        } else if self.branches.is_none() {
+            panic!("Cannot build link! Missing number of branches");
+        } else {
+            let mut to_egressors: Vec<Sender<Option<Packet>>> = Vec::new();
+            let mut egressors: Vec<PacketStream<Packet>> = Vec::new();
+
+            let mut from_ingressors: Vec<Receiver<Option<Packet>>> = Vec::new();
+
+            let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
+
+            for _ in 0..self.branches.unwrap() {
+                let (to_egressor, from_ingressor) =
+                    crossbeam_channel::bounded::<Option<Packet>>(self.queue_capacity);
+                let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
+
+                let egressor = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
+
+                to_egressors.push(to_egressor);
+                egressors.push(Box::new(egressor));
+                from_ingressors.push(from_ingressor);
+                task_parks.push(task_park);
+            }
+
+            let ingressor = TeeIngressor::new(self.in_stream.unwrap(), to_egressors, task_parks);
+
+            (vec![Box::new(ingressor)], egressors)
         }
     }
 }
@@ -121,60 +174,99 @@ impl<P: Sized + Clone> Future for TeeIngressor<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::link::TokioRunnable;
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::immediate_stream;
     use crossbeam::crossbeam_channel;
 
     use futures::future::lazy;
 
+    fn run_tokio(runnables: Vec<TokioRunnable>) {
+        tokio::run(lazy(|| {
+            for runnable in runnables {
+                tokio::spawn(runnable);
+            }
+            Ok(())
+        }));
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_when_built_without_input_streams() {
+        TeeLinkBuilder::<i32>::new().branches(10).build_link();
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_when_built_without_branches() {
+        let packets: Vec<i32> = vec![];
+        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
+
+        TeeLinkBuilder::<i32>::new()
+            .ingressors(vec![Box::new(packet_generator)])
+            .build_link();
+    }
+
+    #[test]
+    fn builder_methods_work_in_any_order() {
+        let packets: Vec<i32> = vec![];
+
+        let packet_generator0 = immediate_stream(packets.clone());
+
+        TeeLinkBuilder::new()
+            .ingressors(vec![Box::new(packet_generator0)])
+            .branches(2)
+            .build_link();
+
+        let packet_generator1 = immediate_stream(packets.clone());
+
+        TeeLinkBuilder::new()
+            .branches(2)
+            .ingressors(vec![Box::new(packet_generator1)])
+            .build_link();
+    }
+
     #[test]
     fn bringup_teardown() {
-        let default_channel_size = 5;
+        let queue_size = 5;
         let number_branches = 1;
         let packet_generator: PacketStream<i32> = immediate_stream(vec![]);
 
-        let mut link = TeeLink::new(
-            Box::new(packet_generator),
-            default_channel_size,
-            number_branches,
-        );
-        let drain = link.ingressor;
+        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+            .branches(number_branches)
+            .queue_capacity(queue_size)
+            .ingressors(vec![Box::new(packet_generator)])
+            .build_link();
 
-        let (s0, collector0_output) = crossbeam_channel::unbounded();
-        let collector0 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
+        let (s0, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s0);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector0);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
 
-        let output: Vec<_> = collector0_output.iter().collect();
+        run_tokio(runnables);
+
+        let output: Vec<_> = collector_output.iter().collect();
         assert!(output.is_empty());
     }
 
     #[test]
     fn one_way() {
-        //TODO: find a way to detect branches all have a ingressor
-        let default_channel_size = 5;
+        let queue_size = 5;
         let number_branches = 1;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let mut link = TeeLink::new(
-            Box::new(packet_generator),
-            default_channel_size,
-            number_branches,
-        );
-        let drain = link.ingressor;
+        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+            .branches(number_branches)
+            .queue_capacity(queue_size)
+            .ingressors(vec![Box::new(packet_generator)])
+            .build_link();
 
         let (s0, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s0);
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector);
-            Ok(())
-        }));
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
 
         let output: Vec<_> = collector_output.iter().collect();
         assert_eq!(output, vec![1, 1337, 3, 5, 7, 9]);
@@ -182,29 +274,25 @@ mod tests {
 
     #[test]
     fn two_way() {
-        let default_channel_size = 10;
+        let queue_size = 5;
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let mut link = TeeLink::new(
-            Box::new(packet_generator),
-            default_channel_size,
-            number_branches,
-        );
-        let drain = link.ingressor;
+        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+            .branches(number_branches)
+            .queue_capacity(queue_size)
+            .ingressors(vec![Box::new(packet_generator)])
+            .build_link();
 
         let (s1, collector1_output) = crossbeam_channel::unbounded();
-        let collector1 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
+        let collector1 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
+        runnables.push(Box::new(collector1));
 
         let (s0, collector0_output) = crossbeam_channel::unbounded();
-        let collector0 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
+        let collector0 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
+        runnables.push(Box::new(collector0));
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector0);
-            tokio::spawn(collector1);
-            Ok(())
-        }));
+        run_tokio(runnables);
 
         let output0: Vec<_> = collector0_output.iter().collect();
         assert_eq!(output0, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
@@ -215,33 +303,29 @@ mod tests {
 
     #[test]
     fn three_way() {
-        let default_channel_size = 10;
+        let queue_size = 5;
         let number_branches = 3;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let mut link = TeeLink::new(
-            Box::new(packet_generator),
-            default_channel_size,
-            number_branches,
-        );
-        let drain = link.ingressor;
+        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+            .branches(number_branches)
+            .queue_capacity(queue_size)
+            .ingressors(vec![Box::new(packet_generator)])
+            .build_link();
 
         let (s2, collector2_output) = crossbeam_channel::unbounded();
-        let collector2 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s2);
+        let collector2 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s2);
+        runnables.push(Box::new(collector2));
 
         let (s1, collector1_output) = crossbeam_channel::unbounded();
-        let collector1 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s1);
+        let collector1 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
+        runnables.push(Box::new(collector1));
 
         let (s0, collector0_output) = crossbeam_channel::unbounded();
-        let collector0 = ExhaustiveCollector::new(0, Box::new(link.egressors.pop().unwrap()), s0);
+        let collector0 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
+        runnables.push(Box::new(collector0));
 
-        tokio::run(lazy(|| {
-            tokio::spawn(drain);
-            tokio::spawn(collector0);
-            tokio::spawn(collector1);
-            tokio::spawn(collector2);
-            Ok(())
-        }));
+        run_tokio(runnables);
 
         let output0: Vec<_> = collector0_output.iter().collect();
         assert_eq!(output0, vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
