@@ -226,22 +226,26 @@ pub fn get_ipv4_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
     IpProtocol::from(data[packet_offset + 9])
 }
 
-pub type Ipv4PacketResult<'packet> = Result<Ipv4Packet<'packet>, &'static str>;
+impl<'packet> TryFrom<EthernetFrame<'packet>> for Ipv4Packet<'packet> {
+    type Error = &'static str;
 
-impl<'packet> From<EthernetFrame<'packet>> for Ipv4PacketResult<'packet> {
-    fn from(frame: EthernetFrame<'packet>) -> Self {
+    fn try_from(frame: EthernetFrame<'packet>) -> Result<Self, Self::Error> {
         Ipv4Packet::new(frame.data, frame.payload_offset)
     }
 }
 
-impl<'packet> From<TcpSegment<'packet>> for Ipv4PacketResult<'packet> {
-    fn from(segment: TcpSegment<'packet>) -> Self {
+impl<'packet> TryFrom<TcpSegment<'packet>> for Ipv4Packet<'packet> {
+    type Error = &'static str;
+
+    fn try_from(segment: TcpSegment<'packet>) -> Result<Self, Self::Error> {
         Ipv4Packet::new(segment.data, segment.packet_offset)
     }
 }
 
-impl<'packet> From<UdpSegment<'packet>> for Ipv4PacketResult<'packet> {
-    fn from(segment: UdpSegment<'packet>) -> Self {
+impl<'packet> TryFrom<UdpSegment<'packet>> for Ipv4Packet<'packet> {
+    type Error = &'static str;
+
+    fn try_from(segment: UdpSegment<'packet>) -> Result<Self, Self::Error> {
         Ipv4Packet::new(segment.data, segment.packet_offset)
     }
 }
@@ -263,7 +267,7 @@ mod tests {
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&ip_data);
 
-        let packet = Ipv4PacketResult::from(frame).unwrap();
+        let packet = Ipv4Packet::try_from(frame).unwrap();
 
         assert_eq!(packet.src_addr(), Ipv4Addr::new([192, 178, 128, 0]));
         assert_eq!(packet.dest_addr(), Ipv4Addr::new([10, 0, 0, 1]));
@@ -291,16 +295,16 @@ mod tests {
         ];
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&invalid_checksum_data);
-        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
 
         let valid_checksum_data: Vec<u8> = vec![
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0xc0, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrameResult::from(packet).unwrap();
+        let mut frame = EthernetFrame::try_from(packet).unwrap();
         frame.set_payload(&valid_checksum_data);
-        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(packet.validate_checksum());
     }
 
@@ -314,7 +318,7 @@ mod tests {
         ];
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&ip_data);
-        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
         packet.set_checksum();
         assert!(packet.validate_checksum());

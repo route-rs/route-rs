@@ -69,28 +69,34 @@ impl<'frame> EthernetFrame<'frame> {
     }
 }
 
-pub type EthernetFrameResult<'packet> = Result<EthernetFrame<'packet>, &'static str>;
+impl<'packet> TryFrom<TcpSegment<'packet>> for EthernetFrame<'packet> {
+    type Error = &'static str;
 
-impl<'packet> From<TcpSegment<'packet>> for EthernetFrameResult<'packet> {
-    fn from(segment: TcpSegment<'packet>) -> Self {
+    fn try_from(segment: TcpSegment<'packet>) -> Result<Self, Self::Error> {
         EthernetFrame::new(segment.data)
     }
 }
 
-impl<'packet> From<UdpSegment<'packet>> for EthernetFrameResult<'packet> {
-    fn from(segment: UdpSegment<'packet>) -> Self {
+impl<'packet> TryFrom<UdpSegment<'packet>> for EthernetFrame<'packet> {
+    type Error = &'static str;
+
+    fn try_from(segment: UdpSegment<'packet>) -> Result<Self, Self::Error> {
         EthernetFrame::new(segment.data)
     }
 }
 
-impl<'packet> From<Ipv4Packet<'packet>> for EthernetFrameResult<'packet> {
-    fn from(packet: Ipv4Packet<'packet>) -> Self {
+impl<'packet> TryFrom<Ipv4Packet<'packet>> for EthernetFrame<'packet> {
+    type Error = &'static str;
+
+    fn try_from(packet: Ipv4Packet<'packet>) -> Result<Self, Self::Error> {
         EthernetFrame::new(packet.data)
     }
 }
 
-impl<'packet> From<Ipv6Packet<'packet>> for EthernetFrameResult<'packet> {
-    fn from(packet: Ipv6Packet<'packet>) -> Self {
+impl<'packet> TryFrom<Ipv6Packet<'packet>> for EthernetFrame<'packet> {
+    type Error = &'static str;
+
+    fn try_from(packet: Ipv6Packet<'packet>) -> Result<Self, Self::Error> {
         EthernetFrame::new(packet.data)
     }
 }

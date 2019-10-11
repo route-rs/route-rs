@@ -1,5 +1,6 @@
 use crate::packet::*;
 use std::borrow::Cow;
+use std::convert::TryFrom;
 
 #[allow(dead_code)]
 pub struct Ipv6Packet<'packet> {
@@ -11,15 +12,15 @@ pub struct Ipv6Packet<'packet> {
 }
 
 impl<'packet> Ipv6Packet<'packet> {
-    fn new(packet: PacketData) -> Result<Ipv6Packet, &'static str> {
+    fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv6Packet, &'static str> {
         //Header of Ethernet Frame: 14bytes
         //Haeder of IPv6 Frame: 40bytes minimum
-        if packet.len() < 14 + 40 {
+        if packet.len() < packet_offset + 40 {
             return Err("Packet is too short to be an Ipv6Packet");
         }
 
         //Check version number
-        let version = (packet[14] & 0xF0) >> 4;
+        let version = (packet[packet_offset] & 0xF0) >> 4;
         if version != 6 {
             return Err("Packet has incorrect version, is not Ipv6Packet");
         }
@@ -29,15 +30,16 @@ impl<'packet> Ipv6Packet<'packet> {
         // handle this edge case for now, but it is needed before shipping.
         // This may also not be true if there are extension headers, so we just check that we will not
         // overrun our array trying to access the entire payload.
-        let payload_len = u16::from_be_bytes([packet[14 + 4], packet[14 + 5]]) as usize;
+        let payload_len =
+            u16::from_be_bytes([packet[packet_offset + 4], packet[packet_offset + 5]]) as usize;
         let packet_len = packet.len();
-        if payload_len + 14 + 40 > packet_len {
+        if payload_len + packet_offset + 40 > packet_len {
             return Err("Packet has invalid payload len field");
         }
 
         Ok(Ipv6Packet {
             data: packet,
-            packet_offset: 14,
+            packet_offset,
             payload_offset: packet_len - payload_len,
         })
     }
@@ -211,23 +213,27 @@ pub fn get_ipv6_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
     }
 }
 
-pub type Ipv6PacketResult<'packet> = Result<Ipv6Packet<'packet>, &'static str>;
+impl<'packet> TryFrom<EthernetFrame<'packet>> for Ipv6Packet<'packet> {
+    type Error = &'static str;
 
-impl<'packet> From<EthernetFrame<'packet>> for Ipv6PacketResult<'packet> {
-    fn from(frame: EthernetFrame<'packet>) -> Self {
-        Ipv6Packet::new(frame.data)
+    fn try_from(frame: EthernetFrame<'packet>) -> Result<Self, Self::Error> {
+        Ipv6Packet::new(frame.data, frame.payload_offset)
     }
 }
 
-impl<'packet> From<TcpSegment<'packet>> for Ipv6PacketResult<'packet> {
-    fn from(segment: TcpSegment<'packet>) -> Self {
-        Ipv6Packet::new(segment.data)
+impl<'packet> TryFrom<TcpSegment<'packet>> for Ipv6Packet<'packet> {
+    type Error = &'static str;
+
+    fn try_from(segment: TcpSegment<'packet>) -> Result<Self, Self::Error> {
+        Ipv6Packet::new(segment.data, segment.packet_offset)
     }
 }
 
-impl<'packet> From<UdpSegment<'packet>> for Ipv6PacketResult<'packet> {
-    fn from(segment: UdpSegment<'packet>) -> Self {
-        Ipv6Packet::new(segment.data)
+impl<'packet> TryFrom<UdpSegment<'packet>> for Ipv6Packet<'packet> {
+    type Error = &'static str;
+
+    fn try_from(segment: UdpSegment<'packet>) -> Result<Self, Self::Error> {
+        Ipv6Packet::new(segment.data, segment.packet_offset)
     }
 }
 
@@ -256,7 +262,7 @@ mod tests {
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&ip_data);
 
-        let packet = Ipv6PacketResult::from(frame).unwrap();
+        let packet = Ipv6Packet::try_from(frame).unwrap();
         assert_eq!(packet.traffic_class(), 0);
         assert_eq!(packet.flow_label(), 0);
         assert_eq!(packet.payload_length(), 4);
@@ -284,7 +290,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         ]);
 
-        let mut packet = Ipv6Packet::new(&mut data).unwrap();
+        let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 
         assert_eq!(packet.src_addr(), src_addr);
         packet.set_src_addr(new_src_addr.clone());
@@ -307,7 +313,7 @@ mod tests {
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
         ]);
 
-        let mut packet = Ipv6Packet::new(&mut data).unwrap();
+        let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 
         assert_eq!(packet.dest_addr(), dest_addr);
         packet.set_dest_addr(new_dest_addr.clone());
@@ -322,7 +328,7 @@ mod tests {
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let mut packet = Ipv6Packet::new(&mut data).unwrap();
+        let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 
         assert_eq!(packet.data[packet.payload_offset], 0xa);
 

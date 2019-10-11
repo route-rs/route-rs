@@ -1,5 +1,6 @@
 use crate::packet::*;
 use std::borrow::Cow;
+use std::convert::TryFrom;
 
 #[allow(dead_code)]
 pub struct UdpSegment<'packet> {
@@ -96,16 +97,18 @@ impl<'packet> UdpSegment<'packet> {
     }
 }
 
-pub type UdpSegmentResult<'packet> = Result<UdpSegment<'packet>, &'static str>;
+impl<'packet> TryFrom<Ipv4Packet<'packet>> for UdpSegment<'packet> {
+    type Error = &'static str;
 
-impl<'packet> From<Ipv4Packet<'packet>> for UdpSegmentResult<'packet> {
-    fn from(packet: Ipv4Packet<'packet>) -> Self {
+    fn try_from(packet: Ipv4Packet<'packet>) -> Result<Self, Self::Error> {
         UdpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
     }
 }
 
-impl<'packet> From<Ipv6Packet<'packet>> for UdpSegmentResult<'packet> {
-    fn from(packet: Ipv6Packet<'packet>) -> Self {
+impl<'packet> TryFrom<Ipv6Packet<'packet>> for UdpSegment<'packet> {
+    type Error = &'static str;
+
+    fn try_from(packet: Ipv6Packet<'packet>) -> Result<Self, Self::Error> {
         UdpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
     }
 }
@@ -128,9 +131,9 @@ mod tests {
 
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&ipv4_data);
-        let mut packet = Ipv4PacketResult::from(frame).unwrap();
+        let mut packet = Ipv4Packet::try_from(frame).unwrap();
         packet.set_payload(&udp_data);
-        let segment = UdpSegmentResult::from(packet).unwrap();
+        let segment = UdpSegment::try_from(packet).unwrap();
 
         assert_eq!(segment.src_port(), 99);
         assert_eq!(segment.dest_port(), 88);
