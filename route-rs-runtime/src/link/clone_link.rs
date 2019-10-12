@@ -1,5 +1,5 @@
 use crate::link::task_park::*;
-use crate::link::{AsyncEgressor, Link, LinkBuilder, PacketStream};
+use crate::link::{QueueEgressor, Link, LinkBuilder, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
@@ -87,7 +87,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet>
                     crossbeam_channel::bounded::<Option<Packet>>(self.queue_capacity);
                 let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-                let egressor = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
+                let egressor = QueueEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
 
                 to_egressors.push(to_egressor);
                 egressors.push(Box::new(egressor));

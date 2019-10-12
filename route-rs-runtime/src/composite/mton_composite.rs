@@ -1,4 +1,4 @@
-use crate::link::{Link, LinkBuilder, PacketStream, JoinLinkBuilder, CloneLink};
+use crate::link::{Link, LinkBuilder, PacketStream, JoinLink, CloneLink};
 
 pub struct  MtoNComposite<Packet: Sized + Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
@@ -87,7 +87,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
         } else if self.branches.is_none() {
             panic!("Cannot build link! Missing number of branches");            
         } else {
-            let (join_runnables, join_egressors) = JoinLinkBuilder::new()
+            let (join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
