@@ -7,15 +7,15 @@ use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 #[derive(Default)]
-pub struct TeeLinkBuilder<Packet: Sized + Clone + Send> {
+pub struct CloneLink<Packet: Sized + Clone + Send> {
     in_stream: Option<PacketStream<Packet>>,
     queue_capacity: usize,
     branches: Option<usize>,
 }
 
-impl<Packet: Sized + Clone + Send> TeeLinkBuilder<Packet> {
+impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
     pub fn new() -> Self {
-        TeeLinkBuilder {
+        CloneLink {
             in_stream: None,
             queue_capacity: 10,
             branches: None,
@@ -31,7 +31,7 @@ impl<Packet: Sized + Clone + Send> TeeLinkBuilder<Packet> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        TeeLinkBuilder {
+        CloneLink {
             in_stream: self.in_stream,
             queue_capacity,
             branches: self.branches,
@@ -45,7 +45,7 @@ impl<Packet: Sized + Clone + Send> TeeLinkBuilder<Packet> {
         );
         assert_ne!(branches, 0, "branches must be non-zero");
 
-        TeeLinkBuilder {
+        CloneLink {
             in_stream: self.in_stream,
             queue_capacity: self.queue_capacity,
             branches: Some(branches),
@@ -54,7 +54,7 @@ impl<Packet: Sized + Clone + Send> TeeLinkBuilder<Packet> {
 }
 
 impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet>
-    for TeeLinkBuilder<Packet>
+    for CloneLink<Packet>
 {
     fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
@@ -62,7 +62,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet>
             1,
             "Tee links may only take one input stream!"
         );
-        TeeLinkBuilder {
+        CloneLink {
             in_stream: Some(in_streams.remove(0)),
             queue_capacity: self.queue_capacity,
             branches: self.branches,
@@ -95,26 +95,26 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet>
                 task_parks.push(task_park);
             }
 
-            let ingressor = TeeIngressor::new(self.in_stream.unwrap(), to_egressors, task_parks);
+            let ingressor = CloneIngressor::new(self.in_stream.unwrap(), to_egressors, task_parks);
 
             (vec![Box::new(ingressor)], egressors)
         }
     }
 }
 
-pub struct TeeIngressor<P> {
+pub struct CloneIngressor<P> {
     input_stream: PacketStream<P>,
     to_egressors: Vec<Sender<Option<P>>>,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
-impl<P> TeeIngressor<P> {
+impl<P> CloneIngressor<P> {
     fn new(
         input_stream: PacketStream<P>,
         to_egressors: Vec<Sender<Option<P>>>,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
-        TeeIngressor {
+        CloneIngressor {
             input_stream,
             to_egressors,
             task_parks,
@@ -122,7 +122,7 @@ impl<P> TeeIngressor<P> {
     }
 }
 
-impl<P> Drop for TeeIngressor<P> {
+impl<P> Drop for CloneIngressor<P> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
@@ -136,7 +136,7 @@ impl<P> Drop for TeeIngressor<P> {
     }
 }
 
-impl<P: Sized + Clone> Future for TeeIngressor<P> {
+impl<P: Sized + Clone> Future for CloneIngressor<P> {
     type Item = ();
     type Error = ();
 
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        TeeLinkBuilder::<i32>::new().branches(10).build_link();
+        CloneLink::<i32>::new().branches(10).build_link();
     }
 
     #[test]
@@ -202,7 +202,7 @@ mod tests {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
-        TeeLinkBuilder::<i32>::new()
+        CloneLink::<i32>::new()
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
     }
@@ -213,14 +213,14 @@ mod tests {
 
         let packet_generator0 = immediate_stream(packets.clone());
 
-        TeeLinkBuilder::new()
+        CloneLink::new()
             .ingressors(vec![Box::new(packet_generator0)])
             .branches(2)
             .build_link();
 
         let packet_generator1 = immediate_stream(packets.clone());
 
-        TeeLinkBuilder::new()
+        CloneLink::new()
             .branches(2)
             .ingressors(vec![Box::new(packet_generator1)])
             .build_link();
@@ -232,7 +232,7 @@ mod tests {
         let number_branches = 1;
         let packet_generator: PacketStream<i32> = immediate_stream(vec![]);
 
-        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+        let (mut runnables, mut egressors) = CloneLink::new()
             .branches(number_branches)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
@@ -255,7 +255,7 @@ mod tests {
         let number_branches = 1;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+        let (mut runnables, mut egressors) = CloneLink::new()
             .branches(number_branches)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
@@ -278,7 +278,7 @@ mod tests {
         let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+        let (mut runnables, mut egressors) = CloneLink::new()
             .branches(number_branches)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
@@ -307,7 +307,7 @@ mod tests {
         let number_branches = 3;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let (mut runnables, mut egressors) = TeeLinkBuilder::new()
+        let (mut runnables, mut egressors) = CloneLink::new()
             .branches(number_branches)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
