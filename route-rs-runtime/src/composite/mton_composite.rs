@@ -1,18 +1,18 @@
-use crate::link::{Link, LinkBuilder, PacketStream, JoinLinkBuilder, TeeLinkBuilder};
+use crate::link::{Link, LinkBuilder, PacketStream, JoinLinkBuilder, CloneLink};
 
-pub struct  MtoNCompositeBuilder<Packet: Sized + Send + Clone> {
+pub struct  MtoNComposite<Packet: Sized + Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     join_queue_capacity: usize,
-    tee_queue_capacity: usize,
+    clone_queue_capacity: usize,
     branches: Option<usize>,
 }
 
-impl<Packet: Sized + Send + Clone> MtoNCompositeBuilder<Packet> {
+impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
     pub fn new() -> Self {
-        MtoNCompositeBuilder {
+        MtoNComposite {
             in_streams: None,
             join_queue_capacity: 10,
-            tee_queue_capacity: 10,
+            clone_queue_capacity: 10,
             branches: None,
         }
     }
@@ -26,10 +26,10 @@ impl<Packet: Sized + Send + Clone> MtoNCompositeBuilder<Packet> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        MtoNCompositeBuilder {
+        MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: queue_capacity,
-            tee_queue_capacity: self.tee_queue_capacity,
+            clone_queue_capacity: self.clone_queue_capacity,
             branches: self.branches,
         }        
     }
@@ -43,10 +43,10 @@ impl<Packet: Sized + Send + Clone> MtoNCompositeBuilder<Packet> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        MtoNCompositeBuilder {
+        MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: self.join_queue_capacity,
-            tee_queue_capacity: queue_capacity,
+            clone_queue_capacity: queue_capacity,
             branches: self.branches,
         }             
     }
@@ -58,25 +58,25 @@ impl<Packet: Sized + Send + Clone> MtoNCompositeBuilder<Packet> {
         );
         assert_ne!(branches, 0, "branches must be non-zero");
 
-        MtoNCompositeBuilder {
+        MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: self.join_queue_capacity,
-            tee_queue_capacity: self.tee_queue_capacity,
+            clone_queue_capacity: self.clone_queue_capacity,
             branches: Some(branches),
         }
     }    
 }
 
-impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNCompositeBuilder<Packet> {
+impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNComposite<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
             in_streams.len() > 1 && in_streams.len() <= 1000,
             format!("Input streams {} not in 2..=1000", in_streams.len())
         );
-        MtoNCompositeBuilder {
+        MtoNComposite {
             in_streams: Some(in_streams),
             join_queue_capacity: self.join_queue_capacity,
-            tee_queue_capacity: self.tee_queue_capacity,
+            clone_queue_capacity: self.clone_queue_capacity,
             branches: self.branches,
         }
     }
@@ -91,13 +91,13 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
                 .ingressors(self.in_streams.unwrap())
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
-            let (mut tee_runnables, tee_egresssors) = TeeLinkBuilder::new()
+            let (mut clone_link_runnables, clone_link_egressors) = CloneLink::new()
                 .ingressors(join_egressors)
-                .queue_capacity(self.tee_queue_capacity)
+                .queue_capacity(self.clone_queue_capacity)
                 .branches(self.branches.unwrap())
                 .build_link();
-            tee_runnables.extend(join_runnables);
-            (tee_runnables, tee_egresssors)
+            clone_link_runnables.extend(join_runnables);
+            (clone_link_runnables, clone_link_egressors)
         }
     }
 }
@@ -133,7 +133,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));  
 
-        let (mut runnables, mut egressors) = MtoNCompositeBuilder::new()
+        let (mut runnables, mut egressors) = MtoNComposite::new()
             .branches(number_branches)
             .ingressors(input_streams)
             .build_link();

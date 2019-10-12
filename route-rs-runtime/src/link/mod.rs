@@ -25,8 +25,8 @@ mod join_link;
 pub use self::join_link::*;
 
 /// Copies all input to each of its outputs, asynchronous.
-mod tee_link;
-pub use self::tee_link::*;
+mod clone_link;
+pub use self::clone_link::*;
 
 /// Drops all packets that are ingressed, asynchronous.
 mod blackhole_link;
