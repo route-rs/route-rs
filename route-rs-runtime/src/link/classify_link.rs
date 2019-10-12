@@ -1,6 +1,6 @@
 use crate::element::Classifier;
 use crate::link::task_park::*;
-use crate::link::{AsyncEgressor, PacketStream};
+use crate::link::{QueueEgressor, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 pub struct ClassifyLink<'a, C: Classifier> {
     pub ingressor: ClassifyIngressor<'a, C>,
-    pub egressors: Vec<AsyncEgressor<C::Packet>>,
+    pub egressors: Vec<QueueEgressor<C::Packet>>,
 }
 
 impl<'a, C: Classifier> ClassifyLink<'a, C> {
@@ -31,7 +31,7 @@ impl<'a, C: Classifier> ClassifyLink<'a, C> {
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         let mut to_egressors: Vec<Sender<Option<C::Packet>>> = Vec::new();
-        let mut egressors: Vec<AsyncEgressor<C::Packet>> = Vec::new();
+        let mut egressors: Vec<QueueEgressor<C::Packet>> = Vec::new();
 
         let mut from_ingressors: Vec<Receiver<Option<C::Packet>>> = Vec::new();
 
@@ -42,7 +42,7 @@ impl<'a, C: Classifier> ClassifyLink<'a, C> {
                 crossbeam_channel::bounded::<Option<C::Packet>>(queue_capacity);
             let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-            let provider = AsyncEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
+            let provider = QueueEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
 
             to_egressors.push(to_egressor);
             egressors.push(provider);

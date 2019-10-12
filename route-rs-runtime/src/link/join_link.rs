@@ -7,14 +7,14 @@ use futures::{task, Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 #[derive(Default)]
-pub struct JoinLinkBuilder<Packet: Sized + Send> {
+pub struct JoinLink<Packet: Sized + Send> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     queue_capacity: usize,
 }
 
-impl<Packet: Sized + Send> JoinLinkBuilder<Packet> {
+impl<Packet: Sized + Send> JoinLink<Packet> {
     pub fn new() -> Self {
-        JoinLinkBuilder {
+        JoinLink {
             in_streams: None,
             queue_capacity: 10,
         }
@@ -29,17 +29,17 @@ impl<Packet: Sized + Send> JoinLinkBuilder<Packet> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        JoinLinkBuilder {
+        JoinLink {
             in_streams: self.in_streams,
             queue_capacity,
         }
     }
 }
 
-impl<Packet: Sized + Send + 'static> LinkBuilder<Packet, Packet> for JoinLinkBuilder<Packet> {
+impl<Packet: Sized + Send + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_ne!(in_streams.len(), 0, "Input stream vector can not be zero!");
-        JoinLinkBuilder {
+        JoinLink {
             in_streams: Some(in_streams),
             queue_capacity: self.queue_capacity,
         }
@@ -254,14 +254,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        JoinLinkBuilder::<i32>::new().build_link();
+        JoinLink::<i32>::new().build_link();
     }
 
     #[test]
     #[should_panic]
     fn panics_when_input_streams_is_empty() {
         let input_streams = Vec::new();
-        JoinLinkBuilder::<i32>::new()
+        JoinLink::<i32>::new()
             .ingressors(input_streams)
             .build_link();
     }
@@ -272,14 +272,14 @@ mod tests {
 
         let packet_generator0 = immediate_stream(packets.clone());
 
-        JoinLinkBuilder::new()
+        JoinLink::new()
             .ingressors(vec![Box::new(packet_generator0)])
             .queue_capacity(4)
             .build_link();
 
         let packet_generator1 = immediate_stream(packets.clone());
 
-        JoinLinkBuilder::new()
+        JoinLink::new()
             .queue_capacity(4)
             .ingressors(vec![Box::new(packet_generator1)])
             .build_link();
@@ -295,7 +295,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -319,7 +319,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -349,7 +349,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator3));
         input_streams.push(Box::new(packet_generator4));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -380,7 +380,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -407,7 +407,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -435,7 +435,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -460,7 +460,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLinkBuilder::new()
+        let (mut runnables, mut egressors) = JoinLink::new()
             .ingressors(input_streams)
             .build_link();
 
@@ -487,7 +487,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (_, _) = JoinLinkBuilder::new()
+        let (_, _) = JoinLink::new()
             .ingressors(input_streams)
             .queue_capacity(queue_size)
             .build_link();

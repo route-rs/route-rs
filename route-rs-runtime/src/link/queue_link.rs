@@ -8,15 +8,15 @@ use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 #[derive(Default)]
-pub struct AsyncLinkBuilder<E: Element> {
+pub struct QueueLink<E: Element> {
     in_stream: Option<PacketStream<E::Input>>,
     element: Option<E>,
     queue_capacity: usize,
 }
 
-impl<E: Element> AsyncLinkBuilder<E> {
+impl<E: Element> QueueLink<E> {
     pub fn new() -> Self {
-        AsyncLinkBuilder {
+        QueueLink {
             in_stream: None,
             element: None,
             queue_capacity: 10,
@@ -24,7 +24,7 @@ impl<E: Element> AsyncLinkBuilder<E> {
     }
 
     pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
-        AsyncLinkBuilder {
+        QueueLink {
             in_stream: Some(in_stream),
             element: self.element,
             queue_capacity: self.queue_capacity,
@@ -40,7 +40,7 @@ impl<E: Element> AsyncLinkBuilder<E> {
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        AsyncLinkBuilder {
+        QueueLink {
             in_stream: self.in_stream,
             element: self.element,
             queue_capacity,
@@ -48,7 +48,7 @@ impl<E: Element> AsyncLinkBuilder<E> {
     }
 }
 
-impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for AsyncLinkBuilder<E> {
+impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for QueueLink<E> {
     fn ingressors(self, mut in_streams: Vec<PacketStream<E::Input>>) -> Self {
         assert_eq!(
             in_streams.len(),
@@ -56,7 +56,7 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for AsyncLink
             "AsyncLink may only take 1 input stream"
         );
 
-        AsyncLinkBuilder {
+        QueueLink {
             in_stream: Some(in_streams.remove(0)),
             element: self.element,
             queue_capacity: self.queue_capacity,
@@ -74,22 +74,22 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for AsyncLink
             let task_park: Arc<AtomicCell<TaskParkState>> =
                 Arc::new(AtomicCell::new(TaskParkState::Empty));
 
-            let ingresssor = AsyncIngressor::new(
+            let ingresssor = QueueIngressor::new(
                 self.in_stream.unwrap(),
                 to_egressor,
                 self.element.unwrap(),
                 Arc::clone(&task_park),
             );
-            let egressor = AsyncEgressor::new(from_ingressor, task_park);
+            let egressor = QueueEgressor::new(from_ingressor, task_park);
 
             (vec![Box::new(ingresssor)], vec![Box::new(egressor)])
         }
     }
 }
 
-impl<E: Element + Send + 'static> ElementLinkBuilder<E> for AsyncLinkBuilder<E> {
+impl<E: Element + Send + 'static> ElementLinkBuilder<E> for QueueLink<E> {
     fn element(self, element: E) -> Self {
-        AsyncLinkBuilder {
+        QueueLink {
             in_stream: self.in_stream,
             element: Some(element),
             queue_capacity: self.queue_capacity,
@@ -97,27 +97,27 @@ impl<E: Element + Send + 'static> ElementLinkBuilder<E> for AsyncLinkBuilder<E> 
     }
 }
 
-/// The AsyncIngressor is responsible for polling its input stream,
+/// The QueueIngressor is responsible for polling its input stream,
 /// processing them using the `element`s process function, and pushing the
 /// output packet onto the to_egressor queue. It does work in batches, so it
 /// will continue to pull packets as long as it can make forward progess,
 /// after which it will return NotReady to sleep. This is handed to, and is
 /// polled by the runtime.
-pub struct AsyncIngressor<E: Element> {
+pub struct QueueIngressor<E: Element> {
     input_stream: PacketStream<E::Input>,
     to_egressor: Sender<Option<E::Output>>,
     element: E,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<E: Element> AsyncIngressor<E> {
+impl<E: Element> QueueIngressor<E> {
     fn new(
         input_stream: PacketStream<E::Input>,
         to_egressor: Sender<Option<E::Output>>,
         element: E,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
-        AsyncIngressor {
+        QueueIngressor {
             input_stream,
             to_egressor,
             element,
@@ -126,7 +126,7 @@ impl<E: Element> AsyncIngressor<E> {
     }
 }
 
-/// Special Drop for AsyncIngressor
+/// Special Drop for QueueIngressor
 ///
 /// When we are dropping the Ingressor, we want to send a message to the
 /// Egressor so that it may drop as well. Additionally, we awaken the
@@ -135,20 +135,20 @@ impl<E: Element> AsyncIngressor<E> {
 /// teardown. We also place a `TaskParkState::Dead` in the task_park
 /// so that the Egressor knows it can not rely on the Ingressor to awaken
 /// it in the future.
-impl<E: Element> Drop for AsyncIngressor<E> {
+impl<E: Element> Drop for QueueIngressor<E> {
     fn drop(&mut self) {
         self.to_egressor
             .try_send(None)
-            .expect("AsyncIngressor::Drop: try_send to_egressor shouldn't fail");
+            .expect("QueueIngressor::Drop: try_send to_egressor shouldn't fail");
         die_and_notify(&self.task_park);
     }
 }
 
-impl<E: Element> Future for AsyncIngressor<E> {
+impl<E: Element> Future for QueueIngressor<E> {
     type Item = ();
     type Error = ();
 
-    /// Implement Poll for Future for AsyncIngressor
+    /// Implement Poll for Future for QueueIngressor
     ///
     /// This function continues to process
     /// packets off it's input queue until it reaches a point where it can not
@@ -186,7 +186,7 @@ impl<E: Element> Future for AsyncIngressor<E> {
                     if let Some(output_packet) = self.element.process(input_packet) {
                         self.to_egressor
                             .try_send(Some(output_packet))
-                            .expect("AsyncIngressor::Poll: try_send to_egressor shouldn't fail");
+                            .expect("QueueIngressor::Poll: try_send to_egressor shouldn't fail");
                         unpark_and_notify(&self.task_park);
                     }
                 }
@@ -195,21 +195,21 @@ impl<E: Element> Future for AsyncIngressor<E> {
     }
 }
 
-/// The Egressor side of the AsyncLink is responsible to converting the
+/// The Egressor side of the QueueLink is responsible to converting the
 /// output queue of processed packets, which is a crossbeam channel, to a
 /// Stream that can be polled for packets. It ends up being owned by the
 /// element which is polling for packets.
-pub struct AsyncEgressor<Packet: Sized> {
+pub struct QueueEgressor<Packet: Sized> {
     from_ingressor: Receiver<Option<Packet>>,
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
-impl<Packet: Sized> AsyncEgressor<Packet> {
+impl<Packet: Sized> QueueEgressor<Packet> {
     pub fn new(
         from_ingressor: Receiver<Option<Packet>>,
         task_park: Arc<AtomicCell<TaskParkState>>,
     ) -> Self {
-        AsyncEgressor {
+        QueueEgressor {
             from_ingressor,
             task_park,
         }
@@ -222,17 +222,17 @@ impl<Packet: Sized> AsyncEgressor<Packet> {
 /// to awaken it. It is not expected behavior that the Egressor dies while the
 /// Ingressor is still alive. But it may happen in edge cases and we want to
 /// ensure that a deadlock does not occur.
-impl<Packet: Sized> Drop for AsyncEgressor<Packet> {
+impl<Packet: Sized> Drop for QueueEgressor<Packet> {
     fn drop(&mut self) {
         die_and_notify(&self.task_park);
     }
 }
 
-impl<Packet: Sized> Stream for AsyncEgressor<Packet> {
+impl<Packet: Sized> Stream for QueueEgressor<Packet> {
     type Item = Packet;
     type Error = ();
 
-    /// Implement Poll for Stream for AsyncEgressor
+    /// Implement Poll for Stream for QueueEgressor
     ///
     /// This function, tries to retrieve a packet off the `from_ingressor`
     /// channel, there are four cases:
@@ -291,7 +291,7 @@ mod tests {
     fn panics_when_built_without_input_streams() {
         let identity_element: IdentityElement<i32> = IdentityElement::new();
 
-        AsyncLinkBuilder::new()
+        QueueLink::new()
             .element(identity_element)
             .build_link();
     }
@@ -302,7 +302,7 @@ mod tests {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
-        AsyncLinkBuilder::<IdentityElement<i32>>::new()
+        QueueLink::<IdentityElement<i32>>::new()
             .ingressor(packet_generator)
             .build_link();
     }
@@ -314,7 +314,7 @@ mod tests {
         let packet_generator0 = immediate_stream(packets.clone());
         let identity_element0 = IdentityElement::new();
 
-        AsyncLinkBuilder::new()
+        QueueLink::new()
             .ingressor(packet_generator0)
             .element(identity_element0)
             .build_link();
@@ -322,20 +322,20 @@ mod tests {
         let packet_generator1 = immediate_stream(packets.clone());
         let identity_element1 = IdentityElement::new();
 
-        AsyncLinkBuilder::new()
+        QueueLink::new()
             .element(identity_element1)
             .ingressor(packet_generator1)
             .build_link();
     }
 
     #[test]
-    fn async_link() {
+    fn queue_link() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
         let elem = IdentityElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .build_link();
@@ -357,7 +357,7 @@ mod tests {
 
         let elem = IdentityElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .build_link();
@@ -382,7 +382,7 @@ mod tests {
 
         let elem = IdentityElement::new();
 
-        let (_, _) = AsyncLinkBuilder::new()
+        let (_, _) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .queue_capacity(queue_size)
@@ -397,7 +397,7 @@ mod tests {
 
         let elem = IdentityElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .queue_capacity(queue_size)
@@ -421,7 +421,7 @@ mod tests {
 
         let elem = IdentityElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .build_link();
@@ -445,12 +445,12 @@ mod tests {
         let elem0 = IdentityElement::new();
         let elem1 = IdentityElement::new();
 
-        let (runnables0, mut egressors0) = AsyncLinkBuilder::new()
+        let (runnables0, mut egressors0) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem0)
             .build_link();
 
-        let (mut runnables1, mut egressors1) = AsyncLinkBuilder::new()
+        let (mut runnables1, mut egressors1) = QueueLink::new()
             .ingressors(vec![Box::new(egressors0.remove(0))])
             .element(elem1)
             .build_link();
@@ -468,7 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn series_of_sync_and_async_links() {
+    fn series_of_sync_and_queue_links() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
@@ -482,7 +482,7 @@ mod tests {
             .element(elem0)
             .build_link();
 
-        let (runnables1, mut egressors1) = AsyncLinkBuilder::new()
+        let (runnables1, mut egressors1) = QueueLink::new()
             .ingressors(vec![Box::new(egressors0.remove(0))])
             .element(elem1)
             .build_link();
@@ -492,7 +492,7 @@ mod tests {
             .element(elem2)
             .build_link();
 
-        let (mut runnables3, mut egressors3) = AsyncLinkBuilder::new()
+        let (mut runnables3, mut egressors3) = QueueLink::new()
             .ingressors(vec![Box::new(egressors2.remove(0))])
             .element(elem3)
             .build_link();
@@ -519,7 +519,7 @@ mod tests {
 
         let elem = IdentityElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .build_link();
@@ -542,7 +542,7 @@ mod tests {
 
         let elem = TransformElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .build_link();
@@ -566,7 +566,7 @@ mod tests {
 
         let elem = DropElement::new();
 
-        let (mut runnables, mut egressors) = AsyncLinkBuilder::new()
+        let (mut runnables, mut egressors) = QueueLink::new()
             .ingressors(vec![Box::new(packet_generator)])
             .element(elem)
             .build_link();
