@@ -1,6 +1,6 @@
 use crate::packet::*;
 use std::borrow::Cow;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 #[allow(dead_code)]
 pub struct UdpSegment<'packet> {
@@ -40,7 +40,11 @@ impl<'packet> UdpSegment<'packet> {
             return Err("Protocol is incorrect, since it isn't UDP");
         }
 
-        let length = u16::from_be_bytes([segment[segment_offset + 4], segment[segment_offset + 5]]);
+        let length = u16::from_be_bytes(
+            segment[segment_offset + 4..=segment_offset + 5]
+                .try_into()
+                .unwrap(),
+        );
 
         if segment.len() < segment_offset + length as usize {
             return Err("Segment is not correct length as given by it's length field");
@@ -55,10 +59,11 @@ impl<'packet> UdpSegment<'packet> {
     }
 
     pub fn src_port(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset],
-            self.data[self.segment_offset + 1],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset..=self.segment_offset + 1]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn set_src_port(&mut self, port: u16) {
@@ -67,10 +72,11 @@ impl<'packet> UdpSegment<'packet> {
     }
 
     pub fn dest_port(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 2],
-            self.data[self.segment_offset + 3],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 2..=self.segment_offset + 3]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn set_dest_port(&mut self, port: u16) {
@@ -79,17 +85,19 @@ impl<'packet> UdpSegment<'packet> {
     }
 
     pub fn length(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 4],
-            self.data[self.segment_offset + 5],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 4..=self.segment_offset + 5]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn checksum(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 6],
-            self.data[self.segment_offset + 7],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 6..=self.segment_offset + 7]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn payload(&self) -> Cow<[u8]> {

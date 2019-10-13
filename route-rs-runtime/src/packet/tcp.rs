@@ -1,6 +1,6 @@
 use crate::packet::*;
 use std::borrow::Cow;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 #[allow(dead_code)]
 pub struct TcpSegment<'packet> {
@@ -60,10 +60,11 @@ impl<'packet> TcpSegment<'packet> {
     }
 
     pub fn src_port(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset],
-            self.data[self.segment_offset + 1],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset..=self.segment_offset + 1]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn set_src_port(&mut self, port: u16) {
@@ -72,10 +73,11 @@ impl<'packet> TcpSegment<'packet> {
     }
 
     pub fn dest_port(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 2],
-            self.data[self.segment_offset + 3],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 2..=self.segment_offset + 3]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn set_dest_port(&mut self, port: u16) {
@@ -84,21 +86,19 @@ impl<'packet> TcpSegment<'packet> {
     }
 
     pub fn sequence_number(&self) -> u32 {
-        u32::from_be_bytes([
-            self.data[self.segment_offset + 4],
-            self.data[self.segment_offset + 5],
-            self.data[self.segment_offset + 6],
-            self.data[self.segment_offset + 7],
-        ])
+        u32::from_be_bytes(
+            self.data[self.segment_offset + 4..=self.segment_offset + 7]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn acknowledgment_number(&self) -> u32 {
-        u32::from_be_bytes([
-            self.data[self.segment_offset + 8],
-            self.data[self.segment_offset + 9],
-            self.data[self.segment_offset + 10],
-            self.data[self.segment_offset + 11],
-        ])
+        u32::from_be_bytes(
+            self.data[self.segment_offset + 8..=self.segment_offset + 11]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn data_offset(&self) -> u8 {
@@ -115,31 +115,35 @@ impl<'packet> TcpSegment<'packet> {
     /// Returns the 9 control bits as a u16, the 9 least significant bits
     /// represent the bits in question
     pub fn control_bits(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 12],
-            self.data[self.segment_offset + 13],
-        ]) & 0x01FF
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 12..=self.segment_offset + 13]
+                .try_into()
+                .unwrap(),
+        ) & 0x01FF
     }
 
     pub fn window_size(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 14],
-            self.data[self.segment_offset + 15],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 14..=self.segment_offset + 15]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn checksum(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 16],
-            self.data[self.segment_offset + 17],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 16..=self.segment_offset + 17]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn urgent_pointer(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.segment_offset + 18],
-            self.data[self.segment_offset + 19],
-        ])
+        u16::from_be_bytes(
+            self.data[self.segment_offset + 18..=self.segment_offset + 19]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
