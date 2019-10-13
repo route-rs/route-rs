@@ -1,4 +1,4 @@
-use crate::element::{AsyncElement, Element};
+use crate::element::{Element};
 use std::marker::PhantomData;
 
 /* IdentityElement
@@ -21,31 +21,6 @@ impl<A> Element for IdentityElement<A>
 where
     A: std::marker::Send,
 {
-    type Input = A;
-    type Output = A;
-
-    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
-        Some(packet)
-    }
-}
-
-/* AsyncIdentityElement
-  This is an async element that passes what it has received
-*/
-#[derive(Default)]
-pub struct AsyncIdentityElement<A: Sized> {
-    phantom: PhantomData<A>,
-}
-
-impl<A> AsyncIdentityElement<A> {
-    pub fn new() -> AsyncIdentityElement<A> {
-        AsyncIdentityElement {
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<A> AsyncElement for AsyncIdentityElement<A> {
     type Input = A;
     type Output = A;
 

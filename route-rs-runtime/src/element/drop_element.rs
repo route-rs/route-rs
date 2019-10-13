@@ -1,4 +1,4 @@
-use crate::element::{AsyncElement, Element};
+use crate::element::{Element};
 use std::marker::PhantomData;
 
 /* DropElement
@@ -18,15 +18,6 @@ impl<A> DropElement<A> {
 }
 
 impl<A: Send> Element for DropElement<A> {
-    type Input = A;
-    type Output = A;
-
-    fn process(&mut self, _packet: Self::Input) -> Option<Self::Output> {
-        None
-    }
-}
-
-impl<A> AsyncElement for DropElement<A> {
     type Input = A;
     type Output = A;
 

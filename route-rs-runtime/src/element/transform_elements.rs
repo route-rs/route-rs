@@ -1,4 +1,4 @@
-use crate::element::{AsyncElement, Element};
+use crate::element::{Element};
 use std::convert::From;
 use std::marker::PhantomData;
 use std::marker::Send;
@@ -23,15 +23,6 @@ impl<A, B> TransformElement<A, B> {
 }
 
 impl<A: Send, B: From<A> + Send> Element for TransformElement<A, B> {
-    type Input = A;
-    type Output = B;
-
-    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
-        Some(Self::Output::from(packet))
-    }
-}
-
-impl<A, B: From<A>> AsyncElement for TransformElement<A, B> {
     type Input = A;
     type Output = B;
 
