@@ -295,9 +295,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
@@ -319,9 +317,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
@@ -349,9 +345,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator3));
         input_streams.push(Box::new(packet_generator4));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
@@ -380,9 +374,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
@@ -407,9 +399,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
@@ -435,9 +425,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
@@ -460,9 +448,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressors(input_streams)
-            .build_link();
+        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);

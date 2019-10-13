@@ -291,9 +291,7 @@ mod tests {
     fn panics_when_built_without_input_streams() {
         let identity_element: IdentityElement<i32> = IdentityElement::new();
 
-        QueueLink::new()
-            .element(identity_element)
-            .build_link();
+        QueueLink::new().element(identity_element).build_link();
     }
 
     #[test]
