@@ -1,6 +1,6 @@
 use crate::packet::*;
 use std::borrow::Cow;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 pub struct EthernetFrame<'packet> {
     pub data: PacketData<'packet>,
@@ -51,7 +51,7 @@ impl<'frame> EthernetFrame<'frame> {
     }
 
     pub fn payload_len(&self) -> u16 {
-        u16::from_be_bytes([self.data[12], self.data[13]])
+        u16::from_be_bytes(self.data[12..=13].try_into().unwrap())
     }
 
     //This gives you a cow of a slice of the payload.

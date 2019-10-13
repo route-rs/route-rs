@@ -1,6 +1,6 @@
 use crate::packet::*;
 use std::borrow::Cow;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 pub struct Ipv4Packet<'packet> {
     pub data: PacketData<'packet>,
@@ -24,8 +24,11 @@ impl<'packet> Ipv4Packet<'packet> {
         }
 
         // TotalLen is the 3rd and 4th byte of the IP Header
-        let total_len =
-            u16::from_be_bytes([packet[packet_offset + 2], packet[packet_offset + 3]]) as usize;
+        let total_len = u16::from_be_bytes(
+            packet[packet_offset + 2..=packet_offset + 3]
+                .try_into()
+                .unwrap(),
+        ) as usize;
         if packet.len() != total_len + packet_offset {
             return Err("Packet has invalid total length field");
         }
@@ -123,10 +126,11 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn total_len(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.packet_offset + 2],
-            self.data[self.packet_offset + 3],
-        ])
+        u16::from_be_bytes(
+            self.data[self.packet_offset + 2..=self.packet_offset + 3]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn ttl(&self) -> u8 {
@@ -139,10 +143,11 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn checksum(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.packet_offset + 10],
-            self.data[self.packet_offset + 11],
-        ])
+        u16::from_be_bytes(
+            self.data[self.packet_offset + 10..=self.packet_offset + 11]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn dcsp(&self) -> u8 {
@@ -154,10 +159,11 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn indentification(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.packet_offset + 4],
-            self.data[self.packet_offset + 5],
-        ])
+        u16::from_be_bytes(
+            self.data[self.packet_offset + 4..=self.packet_offset + 5]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn fragment_offet(&self) -> u16 {

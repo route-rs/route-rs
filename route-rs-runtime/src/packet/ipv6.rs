@@ -1,6 +1,7 @@
 use crate::packet::*;
 use std::borrow::Cow;
 use std::convert::TryFrom;
+use std::convert::TryInto;
 
 #[allow(dead_code)]
 pub struct Ipv6Packet<'packet> {
@@ -30,8 +31,11 @@ impl<'packet> Ipv6Packet<'packet> {
         // handle this edge case for now, but it is needed before shipping.
         // This may also not be true if there are extension headers, so we just check that we will not
         // overrun our array trying to access the entire payload.
-        let payload_len =
-            u16::from_be_bytes([packet[packet_offset + 4], packet[packet_offset + 5]]) as usize;
+        let payload_len = u16::from_be_bytes(
+            packet[packet_offset + 4..=packet_offset + 5]
+                .try_into()
+                .unwrap(),
+        ) as usize;
         let packet_len = packet.len();
         if payload_len + packet_offset + 40 > packet_len {
             return Err("Packet has invalid payload len field");
@@ -59,10 +63,11 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 
     pub fn payload_length(&self) -> u16 {
-        u16::from_be_bytes([
-            self.data[self.packet_offset + 4],
-            self.data[self.packet_offset + 5],
-        ])
+        u16::from_be_bytes(
+            self.data[self.packet_offset + 4..=self.packet_offset + 5]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn next_header(&self) -> IpProtocol {
