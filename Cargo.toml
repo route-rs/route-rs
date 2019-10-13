@@ -4,6 +4,7 @@ members = [
     # These crates can actually be used by other people and might be published to crates.io
     "route-rs-graphgen",
     "route-rs-runtime",
+    "route-rs-packets",
 
     # I/O Crates
     "afpacket",
