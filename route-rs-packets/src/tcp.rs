@@ -1,4 +1,4 @@
-use crate::packet::*;
+use crate::*;
 use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 
