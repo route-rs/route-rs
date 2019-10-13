@@ -1,5 +1,5 @@
 use crate::link::task_park::*;
-use crate::link::{QueueEgressor, Link, LinkBuilder, PacketStream};
+use crate::link::{Link, LinkBuilder, PacketStream, QueueEgressor};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
@@ -53,9 +53,7 @@ impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
     }
 }
 
-impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet>
-    for CloneLink<Packet>
-{
+impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for CloneLink<Packet> {
     fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),

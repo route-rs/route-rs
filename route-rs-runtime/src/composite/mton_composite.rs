@@ -1,6 +1,6 @@
-use crate::link::{Link, LinkBuilder, PacketStream, JoinLink, CloneLink};
+use crate::link::{CloneLink, JoinLink, Link, LinkBuilder, PacketStream};
 
-pub struct  MtoNComposite<Packet: Sized + Send + Clone> {
+pub struct MtoNComposite<Packet: Sized + Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     join_queue_capacity: usize,
     clone_queue_capacity: usize,
@@ -31,7 +31,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
             join_queue_capacity: queue_capacity,
             clone_queue_capacity: self.clone_queue_capacity,
             branches: self.branches,
-        }        
+        }
     }
 
     /// Changes tee_queue_capcity, default value is 10.
@@ -48,7 +48,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
             join_queue_capacity: self.join_queue_capacity,
             clone_queue_capacity: queue_capacity,
             branches: self.branches,
-        }             
+        }
     }
 
     pub fn branches(self, branches: usize) -> Self {
@@ -64,7 +64,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
             clone_queue_capacity: self.clone_queue_capacity,
             branches: Some(branches),
         }
-    }    
+    }
 }
 
 impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNComposite<Packet> {
@@ -85,7 +85,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
         if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input stream");
         } else if self.branches.is_none() {
-            panic!("Cannot build link! Missing number of branches");            
+            panic!("Cannot build link! Missing number of branches");
         } else {
             let (join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
@@ -131,13 +131,13 @@ mod tests {
 
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));  
+        input_streams.push(Box::new(packet_generator1));
 
         let (mut runnables, mut egressors) = MtoNComposite::new()
             .branches(number_branches)
             .ingressors(input_streams)
             .build_link();
-        
+
         let (s1, collector1_output) = crossbeam_channel::unbounded();
         let collector1 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
         runnables.push(Box::new(collector1));
@@ -152,6 +152,6 @@ mod tests {
         assert_eq!(output0.len(), packets.len() * 2);
 
         let output1: Vec<_> = collector1_output.iter().collect();
-        assert_eq!(output1.len(), packets.len() * 2);              
+        assert_eq!(output1.len(), packets.len() * 2);
     }
 }
