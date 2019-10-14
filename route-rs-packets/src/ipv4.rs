@@ -12,13 +12,13 @@ pub struct Ipv4Packet<'packet> {
 
 impl<'packet> Ipv4Packet<'packet> {
     fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv4Packet, &'static str> {
-        //Header of Ethernet Frame: 14 bytes
-        //Header of IPv4 Frame: 20 bytes
+        // Header of Ethernet Frame: 14 bytes
+        // Header of IPv4 Frame: 20 bytes
         if packet.len() < packet_offset + 20 {
             return Err("Data is too short to be an IPv4 Packet");
         }
 
-        //Check version number
+        // Check version number
         let version: u8 = (packet[packet_offset] & 0xF0) >> 4;
         if version != 4 {
             return Err("Packet has incorrect version, is not Ipv4Packet");
@@ -34,7 +34,7 @@ impl<'packet> Ipv4Packet<'packet> {
             return Err("Packet has invalid total length field");
         }
 
-        //This is the header length in 32bit words
+        // This is the header length in 32bit words
         let ihl = (packet[packet_offset] & 0x0F) as usize;
         let payload_offset = packet_offset + (ihl * 4);
 
@@ -47,11 +47,6 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn src_addr(&self) -> Ipv4Addr {
-        /*let bytes =
-            <[u8; 4]>::try_from(&self.data[(self.packet_offset + 12)..(self.packet_offset + 16)])
-                .unwrap();
-        Ipv4Addr::new(bytes)
-        */
         let data: [u8; 4] = self.data[self.packet_offset + 12..self.packet_offset + 16]
             .try_into()
             .unwrap();
@@ -80,7 +75,7 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn set_ihl(&mut self, header_length: usize) {
-        self.data[self.packet_offset] &= 0xF0; //Clear least sig 4 bits
+        self.data[self.packet_offset] &= 0xF0; // Clear least sig 4 bits
         self.data[self.packet_offset] |= 0x0F & ((header_length / 4) as u8);
         self.payload_offset = header_length;
         self.validated_checksum = false;
@@ -268,7 +263,6 @@ mod tests {
 
     #[test]
     fn ipv4_packet() {
-        //Example frame with 0 payload
         let mut mac_data: Vec<u8> =
             vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ip_data: Vec<u8> = vec![

@@ -20,7 +20,7 @@ impl<'frame> EthernetFrame<'frame> {
         if frame.len() < 14 {
             return Err("Frame is less than the minimum of 14 bytes");
         }
-        //Can't use helper here, since we don't have the object yet :(.
+        // Can't use helper here, since we don't have the object yet :(.
         let payload_len = u16::from_be_bytes([frame[12], frame[13]]) as usize;
         if payload_len + 14 != frame.len() {
             return Err("Frame has invalivd payload len field");
@@ -54,16 +54,16 @@ impl<'frame> EthernetFrame<'frame> {
         u16::from_be_bytes(self.data[12..=13].try_into().unwrap())
     }
 
-    //This gives you a cow of a slice of the payload.
+    // This gives you a cow of a slice of the payload.
     pub fn payload(&self) -> Cow<[u8]> {
         Cow::from(&self.data[self.payload_offset..])
     }
 
     pub fn set_payload(&mut self, payload: &[u8]) {
         let payload_len = payload.len() as u16;
-        self.data.truncate(self.payload_offset - 2); //Cut off and drop the entire payload and payload_len
+        self.data.truncate(self.payload_offset - 2); // Cut off and drop the entire payload and payload_len
         let payload_len_bytes = payload_len.to_be_bytes();
-        self.data.reserve_exact(payload_len as usize + 2); //Reserve room for payload and len field.
+        self.data.reserve_exact(payload_len as usize + 2); // Reserve room for payload and len field.
         self.data.extend(payload_len_bytes.iter());
         self.data.extend(payload);
     }
@@ -108,7 +108,6 @@ mod tests {
 
     #[test]
     fn ethernet_frame() {
-        //Example frame with 0 payload
         let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let frame = EthernetFrame::new(&mut data).unwrap();
         assert_eq!(
