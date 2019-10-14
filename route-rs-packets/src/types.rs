@@ -31,6 +31,7 @@ impl fmt::Display for MacAddr {
     }
 }
 
+/*
 //Most significant byte is 0th
 #[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
 pub struct Ipv4Addr {
@@ -53,6 +54,7 @@ impl Ipv4Addr {
     }
 }
 
+
 impl fmt::Display for Ipv4Addr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -62,7 +64,9 @@ impl fmt::Display for Ipv4Addr {
         )
     }
 }
+*/
 
+/*
 #[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
 pub struct Ipv6Addr {
     pub words: [u16; 8],
@@ -121,6 +125,7 @@ impl fmt::Display for Ipv6Addr {
         )
     }
 }
+*/
 
 #[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq, Debug)]
