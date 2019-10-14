@@ -303,7 +303,7 @@ mod tests {
         let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 
         assert_eq!(packet.src_addr(), src_addr);
-        packet.set_src_addr(new_src_addr.clone());
+        packet.set_src_addr(new_src_addr);
         assert_eq!(packet.src_addr(), new_src_addr);
     }
 
@@ -326,7 +326,7 @@ mod tests {
         let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 
         assert_eq!(packet.dest_addr(), dest_addr);
-        packet.set_dest_addr(new_dest_addr.clone());
+        packet.set_dest_addr(new_dest_addr);
         assert_eq!(packet.dest_addr(), new_dest_addr);
     }
 
