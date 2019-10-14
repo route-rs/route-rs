@@ -7,6 +7,7 @@ use crossbeam::crossbeam_channel::{Receiver, Sender};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
+#[derive(Default)]
 pub struct ClassifyLink<C: Classifier> {
     in_stream: Option<PacketStream<C::Packet>>,
     classifier: Option<C>,

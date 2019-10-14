@@ -1,4 +1,4 @@
-use crate::element::{Element};
+use crate::element::Element;
 use std::marker::PhantomData;
 
 /* DropElement
