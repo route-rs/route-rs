@@ -2,6 +2,7 @@ use crate::*;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::convert::TryInto;
+use std::net::Ipv6Addr;
 
 #[allow(dead_code)]
 pub struct Ipv6Packet<'packet> {
@@ -101,23 +102,27 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 
     pub fn src_addr(&self) -> Ipv6Addr {
-        Ipv6Addr::from_byte_slice(&self.data[self.packet_offset + 8..self.packet_offset + 24])
-            .unwrap()
+        let data: [u8; 16] = self.data[self.packet_offset + 8..self.packet_offset + 24]
+            .try_into()
+            .unwrap();
+        Ipv6Addr::from(data)
     }
 
     pub fn dest_addr(&self) -> Ipv6Addr {
-        Ipv6Addr::from_byte_slice(&self.data[self.packet_offset + 24..self.packet_offset + 40])
-            .unwrap()
+        let data: [u8; 16] = self.data[self.packet_offset + 24..self.packet_offset + 40]
+            .try_into()
+            .unwrap();
+        Ipv6Addr::from(data)
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv6Addr) {
         self.data[self.packet_offset + 8..self.packet_offset + 24]
-            .copy_from_slice(&addr.bytes()[..]);
+            .copy_from_slice(&addr.octets());
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
         self.data[self.packet_offset + 24..self.packet_offset + 40]
-            .copy_from_slice(&addr.bytes()[..]);
+            .copy_from_slice(&addr.octets());
     }
 
     //TODO: Test the get and set for extension headers.
@@ -257,12 +262,12 @@ mod tests {
             14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let src_addr = Ipv6Addr::new([
+        let src_addr = Ipv6Addr::new(
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
-        ]);
-        let dest_addr = Ipv6Addr::new([
+        );
+        let dest_addr = Ipv6Addr::new(
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
-        ]);
+        );
 
         let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
         frame.set_payload(&ip_data);
@@ -287,13 +292,13 @@ mod tests {
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let src_addr = Ipv6Addr::new([
+        let src_addr = Ipv6Addr::new(
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
-        ]);
+        );
 
-        let new_src_addr = Ipv6Addr::new([
+        let new_src_addr = Ipv6Addr::new(
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
-        ]);
+        );
 
         let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 
@@ -310,13 +315,13 @@ mod tests {
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let dest_addr = Ipv6Addr::new([
+        let dest_addr = Ipv6Addr::new(
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
-        ]);
+        );
 
-        let new_dest_addr = Ipv6Addr::new([
+        let new_dest_addr = Ipv6Addr::new(
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
-        ]);
+        );
 
         let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
 

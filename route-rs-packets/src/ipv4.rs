@@ -1,6 +1,7 @@
 use crate::*;
 use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
+use std::net::Ipv4Addr;
 
 pub struct Ipv4Packet<'packet> {
     pub data: PacketData<'packet>,
@@ -46,27 +47,31 @@ impl<'packet> Ipv4Packet<'packet> {
     }
 
     pub fn src_addr(&self) -> Ipv4Addr {
-        let bytes =
+        /*let bytes =
             <[u8; 4]>::try_from(&self.data[(self.packet_offset + 12)..(self.packet_offset + 16)])
                 .unwrap();
         Ipv4Addr::new(bytes)
+        */
+        let data: [u8; 4] = self.data[self.packet_offset + 12..self.packet_offset + 16]
+            .try_into()
+            .unwrap();
+        Ipv4Addr::from(data)
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
-        self.data[self.packet_offset + 12..self.packet_offset + 4].copy_from_slice(&addr.bytes[..]);
+        self.data[self.packet_offset + 12..self.packet_offset + 16].copy_from_slice(&addr.octets());
         self.validated_checksum = false;
     }
 
     pub fn dest_addr(&self) -> Ipv4Addr {
-        let bytes =
-            <[u8; 4]>::try_from(&self.data[(self.packet_offset + 16)..(self.packet_offset + 20)])
-                .unwrap();
-        Ipv4Addr::new(bytes)
+        let data: [u8; 4] = self.data[self.packet_offset + 16..self.packet_offset + 20]
+            .try_into()
+            .unwrap();
+        Ipv4Addr::from(data)
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
-        self.data[self.packet_offset + 16..self.packet_offset + 20]
-            .copy_from_slice(&addr.bytes[..]);
+        self.data[self.packet_offset + 16..self.packet_offset + 20].copy_from_slice(&addr.octets());
         self.validated_checksum = false;
     }
 
@@ -275,8 +280,8 @@ mod tests {
 
         let packet = Ipv4Packet::try_from(frame).unwrap();
 
-        assert_eq!(packet.src_addr(), Ipv4Addr::new([192, 178, 128, 0]));
-        assert_eq!(packet.dest_addr(), Ipv4Addr::new([10, 0, 0, 1]));
+        assert_eq!(packet.src_addr(), Ipv4Addr::new(192, 178, 128, 0));
+        assert_eq!(packet.dest_addr(), Ipv4Addr::new(10, 0, 0, 1));
         assert_eq!(packet.ihl(), 5);
         assert_eq!(packet.payload().len(), 0);
         assert_eq!(packet.options(), None);
