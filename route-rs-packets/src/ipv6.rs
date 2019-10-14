@@ -15,13 +15,13 @@ pub struct Ipv6Packet<'packet> {
 
 impl<'packet> Ipv6Packet<'packet> {
     fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv6Packet, &'static str> {
-        //Header of Ethernet Frame: 14bytes
-        //Haeder of IPv6 Frame: 40bytes minimum
+        // Header of Ethernet Frame: 14bytes
+        // Haeder of IPv6 Frame: 40bytes minimum
         if packet.len() < packet_offset + 40 {
             return Err("Packet is too short to be an Ipv6Packet");
         }
 
-        //Check version number
+        // Check version number
         let version = (packet[packet_offset] & 0xF0) >> 4;
         if version != 6 {
             return Err("Packet has incorrect version, is not Ipv6Packet");
@@ -125,12 +125,12 @@ impl<'packet> Ipv6Packet<'packet> {
             .copy_from_slice(&addr.octets());
     }
 
-    //TODO: Test the get and set for extension headers.
+    // TODO: Test the get and set for extension headers.
     pub fn extension_headers(&self) -> Vec<Cow<[u8]>> {
         let mut headers = Vec::<Cow<[u8]>>::new();
         let mut next_header = self.next_header();
         let mut header_ext_len;
-        let mut offset = self.packet_offset + 40; //First byte of first header
+        let mut offset = self.packet_offset + 40; // First byte of first header
         loop {
             match next_header {
                 IpProtocol::HOPOPT
@@ -145,7 +145,8 @@ impl<'packet> Ipv6Packet<'packet> {
                 | IpProtocol::Use_for_expiramentation_and_testing => {
                     header_ext_len = self.data[offset + 1];
                     if header_ext_len == 0 {
-                        //fragments have the minimum of 8, but it set to zero for some dumb reason
+                        // Fragments have the minimum of 8, but it set to zero for some dumb reason
+                        // https://en.wikipedia.org/wiki/IPv6_packet#Fragment
                         header_ext_len = 8;
                     }
                     headers.push(Cow::from(
@@ -191,7 +192,7 @@ pub fn get_ipv6_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
 
     let mut header = IpProtocol::from(data[packet_offset + 6]);
     let mut header_ext_len;
-    let mut offset = packet_offset + 40; //First byte of first header
+    let mut offset = packet_offset + 40; // First byte of first header
     loop {
         match header {
             IpProtocol::HOPOPT
@@ -210,7 +211,8 @@ pub fn get_ipv6_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
                 }
                 header_ext_len = data[offset + 1];
                 if header_ext_len == 0 {
-                    //fragments have the minimum of 8, but it set to zero for some dumb reason
+                    // Fragments have the minimum of 8, but it set to zero for some dumb reason
+                    // https://en.wikipedia.org/wiki/IPv6_packet#Fragment
                     header_ext_len = 8;
                 }
                 header = IpProtocol::from(data[offset]);

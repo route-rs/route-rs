@@ -1,10 +1,10 @@
-//Let's use this area for now to declare common structs, constants, and common helper functions.
+// Let's use this area for now to declare common structs, constants, and common helper functions.
 use std::fmt;
 
-///The common datatype that all packet structures share to repreasent their data
+/// The common datatype that all packet structures share to repreasent their data
 pub type PacketData<'packet> = &'packet mut Vec<u8>;
 
-//Most significant byte is 0th
+// Most significant byte is 0th
 #[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
 pub struct MacAddr {
     pub bytes: [u8; 6],
@@ -30,102 +30,6 @@ impl fmt::Display for MacAddr {
         )
     }
 }
-
-/*
-//Most significant byte is 0th
-#[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
-pub struct Ipv4Addr {
-    pub bytes: [u8; 4],
-}
-
-impl Ipv4Addr {
-    pub fn new(bytes: [u8; 4]) -> Ipv4Addr {
-        Ipv4Addr { bytes }
-    }
-
-    pub fn from_byte_slice(bytes: &[u8]) -> Result<Ipv4Addr, &'static str> {
-        if bytes.len() != 4 {
-            return Err("Slice of length is not 4");
-        }
-
-        let mut addr: [u8; 4] = [0; 4];
-        addr.copy_from_slice(bytes);
-        Ok(Ipv4Addr::new(addr))
-    }
-}
-
-
-impl fmt::Display for Ipv4Addr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            " {}.{}.{}.{} ",
-            self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3]
-        )
-    }
-}
-*/
-
-/*
-#[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]
-pub struct Ipv6Addr {
-    pub words: [u16; 8],
-}
-
-impl Ipv6Addr {
-    pub fn new(words: [u16; 8]) -> Ipv6Addr {
-        Ipv6Addr { words }
-    }
-
-    pub fn from_byte_slice(bytes: &[u8]) -> Result<Ipv6Addr, &'static str> {
-        let words: Vec<u16> = bytes
-            .chunks_exact(2)
-            .map(|x| u16::from_be_bytes([x[0], x[1]]))
-            .collect();
-        if words.len() != 8 {
-            return Err("Could not parse bytes into word slice of length 8");
-        }
-        let mut addr: [u16; 8] = [0; 8];
-        addr.copy_from_slice(&words);
-        Ok(Ipv6Addr::new(addr))
-    }
-
-    pub fn from_word_slice(words: &[u16]) -> Result<Ipv6Addr, &'static str> {
-        if words.len() != 8 {
-            return Err("Word slice is not of length 8");
-        }
-        let mut addr: [u16; 8] = [0; 8];
-        addr.copy_from_slice(words);
-        Ok(Ipv6Addr::new(addr))
-    }
-
-    pub fn bytes(&self) -> [u8; 16] {
-        let mut bytes = [0; 16];
-        for (i, word) in self.words.iter().enumerate() {
-            bytes[i * 2] = ((word >> 8) & 0xFF as u16) as u8;
-            bytes[(i * 2) + 1] = (word & 0xFF as u16) as u8;
-        }
-        bytes
-    }
-}
-
-impl fmt::Display for Ipv6Addr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}:{}:{}:{}:{}:{}:{}:{}",
-            self.words[0],
-            self.words[1],
-            self.words[2],
-            self.words[3],
-            self.words[4],
-            self.words[5],
-            self.words[6],
-            self.words[7],
-        )
-    }
-}
-*/
 
 #[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq, Debug)]
