@@ -116,13 +116,11 @@ impl<'packet> Ipv6Packet<'packet> {
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv6Addr) {
-        self.data[self.packet_offset + 8..self.packet_offset + 24]
-            .copy_from_slice(&addr.octets());
+        self.data[self.packet_offset + 8..self.packet_offset + 24].copy_from_slice(&addr.octets());
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
-        self.data[self.packet_offset + 24..self.packet_offset + 40]
-            .copy_from_slice(&addr.octets());
+        self.data[self.packet_offset + 24..self.packet_offset + 40].copy_from_slice(&addr.octets());
     }
 
     // TODO: Test the get and set for extension headers.
