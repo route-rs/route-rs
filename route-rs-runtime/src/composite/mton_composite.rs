@@ -1,5 +1,6 @@
 use crate::link::{CloneLink, JoinLink, Link, LinkBuilder, PacketStream};
 
+#[derive(Default)]
 pub struct MtoNComposite<Packet: Sized + Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     join_queue_capacity: usize,

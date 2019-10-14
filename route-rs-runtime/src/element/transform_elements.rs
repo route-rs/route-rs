@@ -1,4 +1,4 @@
-use crate::element::{Element};
+use crate::element::Element;
 use std::convert::From;
 use std::marker::PhantomData;
 use std::marker::Send;
