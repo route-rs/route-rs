@@ -13,7 +13,7 @@ pub struct ClassifyLink<C: Classifier> {
     classifier: Option<C>,
     dispatcher: Option<Box<dyn Fn(C::Class) -> usize + Send + Sync + 'static>>,
     queue_capacity: usize,
-    branches: Option<usize>,
+    num_egressors: Option<usize>,
 }
 
 impl<C: Classifier> ClassifyLink<C> {
@@ -23,7 +23,7 @@ impl<C: Classifier> ClassifyLink<C> {
             classifier: None,
             dispatcher: None,
             queue_capacity: 10,
-            branches: None,
+            num_egressors: None,
         }
     }
 
@@ -33,7 +33,7 @@ impl<C: Classifier> ClassifyLink<C> {
             classifier: Some(classifier),
             dispatcher: self.dispatcher,
             queue_capacity: self.queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
@@ -46,7 +46,7 @@ impl<C: Classifier> ClassifyLink<C> {
             classifier: self.classifier,
             dispatcher: Some(dispatcher),
             queue_capacity: self.queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
@@ -63,21 +63,24 @@ impl<C: Classifier> ClassifyLink<C> {
             classifier: self.classifier,
             dispatcher: self.dispatcher,
             queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
-    pub fn branches(self, branches: usize) -> Self {
+    pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            (2..=1000).contains(&branches),
-            format!("Branches: {}, must be in range 2..=1000", branches)
+            (1..=1000).contains(&num_egressors),
+            format!(
+                "num_egressors: {}, must be in range 1..=1000",
+                num_egressors
+            )
         );
         ClassifyLink {
             in_stream: self.in_stream,
             classifier: self.classifier,
             dispatcher: self.dispatcher,
             queue_capacity: self.queue_capacity,
-            branches: Some(branches),
+            num_egressors: Some(num_egressors),
         }
     }
 }
@@ -95,7 +98,7 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
             classifier: self.classifier,
             dispatcher: self.dispatcher,
             queue_capacity: self.queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
@@ -106,8 +109,8 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
             panic!("Cannot build link! Missing classifier");
         } else if self.dispatcher.is_none() {
             panic!("Cannot build link! Missing dispatcher");
-        } else if self.branches.is_none() {
-            panic!("Cannot build link! Missing branches");
+        } else if self.num_egressors.is_none() {
+            panic!("Cannot build link! Missing num_egressors");
         } else {
             let mut to_egressors: Vec<Sender<Option<C::Packet>>> = Vec::new();
             let mut egressors: Vec<PacketStream<C::Packet>> = Vec::new();
@@ -116,7 +119,7 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
 
             let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
-            for _ in 0..self.branches.unwrap() {
+            for _ in 0..self.num_egressors.unwrap() {
                 let (to_egressor, from_ingressor) =
                     crossbeam_channel::bounded::<Option<C::Packet>>(self.queue_capacity);
                 let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
@@ -260,7 +263,7 @@ mod tests {
         let even_classifier = ClassifyEvenness::new();
 
         ClassifyLink::new()
-            .branches(10)
+            .num_egressors(10)
             .classifier(even_classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -289,7 +292,7 @@ mod tests {
 
         ClassifyLink::<ClassifyEvenness>::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(10)
+            .num_egressors(10)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
     }
@@ -317,7 +320,7 @@ mod tests {
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(number_branches)
+            .num_egressors(number_branches)
             .classifier(even_classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -353,7 +356,7 @@ mod tests {
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(number_branches)
+            .num_egressors(number_branches)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -385,7 +388,7 @@ mod tests {
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(number_branches)
+            .num_egressors(number_branches)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -448,7 +451,7 @@ mod tests {
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(4)
+            .num_egressors(4)
             .classifier(classifier)
             .dispatcher(Box::new(|fb| match fb {
                 FizzBuzz::FizzBuzz => 0,
@@ -502,7 +505,7 @@ mod tests {
 
         let (fb_runnables, mut fb_egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(4)
+            .num_egressors(4)
             .classifier(fizz_buzz_classifier)
             .dispatcher(Box::new(|fb| match fb {
                 FizzBuzz::FizzBuzz => 0,
@@ -516,7 +519,7 @@ mod tests {
 
         let (mut eo_runnables, mut eo_egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(fb_egressors.pop().unwrap())])
-            .branches(2)
+            .num_egressors(2)
             .classifier(even_odd_classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -553,7 +556,7 @@ mod tests {
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(number_branches)
+            .num_egressors(number_branches)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
