@@ -1,20 +1,21 @@
+use crate::element::Element;
 use crate::link::{Link, LinkBuilder, PacketStream};
 use futures::{Async, Future, Poll};
 
 /// Link that drops all packets ingressed.
 #[derive(Default)]
-pub struct BlackHoleLink<Packet: Sized> {
-    in_streams: Option<Vec<PacketStream<Packet>>>,
+pub struct BlackHoleLink<E: Element> {
+    in_streams: Option<Vec<PacketStream<E::Input>>>,
 }
 
-impl<Packet> BlackHoleLink<Packet> {
+impl<E: Element> BlackHoleLink<E> {
     pub fn new() -> Self {
         BlackHoleLink { in_streams: None }
     }
 }
 
-impl<Packet: Sized + 'static> LinkBuilder<Packet, ()> for BlackHoleLink<Packet> {
-    fn ingressors(self, ingress_streams: Vec<PacketStream<Packet>>) -> Self {
+impl<E: Element + 'static> LinkBuilder<E::Input, ()> for BlackHoleLink<E> {
+    fn ingressors(self, ingress_streams: Vec<PacketStream<E::Input>>) -> Self {
         BlackHoleLink {
             in_streams: Some(ingress_streams),
         }
@@ -25,24 +26,26 @@ impl<Packet: Sized + 'static> LinkBuilder<Packet, ()> for BlackHoleLink<Packet> 
             panic!("Cannot build link! Missing input streams");
         } else {
             (
-                vec![Box::new(BlackHoleIngressor::new(self.in_streams.unwrap()))],
+                vec![Box::new(BlackHoleIngressor::<E>::new(
+                    self.in_streams.unwrap(),
+                ))],
                 vec![],
             )
         }
     }
 }
 
-struct BlackHoleIngressor<Packet> {
-    in_streams: Vec<PacketStream<Packet>>,
+struct BlackHoleIngressor<E: Element> {
+    in_streams: Vec<PacketStream<E::Input>>,
 }
 
-impl<Packet: Sized> BlackHoleIngressor<Packet> {
-    fn new(in_streams: Vec<PacketStream<Packet>>) -> Self {
+impl<E: Element> BlackHoleIngressor<E> {
+    fn new(in_streams: Vec<PacketStream<E::Input>>) -> Self {
         BlackHoleIngressor { in_streams }
     }
 }
 
-impl<Packet: Sized> Future for BlackHoleIngressor<Packet> {
+impl<E: Element> Future for BlackHoleIngressor<E> {
     type Item = ();
     type Error = ();
 
@@ -60,7 +63,7 @@ impl<Packet: Sized> Future for BlackHoleIngressor<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::Classifier;
+    use crate::element::{Classifier, IdentityElement};
     use crate::link::{ClassifyLink, TokioRunnable};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
@@ -97,7 +100,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_if_improperly_built() {
-        BlackHoleLink::<i32>::new().build_link();
+        BlackHoleLink::<IdentityElement<i32>>::new().build_link();
     }
 
     #[test]
@@ -105,7 +108,7 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = immediate_stream(packets.clone());
 
-        let (runnables, _) = BlackHoleLink::new()
+        let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
 
@@ -122,7 +125,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let (runnables, _) = BlackHoleLink::new()
+        let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
 
@@ -145,7 +148,7 @@ mod tests {
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
 
-        let (black_hole_runnables, _) = BlackHoleLink::new()
+        let (black_hole_runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
             .ingressors(vec![Box::new(egressors.pop().unwrap())])
             .build_link();
 
