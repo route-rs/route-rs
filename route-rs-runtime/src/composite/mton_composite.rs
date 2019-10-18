@@ -5,7 +5,7 @@ pub struct MtoNComposite<Packet: Sized + Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     join_queue_capacity: usize,
     clone_queue_capacity: usize,
-    branches: Option<usize>,
+    num_egressors: Option<usize>,
 }
 
 impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
@@ -14,7 +14,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
             in_streams: None,
             join_queue_capacity: 10,
             clone_queue_capacity: 10,
-            branches: None,
+            num_egressors: None,
         }
     }
 
@@ -22,16 +22,18 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
     /// Valid range is 1..=1000
     pub fn join_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            queue_capacity <= 1000,
-            format!("queue_capacity: {} > 1000", queue_capacity)
+            (1..=1000).contains(&queue_capacity),
+            format!(
+                "queue_capacity: {}, must be in range 1..=1000",
+                queue_capacity
+            )
         );
-        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: queue_capacity,
             clone_queue_capacity: self.clone_queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
@@ -39,31 +41,35 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
     /// Valid range is 1..=1000
     pub fn tee_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            queue_capacity <= 1000,
-            format!("queue_capacity: {} > 1000", queue_capacity)
+            (1..=1000).contains(&queue_capacity),
+            format!(
+                "queue_capacity: {}, must be in range 1..=1000",
+                queue_capacity
+            )
         );
-        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: self.join_queue_capacity,
             clone_queue_capacity: queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
-    pub fn branches(self, branches: usize) -> Self {
+    pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            branches <= 1000,
-            format!("compsite branches: {} > 1000", branches)
+            (1..=1000).contains(&num_egressors),
+            format!(
+                "num_egressors: {}, must be in range 1..=1000",
+                num_egressors
+            )
         );
-        assert_ne!(branches, 0, "branches must be non-zero");
 
         MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: self.join_queue_capacity,
             clone_queue_capacity: self.clone_queue_capacity,
-            branches: Some(branches),
+            num_egressors: Some(num_egressors),
         }
     }
 }
@@ -71,22 +77,25 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
 impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNComposite<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
-            in_streams.len() > 1 && in_streams.len() <= 1000,
-            format!("Input streams {} not in 2..=1000", in_streams.len())
+            (1..=1000).contains(&in_streams.len()),
+            format!(
+                "Input streams: {} must be in range 1..=1000",
+                in_streams.len()
+            )
         );
         MtoNComposite {
             in_streams: Some(in_streams),
             join_queue_capacity: self.join_queue_capacity,
             clone_queue_capacity: self.clone_queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
     fn build_link(self) -> Link<Packet> {
         if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input stream");
-        } else if self.branches.is_none() {
-            panic!("Cannot build link! Missing number of branches");
+        } else if self.num_egressors.is_none() {
+            panic!("Cannot build link! Missing number of num_egressors");
         } else {
             let (join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
@@ -95,7 +104,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
             let (mut clone_link_runnables, clone_link_egressors) = CloneLink::new()
                 .ingressors(join_egressors)
                 .queue_capacity(self.clone_queue_capacity)
-                .branches(self.branches.unwrap())
+                .num_egressors(self.num_egressors.unwrap())
                 .build_link();
             clone_link_runnables.extend(join_runnables);
             (clone_link_runnables, clone_link_egressors)
@@ -126,7 +135,7 @@ mod tests {
     #[test]
     fn mton_composite() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let number_branches = 2;
+        let number_num_egressors = 2;
         let packet_generator0 = immediate_stream(packets.clone());
         let packet_generator1 = immediate_stream(packets.clone());
 
@@ -135,7 +144,7 @@ mod tests {
         input_streams.push(Box::new(packet_generator1));
 
         let (mut runnables, mut egressors) = MtoNComposite::new()
-            .branches(number_branches)
+            .num_egressors(number_num_egressors)
             .ingressors(input_streams)
             .build_link();
 

@@ -136,14 +136,14 @@ mod tests {
 
     #[test]
     fn odd_packets() {
-        let number_branches = 2;
+        let num_egressors = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
         let classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressors(vec![Box::new(packet_generator)])
-            .branches(number_branches)
+            .num_egressors(num_egressors)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();

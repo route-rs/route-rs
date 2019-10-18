@@ -10,7 +10,7 @@ use std::sync::Arc;
 pub struct CloneLink<Packet: Sized + Clone + Send> {
     in_stream: Option<PacketStream<Packet>>,
     queue_capacity: usize,
-    branches: Option<usize>,
+    num_egressors: Option<usize>,
 }
 
 impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
@@ -18,7 +18,7 @@ impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
         CloneLink {
             in_stream: None,
             queue_capacity: 10,
-            branches: None,
+            num_egressors: None,
         }
     }
 
@@ -26,29 +26,33 @@ impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
     /// Valid range is 1..=1000
     pub fn queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            queue_capacity <= 1000,
-            format!("queue_capacity: {} > 1000", queue_capacity)
+            (1..=1000).contains(&queue_capacity),
+            format!(
+                "queue_capacity: {}, must be in range 1..=1000",
+                queue_capacity
+            )
         );
-        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
         CloneLink {
             in_stream: self.in_stream,
             queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
-    pub fn branches(self, branches: usize) -> Self {
+    pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            branches <= 1000,
-            format!("Tee Link branches: {} > 1000", branches)
+            (1..=1000).contains(&num_egressors),
+            format!(
+                "num_egressors: {}, must be in range 1..=1000",
+                num_egressors
+            )
         );
-        assert_ne!(branches, 0, "branches must be non-zero");
 
         CloneLink {
             in_stream: self.in_stream,
             queue_capacity: self.queue_capacity,
-            branches: Some(branches),
+            num_egressors: Some(num_egressors),
         }
     }
 }
@@ -58,20 +62,20 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Clo
         assert_eq!(
             in_streams.len(),
             1,
-            "Tee links may only take one input stream!"
+            "Clone links may only take one input stream!"
         );
         CloneLink {
             in_stream: Some(in_streams.remove(0)),
             queue_capacity: self.queue_capacity,
-            branches: self.branches,
+            num_egressors: self.num_egressors,
         }
     }
 
     fn build_link(self) -> Link<Packet> {
         if self.in_stream.is_none() {
             panic!("Cannot build link! Missing input stream");
-        } else if self.branches.is_none() {
-            panic!("Cannot build link! Missing number of branches");
+        } else if self.num_egressors.is_none() {
+            panic!("Cannot build link! Missing number of num_egressors");
         } else {
             let mut to_egressors: Vec<Sender<Option<Packet>>> = Vec::new();
             let mut egressors: Vec<PacketStream<Packet>> = Vec::new();
@@ -80,7 +84,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Clo
 
             let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
-            for _ in 0..self.branches.unwrap() {
+            for _ in 0..self.num_egressors.unwrap() {
                 let (to_egressor, from_ingressor) =
                     crossbeam_channel::bounded::<Option<Packet>>(self.queue_capacity);
                 let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
@@ -191,12 +195,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        CloneLink::<i32>::new().branches(10).build_link();
+        CloneLink::<i32>::new().num_egressors(10).build_link();
     }
 
     #[test]
     #[should_panic]
-    fn panics_when_built_without_branches() {
+    fn panics_when_built_without_num_egressors() {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
@@ -213,13 +217,13 @@ mod tests {
 
         CloneLink::new()
             .ingressors(vec![Box::new(packet_generator0)])
-            .branches(2)
+            .num_egressors(2)
             .build_link();
 
         let packet_generator1 = immediate_stream(packets.clone());
 
         CloneLink::new()
-            .branches(2)
+            .num_egressors(2)
             .ingressors(vec![Box::new(packet_generator1)])
             .build_link();
     }
@@ -227,11 +231,11 @@ mod tests {
     #[test]
     fn bringup_teardown() {
         let queue_size = 5;
-        let number_branches = 1;
+        let number_num_egressors = 1;
         let packet_generator: PacketStream<i32> = immediate_stream(vec![]);
 
         let (mut runnables, mut egressors) = CloneLink::new()
-            .branches(number_branches)
+            .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
@@ -250,11 +254,11 @@ mod tests {
     #[test]
     fn one_way() {
         let queue_size = 5;
-        let number_branches = 1;
+        let number_num_egressors = 1;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
         let (mut runnables, mut egressors) = CloneLink::new()
-            .branches(number_branches)
+            .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
@@ -273,11 +277,11 @@ mod tests {
     #[test]
     fn two_way() {
         let queue_size = 5;
-        let number_branches = 2;
+        let number_num_egressors = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
         let (mut runnables, mut egressors) = CloneLink::new()
-            .branches(number_branches)
+            .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
@@ -302,11 +306,11 @@ mod tests {
     #[test]
     fn three_way() {
         let queue_size = 5;
-        let number_branches = 3;
+        let number_num_egressors = 3;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
         let (mut runnables, mut egressors) = CloneLink::new()
-            .branches(number_branches)
+            .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
             .ingressors(vec![Box::new(packet_generator)])
             .build_link();
