@@ -36,7 +36,7 @@ use crate::element::Element;
 /// All Links communicate through streams of packets. This allows them to be composable.
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
 /// Some Links may need to be driven by Tokio. This represents a handle to something Tokio can run.
-pub type TokioRunnable = Box<dyn Future<Item = (), Error = ()> + Send>;
+pub type TokioRunnable = Box<dyn Future<Item = (), Error = ()> + Send + 'static>;
 /// LinkBuilders build this.
 pub type Link<Output> = (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
 
