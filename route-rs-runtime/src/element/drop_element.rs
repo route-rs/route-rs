@@ -5,11 +5,11 @@ use std::marker::PhantomData;
   This element drops every packet that it receives
 */
 #[derive(Default)]
-pub struct DropElement<A: Sized> {
+pub struct DropElement<A: Send + Clone> {
     phantom: PhantomData<A>,
 }
 
-impl<A> DropElement<A> {
+impl<A: Send + Clone> DropElement<A> {
     pub fn new() -> DropElement<A> {
         DropElement {
             phantom: PhantomData,
@@ -17,7 +17,7 @@ impl<A> DropElement<A> {
     }
 }
 
-impl<A: Send> Element for DropElement<A> {
+impl<A: Send + Clone> Element for DropElement<A> {
     type Input = A;
     type Output = A;
 
