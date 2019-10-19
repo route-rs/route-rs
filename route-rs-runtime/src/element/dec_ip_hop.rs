@@ -27,7 +27,7 @@ impl Element for DecIpv4HopLimit {
 }
 
 /// Decrements the TTL of an IPv6 packet
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DecIpv6HopLimit {}
 
 impl DecIpv6HopLimit {

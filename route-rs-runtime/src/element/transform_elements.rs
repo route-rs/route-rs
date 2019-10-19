@@ -8,12 +8,12 @@ use std::marker::Send;
   This is an element that takes type A and passes the equivalent type B using From
 */
 #[derive(Default)]
-pub struct TransformElement<A: Sized, B: Sized> {
+pub struct TransformElement<A: Send + Clone, B: Send + Clone> {
     phantom_in: PhantomData<A>,
     phantom_out: PhantomData<B>,
 }
 
-impl<A, B> TransformElement<A, B> {
+impl<A: Send + Clone, B: Send + Clone> TransformElement<A, B> {
     pub fn new() -> TransformElement<A, B> {
         TransformElement {
             phantom_in: PhantomData,
@@ -22,7 +22,7 @@ impl<A, B> TransformElement<A, B> {
     }
 }
 
-impl<A: Send, B: From<A> + Send> Element for TransformElement<A, B> {
+impl<A: Send + Clone, B: From<A> + Send + Clone> Element for TransformElement<A, B> {
     type Input = A;
     type Output = B;
 

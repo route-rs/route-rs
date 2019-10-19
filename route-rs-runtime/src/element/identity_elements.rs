@@ -5,11 +5,11 @@ use std::marker::PhantomData;
   This is an element that passes what it has received
 */
 #[derive(Default)]
-pub struct IdentityElement<A: Sized> {
+pub struct IdentityElement<A: Send + Clone> {
     phantom: PhantomData<A>,
 }
 
-impl<A> IdentityElement<A> {
+impl<A: Send + Clone> IdentityElement<A> {
     pub fn new() -> IdentityElement<A> {
         IdentityElement {
             phantom: PhantomData,
@@ -17,10 +17,7 @@ impl<A> IdentityElement<A> {
     }
 }
 
-impl<A> Element for IdentityElement<A>
-where
-    A: std::marker::Send,
-{
+impl<A: Send + Clone> Element for IdentityElement<A> {
     type Input = A;
     type Output = A;
 

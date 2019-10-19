@@ -7,13 +7,13 @@ use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 #[derive(Default)]
-pub struct CloneLink<Packet: Sized + Clone + Send> {
+pub struct CloneLink<Packet: Clone + Send> {
     in_stream: Option<PacketStream<Packet>>,
     queue_capacity: usize,
     num_egressors: Option<usize>,
 }
 
-impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
+impl<Packet: Clone + Send> CloneLink<Packet> {
     pub fn new() -> Self {
         CloneLink {
             in_stream: None,
@@ -57,7 +57,7 @@ impl<Packet: Sized + Clone + Send> CloneLink<Packet> {
     }
 }
 
-impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for CloneLink<Packet> {
+impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for CloneLink<Packet> {
     fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),
@@ -138,7 +138,7 @@ impl<P> Drop for CloneIngressor<P> {
     }
 }
 
-impl<P: Sized + Clone> Future for CloneIngressor<P> {
+impl<P: Send + Clone> Future for CloneIngressor<P> {
     type Item = ();
     type Error = ();
 
