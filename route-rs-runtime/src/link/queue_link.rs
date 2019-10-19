@@ -443,7 +443,7 @@ mod tests {
         let elem0 = IdentityElement::new();
         let elem1 = IdentityElement::new();
 
-        let (runnables0, mut egressors0) = QueueLink::new()
+        let (mut runnables0, mut egressors0) = QueueLink::new()
             .ingressor(packet_generator)
             .element(elem0)
             .build_link();
@@ -456,7 +456,7 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors1.remove(0)), s);
 
-        runnables1.extend(runnables0);
+        runnables1.append(&mut runnables0);
         runnables1.push(Box::new(collector));
 
         run_tokio(runnables1);
@@ -480,7 +480,7 @@ mod tests {
             .element(elem0)
             .build_link();
 
-        let (runnables1, mut egressors1) = QueueLink::new()
+        let (mut runnables1, mut egressors1) = QueueLink::new()
             .ingressor(egressors0.remove(0))
             .element(elem1)
             .build_link();
@@ -498,7 +498,7 @@ mod tests {
         let (s, r) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors3.remove(0)), s);
 
-        runnables3.extend(runnables1);
+        runnables3.append(&mut runnables1);
         runnables3.push(Box::new(collector));
 
         run_tokio(runnables3);

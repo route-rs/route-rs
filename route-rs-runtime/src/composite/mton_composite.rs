@@ -97,7 +97,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
         } else if self.num_egressors.is_none() {
             panic!("Cannot build link! Missing number of num_egressors");
         } else {
-            let (join_runnables, join_egressors) = JoinLink::new()
+            let (mut join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
@@ -106,7 +106,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
                 .queue_capacity(self.clone_queue_capacity)
                 .num_egressors(self.num_egressors.unwrap())
                 .build_link();
-            clone_link_runnables.extend(join_runnables);
+            clone_link_runnables.append(&mut join_runnables);
             (clone_link_runnables, clone_link_egressors)
         }
     }
