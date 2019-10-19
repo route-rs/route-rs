@@ -55,6 +55,14 @@ impl<Packet: Clone + Send> CloneLink<Packet> {
             num_egressors: Some(num_egressors),
         }
     }
+
+    pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+        CloneLink {
+            in_stream: Some(in_stream),
+            queue_capacity: self.queue_capacity,
+            num_egressors: self.num_egressors,
+        }
+    }
 }
 
 impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for CloneLink<Packet> {
@@ -216,7 +224,7 @@ mod tests {
         let packet_generator0 = immediate_stream(packets.clone());
 
         CloneLink::new()
-            .ingressors(vec![Box::new(packet_generator0)])
+            .ingressor(packet_generator0)
             .num_egressors(2)
             .build_link();
 
@@ -224,7 +232,7 @@ mod tests {
 
         CloneLink::new()
             .num_egressors(2)
-            .ingressors(vec![Box::new(packet_generator1)])
+            .ingressor(packet_generator1)
             .build_link();
     }
 
@@ -237,7 +245,7 @@ mod tests {
         let (mut runnables, mut egressors) = CloneLink::new()
             .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .build_link();
 
         let (s0, collector_output) = crossbeam_channel::unbounded();
@@ -260,7 +268,7 @@ mod tests {
         let (mut runnables, mut egressors) = CloneLink::new()
             .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .build_link();
 
         let (s0, collector_output) = crossbeam_channel::unbounded();
@@ -283,7 +291,7 @@ mod tests {
         let (mut runnables, mut egressors) = CloneLink::new()
             .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .build_link();
 
         let (s1, collector1_output) = crossbeam_channel::unbounded();
@@ -312,7 +320,7 @@ mod tests {
         let (mut runnables, mut egressors) = CloneLink::new()
             .num_egressors(number_num_egressors)
             .queue_capacity(queue_size)
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .build_link();
 
         let (s2, collector2_output) = crossbeam_channel::unbounded();

@@ -334,7 +334,7 @@ mod tests {
         let elem = IdentityElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .build_link();
 
@@ -356,7 +356,7 @@ mod tests {
         let elem = IdentityElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .build_link();
 
@@ -381,7 +381,7 @@ mod tests {
         let elem = IdentityElement::new();
 
         let (_, _) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .queue_capacity(queue_size)
             .build_link();
@@ -396,7 +396,7 @@ mod tests {
         let elem = IdentityElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .queue_capacity(queue_size)
             .build_link();
@@ -420,7 +420,7 @@ mod tests {
         let elem = IdentityElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .build_link();
 
@@ -444,12 +444,12 @@ mod tests {
         let elem1 = IdentityElement::new();
 
         let (runnables0, mut egressors0) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem0)
             .build_link();
 
         let (mut runnables1, mut egressors1) = QueueLink::new()
-            .ingressors(vec![Box::new(egressors0.remove(0))])
+            .ingressor(egressors0.remove(0))
             .element(elem1)
             .build_link();
 
@@ -481,17 +481,17 @@ mod tests {
             .build_link();
 
         let (runnables1, mut egressors1) = QueueLink::new()
-            .ingressors(vec![Box::new(egressors0.remove(0))])
+            .ingressor(egressors0.remove(0))
             .element(elem1)
             .build_link();
 
         let (_, mut egressors2) = SyncLinkBuilder::new()
-            .ingressor(Box::new(egressors1.remove(0)))
+            .ingressor(egressors1.remove(0))
             .element(elem2)
             .build_link();
 
         let (mut runnables3, mut egressors3) = QueueLink::new()
-            .ingressors(vec![Box::new(egressors2.remove(0))])
+            .ingressor(egressors2.remove(0))
             .element(elem3)
             .build_link();
 
@@ -518,7 +518,7 @@ mod tests {
         let elem = IdentityElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(Box::new(packet_generator))
             .element(elem)
             .build_link();
 
@@ -541,7 +541,7 @@ mod tests {
         let elem = TransformElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .build_link();
 
@@ -565,7 +565,7 @@ mod tests {
         let elem = DropElement::new();
 
         let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .element(elem)
             .build_link();
 
