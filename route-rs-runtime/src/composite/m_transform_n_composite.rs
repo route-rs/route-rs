@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn m_transform_n_composite() {
-        let packets = vec![0xDEADBEEF, 0xBEEFDEAD, 0x0A000001, 0xFFFFFFFF];
+        let packets = vec![0xDEAD_BEEF, 0xBEEF_DEAD, 0x0A00_0001, 0xFFFF_FFFF];
         let number_num_egressors = 2;
         let packet_generator0 = immediate_stream(packets.clone());
         let packet_generator1 = immediate_stream(packets.clone());
