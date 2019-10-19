@@ -7,12 +7,12 @@ use futures::{task, Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 #[derive(Default)]
-pub struct JoinLink<Packet: Sized + Send> {
+pub struct JoinLink<Packet: Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     queue_capacity: usize,
 }
 
-impl<Packet: Sized + Send> JoinLink<Packet> {
+impl<Packet: Send + Clone> JoinLink<Packet> {
     pub fn new() -> Self {
         JoinLink {
             in_streams: None,
@@ -36,9 +36,29 @@ impl<Packet: Sized + Send> JoinLink<Packet> {
             queue_capacity,
         }
     }
+
+    /// Appends the ingressor to the ingressors of the blackhole.
+    pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+        match self.in_streams {
+            None => {
+                let in_streams = Some(vec![in_stream]);
+                JoinLink {
+                    in_streams,
+                    queue_capacity: self.queue_capacity,
+                }
+            }
+            Some(mut in_streams) => {
+                in_streams.push(in_stream);
+                JoinLink {
+                    in_streams: Some(in_streams),
+                    queue_capacity: self.queue_capacity,
+                }
+            }
+        }
+    }
 }
 
-impl<Packet: Sized + Send + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
+impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
             (1..=1000).contains(&in_streams.len()),
@@ -304,6 +324,28 @@ mod tests {
         input_streams.push(Box::new(packet_generator1));
 
         let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+
+        let (s, collector_output) = crossbeam_channel::unbounded();
+        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
+
+        runnables.push(Box::new(collector));
+
+        run_tokio(runnables);
+
+        let link_output: Vec<_> = collector_output.iter().collect();
+        assert_eq!(link_output.len(), packets.len() * 2);
+    }
+
+    #[test]
+    fn multiple_ingressor_calls_works() {
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+        let packet_generator0 = immediate_stream(packets.clone());
+        let packet_generator1 = immediate_stream(packets.clone());
+
+        let (mut runnables, mut egressors) = JoinLink::new()
+            .ingressor(packet_generator0)
+            .ingressor(packet_generator1)
+            .build_link();
 
         let (s, collector_output) = crossbeam_channel::unbounded();
         let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);

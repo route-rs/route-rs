@@ -12,6 +12,22 @@ impl<E: Element> BlackHoleLink<E> {
     pub fn new() -> Self {
         BlackHoleLink { in_streams: None }
     }
+
+    /// Appends the ingressor to the ingressors of the blackhole.
+    pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
+        match self.in_streams {
+            None => {
+                let in_streams = Some(vec![in_stream]);
+                BlackHoleLink { in_streams }
+            }
+            Some(mut in_streams) => {
+                in_streams.push(in_stream);
+                BlackHoleLink {
+                    in_streams: Some(in_streams),
+                }
+            }
+        }
+    }
 }
 
 impl<E: Element + 'static> LinkBuilder<E::Input, ()> for BlackHoleLink<E> {
@@ -99,8 +115,20 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn panics_if_improperly_built() {
+    fn panics_if_no_input_stream_provided() {
         BlackHoleLink::<IdentityElement<i32>>::new().build_link();
+    }
+
+    #[test]
+    fn multiple_ingressor_calls_works() {
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packet_generator0 = immediate_stream(packets.clone());
+        let packet_generator1 = immediate_stream(packets.clone());
+        let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
+            .ingressor(packet_generator0)
+            .ingressor(packet_generator1)
+            .build_link();
+        run_tokio(runnables);
     }
 
     #[test]
@@ -109,7 +137,7 @@ mod tests {
         let packet_generator = immediate_stream(packets.clone());
 
         let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .build_link();
 
         run_tokio(runnables);
@@ -126,7 +154,7 @@ mod tests {
         );
 
         let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(Box::new(packet_generator))
             .build_link();
 
         run_tokio(runnables);
@@ -142,14 +170,14 @@ mod tests {
         let classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(num_egressors)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
 
         let (black_hole_runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
-            .ingressors(vec![Box::new(egressors.pop().unwrap())])
+            .ingressor(egressors.pop().unwrap())
             .build_link();
 
         let (s0, link0_port0_collector_output) = crossbeam_channel::unbounded();

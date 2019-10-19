@@ -83,6 +83,16 @@ impl<C: Classifier> ClassifyLink<C> {
             num_egressors: Some(num_egressors),
         }
     }
+
+    pub fn ingressor(self, in_stream: PacketStream<C::Packet>) -> Self {
+        ClassifyLink {
+            in_stream: Some(in_stream),
+            classifier: self.classifier,
+            dispatcher: self.dispatcher,
+            queue_capacity: self.queue_capacity,
+            num_egressors: self.num_egressors,
+        }
+    }
 }
 
 impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for ClassifyLink<C> {
@@ -278,7 +288,7 @@ mod tests {
         let even_classifier = ClassifyEvenness::new();
 
         ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .classifier(even_classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -291,7 +301,7 @@ mod tests {
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
         ClassifyLink::<ClassifyEvenness>::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(10)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
@@ -306,7 +316,7 @@ mod tests {
         let even_classifier = ClassifyEvenness::new();
 
         ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .classifier(even_classifier)
             .build_link();
     }
@@ -319,7 +329,7 @@ mod tests {
         let even_classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(number_branches)
             .classifier(even_classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
@@ -355,7 +365,7 @@ mod tests {
         let classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(number_branches)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
@@ -387,7 +397,7 @@ mod tests {
         let classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(number_branches)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
@@ -450,7 +460,7 @@ mod tests {
         let classifier = ClassifyFizzBuzz::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(4)
             .classifier(classifier)
             .dispatcher(Box::new(|fb| match fb {
@@ -504,7 +514,7 @@ mod tests {
         let fizz_buzz_classifier = ClassifyFizzBuzz::new();
 
         let (fb_runnables, mut fb_egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(packet_generator)
             .num_egressors(4)
             .classifier(fizz_buzz_classifier)
             .dispatcher(Box::new(|fb| match fb {
@@ -518,7 +528,7 @@ mod tests {
         let even_odd_classifier = ClassifyEvenness::new();
 
         let (mut eo_runnables, mut eo_egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(fb_egressors.pop().unwrap())])
+            .ingressor(fb_egressors.pop().unwrap())
             .num_egressors(2)
             .classifier(even_odd_classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
@@ -555,7 +565,7 @@ mod tests {
         let classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressors(vec![Box::new(packet_generator)])
+            .ingressor(Box::new(packet_generator))
             .num_egressors(number_branches)
             .classifier(classifier)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
