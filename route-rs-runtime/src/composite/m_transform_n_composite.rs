@@ -103,12 +103,12 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
         } else if self.element.is_none() {
             panic!("Cannot build link! Missing element");
         } else {
-            let (join_runnables, join_egressors) = JoinLink::new()
+            let (mut join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
 
-            let (sync_runnables, sync_egressors) = SyncLinkBuilder::new()
+            let (mut sync_runnables, sync_egressors) = SyncLinkBuilder::new()
                 .ingressors(join_egressors)
                 .element(self.element.unwrap())
                 .build_link();
@@ -118,8 +118,8 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
                 .queue_capacity(self.clone_queue_capacity)
                 .num_egressors(self.num_egressors.unwrap())
                 .build_link();
-            clone_link_runnables.extend(join_runnables);
-            clone_link_runnables.extend(sync_runnables);
+            clone_link_runnables.append(&mut join_runnables);
+            clone_link_runnables.append(&mut sync_runnables);
 
             (clone_link_runnables, clone_link_egressors)
         }

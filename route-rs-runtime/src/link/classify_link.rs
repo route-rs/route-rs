@@ -513,7 +513,7 @@ mod tests {
 
         let fizz_buzz_classifier = ClassifyFizzBuzz::new();
 
-        let (fb_runnables, mut fb_egressors) = ClassifyLink::new()
+        let (mut fb_runnables, mut fb_egressors) = ClassifyLink::new()
             .ingressor(packet_generator)
             .num_egressors(4)
             .classifier(fizz_buzz_classifier)
@@ -540,7 +540,7 @@ mod tests {
         let (s0, even_collector_output) = crossbeam_channel::unbounded();
         let even_collector = ExhaustiveCollector::new(0, Box::new(eo_egressors.pop().unwrap()), s0);
 
-        eo_runnables.extend(fb_runnables);
+        eo_runnables.append(&mut fb_runnables);
         eo_runnables.push(Box::new(odd_collector));
         eo_runnables.push(Box::new(even_collector));
 

@@ -176,7 +176,7 @@ mod tests {
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
 
-        let (black_hole_runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
+        let (mut black_hole_runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
             .ingressor(egressors.pop().unwrap())
             .build_link();
 
@@ -185,7 +185,7 @@ mod tests {
             ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
 
         runnables.push(Box::new(link0_port0_collector));
-        runnables.extend(black_hole_runnables);
+        runnables.append(&mut black_hole_runnables);
 
         run_tokio(runnables);
 
