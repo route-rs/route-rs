@@ -271,37 +271,25 @@ mod tests {
     use super::*;
     use crate::element::{DropElement, IdentityElement, TransformElement};
     use crate::link::sync_link::SyncLink;
-    use crate::link::{ElementLinkBuilder, LinkBuilder, TokioRunnable};
-    use crate::utils::test::packet_collectors::ExhaustiveCollector;
+    use crate::link::{ElementLinkBuilder, LinkBuilder};
+    use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-    use futures::future::lazy;
-
-    fn run_tokio(runnables: Vec<TokioRunnable>) {
-        tokio::run(lazy(|| {
-            for runnable in runnables {
-                tokio::spawn(runnable);
-            }
-            Ok(())
-        }));
-    }
+    use rand::{thread_rng, Rng};
 
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        let identity_element: IdentityElement<i32> = IdentityElement::new();
-
-        QueueLink::new().element(identity_element).build_link();
+        QueueLink::new()
+            .element(IdentityElement::<i32>::new())
+            .build_link();
     }
 
     #[test]
     #[should_panic]
     fn panics_when_built_without_element() {
-        let packets: Vec<i32> = vec![];
-        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
-
         QueueLink::<IdentityElement<i32>>::new()
-            .ingressor(packet_generator)
+            .ingressor(immediate_stream(vec![]))
             .build_link();
     }
 
@@ -309,202 +297,137 @@ mod tests {
     fn builder_methods_work_in_any_order() {
         let packets: Vec<i32> = vec![];
 
-        let packet_generator0 = immediate_stream(packets.clone());
-        let identity_element0 = IdentityElement::new();
-
         QueueLink::new()
-            .ingressor(packet_generator0)
-            .element(identity_element0)
+            .ingressor(immediate_stream(packets.clone()))
+            .element(IdentityElement::new())
             .build_link();
 
-        let packet_generator1 = immediate_stream(packets.clone());
-        let identity_element1 = IdentityElement::new();
-
         QueueLink::new()
-            .element(identity_element1)
-            .ingressor(packet_generator1)
+            .element(IdentityElement::new())
+            .ingressor(immediate_stream(packets.clone()))
             .build_link();
     }
 
     #[test]
     fn queue_link_works() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = immediate_stream(packets.clone());
 
-        let elem = IdentityElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
+        let link = QueueLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .element(IdentityElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output, packets);
+        let results = run_link(link);
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn long_stream() {
-        let packet_generator = immediate_stream(0..2000);
+        let mut rng = thread_rng();
+        let stream_len = rng.gen_range(2000, 4000);
 
-        let elem = IdentityElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
+        let link = QueueLink::new()
+            .ingressor(immediate_stream(0..stream_len))
+            .element(IdentityElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output.len(), 2000);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), stream_len);
     }
 
     #[test]
     #[should_panic(expected = "queue capacity must be non-zero")]
     fn empty_channel() {
-        let queue_size = 0;
         let packets: Vec<i32> = vec![];
-        let packet_generator = immediate_stream(packets);
 
-        let elem = IdentityElement::new();
-
-        let (_, _) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
-            .queue_capacity(queue_size)
+        QueueLink::new()
+            .ingressor(immediate_stream(packets))
+            .element(IdentityElement::new())
+            .queue_capacity(0)
             .build_link();
     }
 
     #[test]
     fn small_channel() {
-        let queue_size = 1;
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = immediate_stream(packets.clone());
 
-        let elem = IdentityElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
-            .queue_capacity(queue_size)
+        let link = QueueLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .element(IdentityElement::new())
+            .queue_capacity(1)
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output, packets);
+        let results = run_link(link);
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn empty_stream() {
         let packets: Vec<i32> = vec![];
-        let packet_generator = immediate_stream(packets.clone());
 
-        let elem = IdentityElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
+        let link = QueueLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .element(IdentityElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output, packets);
+        let results = run_link(link);
+        assert_eq!(results[0], []);
     }
 
     #[test]
     fn two_links() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = immediate_stream(packets.clone());
-
-        let elem0 = IdentityElement::new();
-        let elem1 = IdentityElement::new();
 
         let (mut runnables0, mut egressors0) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem0)
+            .ingressor(immediate_stream(packets.clone()))
+            .element(IdentityElement::new())
             .build_link();
 
         let (mut runnables1, mut egressors1) = QueueLink::new()
             .ingressor(egressors0.remove(0))
-            .element(elem1)
+            .element(IdentityElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors1.remove(0)), s);
-
-        runnables1.append(&mut runnables0);
-        runnables1.push(Box::new(collector));
-
-        run_tokio(runnables1);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output, packets);
+        runnables0.append(&mut runnables1);
+        egressors0.append(&mut egressors1);
+        let link = (runnables0, egressors0);
+        let results = run_link(link);
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn series_of_sync_and_queue_links() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = immediate_stream(packets.clone());
-
-        let elem0 = IdentityElement::new();
-        let elem1 = IdentityElement::new();
-        let elem2 = IdentityElement::new();
-        let elem3 = IdentityElement::new();
 
         let (_, mut egressors0) = SyncLink::new()
-            .ingressor(packet_generator)
-            .element(elem0)
+            .ingressor(immediate_stream(packets.clone()))
+            .element(IdentityElement::new())
             .build_link();
 
         let (mut runnables1, mut egressors1) = QueueLink::new()
             .ingressor(egressors0.remove(0))
-            .element(elem1)
+            .element(IdentityElement::new())
             .build_link();
 
         let (_, mut egressors2) = SyncLink::new()
             .ingressor(egressors1.remove(0))
-            .element(elem2)
+            .element(IdentityElement::new())
             .build_link();
 
         let (mut runnables3, mut egressors3) = QueueLink::new()
             .ingressor(egressors2.remove(0))
-            .element(elem3)
+            .element(IdentityElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors3.remove(0)), s);
+        runnables1.append(&mut runnables3);
+        // TODO: is there a better way to chain Vec concatenation?
+        egressors0.append(&mut egressors1);
+        egressors0.append(&mut egressors2);
+        egressors0.append(&mut egressors3);
 
-        runnables3.append(&mut runnables1);
-        runnables3.push(Box::new(collector));
-
-        run_tokio(runnables3);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output, packets);
+        let link = (runnables1, egressors0);
+        let results = run_link(link);
+        assert_eq!(results[0], packets);
     }
 
     #[test]
@@ -515,68 +438,39 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let elem = IdentityElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
+        let link = QueueLink::new()
             .ingressor(Box::new(packet_generator))
-            .element(elem)
+            .element(IdentityElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let output: Vec<_> = r.iter().collect();
-        assert_eq!(output, packets);
+        let results = run_link(link);
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn transform_element() {
         let packets = "route-rs".chars();
-        let packet_generator = immediate_stream(packets.clone());
 
-        let elem = TransformElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
+        let link = QueueLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .element(TransformElement::<char, u32>::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let output: Vec<u32> = r.iter().collect();
+        let results = run_link(link);
         let expected: Vec<u32> = packets.map(|p| p.into()).collect();
-        assert_eq!(output, expected);
+        assert_eq!(results[0], expected);
     }
 
     #[test]
     fn drop_element() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = immediate_stream(packets.clone());
 
-        let elem = DropElement::new();
-
-        let (mut runnables, mut egressors) = QueueLink::new()
-            .ingressor(packet_generator)
-            .element(elem)
+        let link = QueueLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .element(DropElement::new())
             .build_link();
 
-        let (s, r) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let router_output: Vec<u32> = r.iter().collect();
-        assert_eq!(router_output, []);
+        let results = run_link(link);
+        assert_eq!(results[0], [])
     }
 }
