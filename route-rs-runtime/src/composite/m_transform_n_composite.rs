@@ -1,6 +1,6 @@
 use crate::element::Element;
 use crate::link::{
-    CloneLink, ElementLinkBuilder, JoinLink, Link, LinkBuilder, PacketStream, SyncLinkBuilder,
+    CloneLink, ElementLinkBuilder, JoinLink, Link, LinkBuilder, PacketStream, SyncLink,
 };
 
 #[derive(Default)]
@@ -108,7 +108,7 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
 
-            let (mut sync_runnables, sync_egressors) = SyncLinkBuilder::new()
+            let (mut sync_runnables, sync_egressors) = SyncLink::new()
                 .ingressors(join_egressors)
                 .element(self.element.unwrap())
                 .build_link();
