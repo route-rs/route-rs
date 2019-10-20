@@ -262,22 +262,12 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
 #[allow(dead_code)]
 mod tests {
     use super::*;
-    use crate::link::{LinkBuilder, TokioRunnable};
-    use crate::utils::test::packet_collectors::ExhaustiveCollector;
+    use crate::link::LinkBuilder;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-    use crossbeam::crossbeam_channel;
+    use rand::{thread_rng, Rng};
 
-    use futures::future::lazy;
-
-    fn run_tokio(runnables: Vec<TokioRunnable>) {
-        tokio::run(lazy(|| {
-            for runnable in runnables {
-                tokio::spawn(runnable);
-            }
-            Ok(())
-        }));
-    }
+    use crate::utils::test::harness::run_link;
 
     #[test]
     #[should_panic]
@@ -298,114 +288,63 @@ mod tests {
     fn builder_methods_work_in_any_order() {
         let packets: Vec<i32> = vec![];
 
-        let packet_generator0 = immediate_stream(packets.clone());
-
         JoinLink::new()
-            .ingressors(vec![Box::new(packet_generator0)])
+            .ingressors(vec![immediate_stream(packets.clone())])
             .queue_capacity(4)
             .build_link();
 
-        let packet_generator1 = immediate_stream(packets.clone());
-
         JoinLink::new()
             .queue_capacity(4)
-            .ingressors(vec![Box::new(packet_generator1)])
+            .ingressors(vec![immediate_stream(packets.clone())])
             .build_link();
     }
 
     #[test]
     fn join_link() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
 
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(immediate_stream(packets.clone()));
+        input_streams.push(immediate_stream(packets.clone()));
 
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+        let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let link_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(link_output.len(), packets.len() * 2);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), packets.len() * 2);
     }
 
+    // TODO: I'm not sure this behavior is appropriate for JoinLink.
+    // Since we know JoinLinks are N to 1 rather than 1 to 1, an `ingressor` function doesn't
+    // really make sense. I read the following example as resetting the single ingressor on a
+    // JoinLink. We should talk about this at the next meetup.
     #[test]
     fn multiple_ingressor_calls_works() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
 
-        let (mut runnables, mut egressors) = JoinLink::new()
-            .ingressor(packet_generator0)
-            .ingressor(packet_generator1)
+        let link = JoinLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let link_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(link_output.len(), packets.len() * 2);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), packets.len() * 2);
     }
 
     #[test]
-    fn long_stream() {
-        let packet_generator0 = immediate_stream(0..=2000);
-        let packet_generator1 = immediate_stream(0..=2000);
+    fn several_long_streams() {
+        let mut rng = thread_rng();
+        let stream_len = rng.gen_range(2000, 3000);
+        let num_streams = rng.gen_range(5, 10);
 
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        for _ in 0..num_streams {
+            input_streams.push(immediate_stream(0..stream_len));
+        }
 
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+        let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let link_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(link_output.len(), 4002);
-    }
-
-    #[test]
-    fn five_inputs() {
-        let packet_generator0 = immediate_stream(0..=2000);
-        let packet_generator1 = immediate_stream(0..=2000);
-        let packet_generator2 = immediate_stream(0..=2000);
-        let packet_generator3 = immediate_stream(0..=2000);
-        let packet_generator4 = immediate_stream(0..=2000);
-
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
-        input_streams.push(Box::new(packet_generator2));
-        input_streams.push(Box::new(packet_generator3));
-        input_streams.push(Box::new(packet_generator4));
-
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
-
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let link_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(link_output.len(), 10005);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), stream_len * num_streams);
     }
 
     #[test]
@@ -424,108 +363,61 @@ mod tests {
         input_streams.push(Box::new(packet_generator0));
         input_streams.push(Box::new(packet_generator1));
 
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+        let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let join_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(join_output.len(), packets.len() * 2);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), packets.len() * 2);
     }
 
     #[test]
     fn fairness_test() {
         //If fairness changes, may need to update test
-        let packets_heavy = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        let packets_light = vec![1, 1, 1, 1];
-        let packet_generator0 = immediate_stream(packets_heavy.into_iter());
-        let packet_generator1 = immediate_stream(packets_light.into_iter());
-
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(immediate_stream(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+        input_streams.push(immediate_stream(vec![1, 1, 1, 1]));
 
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+        let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let join0_output: Vec<_> = collector_output.iter().collect();
-
-        // Test early elements contain an even mix of 1s and 0s
-        // expect four (all) 1s within first 10 elements
-        assert_eq!(join0_output[0..10].iter().sum::<usize>(), 4);
+        let results = run_link(link);
+        assert_eq!(results[0][0..10].iter().sum::<usize>(), 4);
     }
 
     #[test]
     fn small_channel() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
 
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(immediate_stream(packets.clone()));
+        input_streams.push(immediate_stream(packets.clone()));
 
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+        let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let join_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(join_output.len(), packets.len() * 2);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), packets.len() * 2);
     }
 
     #[test]
     fn empty_stream() {
-        let packets = vec![];
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
-
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(immediate_stream(vec![]));
+        input_streams.push(immediate_stream(vec![]));
 
-        let (mut runnables, mut egressors) = JoinLink::new().ingressors(input_streams).build_link();
+        let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let (s, collector_output) = crossbeam_channel::unbounded();
-        let collector = ExhaustiveCollector::new(0, Box::new(egressors.remove(0)), s);
-
-        runnables.push(Box::new(collector));
-
-        run_tokio(runnables);
-
-        let join_output: Vec<_> = collector_output.iter().collect();
-        assert_eq!(join_output.len(), packets.len() * 2);
+        let results = run_link(link);
+        assert_eq!(results[0], []);
     }
 
     #[test]
     #[should_panic(expected = "Queue capacity: 0, must be in range 1..=1000")]
     fn empty_channel() {
-        let queue_size = 0;
-        let packets = vec![];
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
-
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(immediate_stream(vec![]));
+        input_streams.push(immediate_stream(vec![]));
 
-        let (_, _) = JoinLink::new()
+        JoinLink::new()
             .ingressors(input_streams)
-            .queue_capacity(queue_size)
+            .queue_capacity(0)
             .build_link();
     }
 }
