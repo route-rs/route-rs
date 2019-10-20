@@ -80,12 +80,10 @@ impl<E: Element> Future for BlackHoleIngressor<E> {
 mod tests {
     use super::*;
     use crate::element::{Classifier, IdentityElement};
-    use crate::link::{ClassifyLink, TokioRunnable};
-    use crate::utils::test::packet_collectors::ExhaustiveCollector;
+    use crate::link::ClassifyLink;
+    use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-    use crossbeam::crossbeam_channel;
-    use futures::future::lazy;
 
     struct ClassifyEvenness {}
 
@@ -104,15 +102,6 @@ mod tests {
         }
     }
 
-    fn run_tokio(runnables: Vec<TokioRunnable>) {
-        tokio::run(lazy(|| {
-            for runnable in runnables {
-                tokio::spawn(runnable);
-            }
-            Ok(())
-        }));
-    }
-
     #[test]
     #[should_panic]
     fn panics_if_no_input_stream_provided() {
@@ -122,27 +111,25 @@ mod tests {
     #[test]
     fn multiple_ingressor_calls_works() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
-        let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
-            .ingressor(packet_generator0)
-            .ingressor(packet_generator1)
+
+        let link = BlackHoleLink::<IdentityElement<i32>>::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .ingressor(immediate_stream(packets.clone()))
             .build_link();
-        run_tokio(runnables);
+
+        run_link(link);
     }
 
     #[test]
     fn finishes() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = immediate_stream(packets.clone());
 
-        let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
-            .ingressor(packet_generator)
+        let link = BlackHoleLink::<IdentityElement<i32>>::new()
+            .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
-        run_tokio(runnables);
-
-        //In this test, we just ensure that it finishes.
+        let results = run_link(link);
+        assert!(results.is_empty());
     }
 
     #[test]
@@ -153,26 +140,22 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let (runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
+        let link = BlackHoleLink::<IdentityElement<i32>>::new()
             .ingressor(Box::new(packet_generator))
             .build_link();
 
-        run_tokio(runnables);
-
-        //In this test, we just ensure that it finishes.
+        let results = run_link(link);
+        assert!(results.is_empty());
     }
 
     #[test]
-    fn odd_packets() {
-        let num_egressors = 2;
+    fn drops_odd_packets() {
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
-
-        let classifier = ClassifyEvenness::new();
 
         let (mut runnables, mut egressors) = ClassifyLink::new()
             .ingressor(packet_generator)
-            .num_egressors(num_egressors)
-            .classifier(classifier)
+            .num_egressors(2)
+            .classifier(ClassifyEvenness::new())
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
 
@@ -180,16 +163,10 @@ mod tests {
             .ingressor(egressors.pop().unwrap())
             .build_link();
 
-        let (s0, link0_port0_collector_output) = crossbeam_channel::unbounded();
-        let link0_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-
-        runnables.push(Box::new(link0_port0_collector));
         runnables.append(&mut black_hole_runnables);
 
-        run_tokio(runnables);
-
-        let elem0_port0_output: Vec<_> = link0_port0_collector_output.iter().collect();
-        assert_eq!(elem0_port0_output, vec![0, 2, 420, 4, 6, 8]);
+        let link = (runnables, vec![egressors.pop().unwrap()]);
+        let results: Vec<Vec<i32>> = run_link(link);
+        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
     }
 }
