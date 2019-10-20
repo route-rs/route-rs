@@ -28,7 +28,7 @@ impl<T: Debug> Future for ExhaustiveDrain<T> {
     }
 }
 
-/// Exhaustive Collector works like Exhaustive Drain in that it continously polls for packets until it
+/// Exhaustive Collector works like Exhaustive Drain in that it continuously polls for packets until it
 /// receives a None, but it also will write that value out to the provided channel, so that the packet
 /// may be compared in a test.
 pub struct ExhaustiveCollector<T: Debug> {
