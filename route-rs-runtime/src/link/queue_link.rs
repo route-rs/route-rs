@@ -270,7 +270,7 @@ impl<Packet: Sized> Stream for QueueEgressor<Packet> {
 mod tests {
     use super::*;
     use crate::element::{DropElement, IdentityElement, TransformElement};
-    use crate::link::sync_link::SyncLinkBuilder;
+    use crate::link::sync_link::SyncLink;
     use crate::link::{ElementLinkBuilder, LinkBuilder, TokioRunnable};
     use crate::utils::test::packet_collectors::ExhaustiveCollector;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
@@ -475,7 +475,7 @@ mod tests {
         let elem2 = IdentityElement::new();
         let elem3 = IdentityElement::new();
 
-        let (_, mut egressors0) = SyncLinkBuilder::new()
+        let (_, mut egressors0) = SyncLink::new()
             .ingressor(packet_generator)
             .element(elem0)
             .build_link();
@@ -485,7 +485,7 @@ mod tests {
             .element(elem1)
             .build_link();
 
-        let (_, mut egressors2) = SyncLinkBuilder::new()
+        let (_, mut egressors2) = SyncLink::new()
             .ingressor(egressors1.remove(0))
             .element(elem2)
             .build_link();
