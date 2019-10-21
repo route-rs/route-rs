@@ -235,11 +235,9 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::link::TokioRunnable;
-    use crate::utils::test::packet_collectors::ExhaustiveCollector;
+    use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-    use futures::future::lazy;
 
     struct ClassifyEvenness {}
 
@@ -258,23 +256,12 @@ mod tests {
         }
     }
 
-    fn run_tokio(runnables: Vec<TokioRunnable>) {
-        tokio::run(lazy(|| {
-            for runnable in runnables {
-                tokio::spawn(runnable);
-            }
-            Ok(())
-        }));
-    }
-
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        let even_classifier = ClassifyEvenness::new();
-
         ClassifyLink::new()
             .num_egressors(10)
-            .classifier(even_classifier)
+            .classifier(ClassifyEvenness::new())
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
     }
@@ -285,11 +272,9 @@ mod tests {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
-        let even_classifier = ClassifyEvenness::new();
-
         ClassifyLink::new()
             .ingressor(packet_generator)
-            .classifier(even_classifier)
+            .classifier(ClassifyEvenness::new())
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
     }
@@ -313,112 +298,59 @@ mod tests {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
-        let even_classifier = ClassifyEvenness::new();
-
         ClassifyLink::new()
             .ingressor(packet_generator)
-            .classifier(even_classifier)
+            .classifier(ClassifyEvenness::new())
             .build_link();
+    }
+
+    fn even_classifier(stream: PacketStream<i32>) -> Link<i32> {
+        ClassifyLink::new()
+            .ingressor(stream)
+            .num_egressors(2)
+            .classifier(ClassifyEvenness::new())
+            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
+            .build_link()
     }
 
     #[test]
     fn even_odd() {
-        let number_branches = 2;
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let even_classifier = ClassifyEvenness::new();
+        let results = run_link(even_classifier(packet_generator));
+        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+        assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+    }
 
-        let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressor(packet_generator)
-            .num_egressors(number_branches)
-            .classifier(even_classifier)
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link();
+    #[test]
+    fn even_odd_wait_between_packets() {
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packet_generator = PacketIntervalGenerator::new(
+            time::Duration::from_millis(10),
+            packets.clone().into_iter(),
+        );
 
-        let (s1, even_port1_collector_output) = crossbeam_channel::unbounded();
-
-        let even_port1_collector =
-            ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
-
-        let (s0, even_port0_collector_output) = crossbeam_channel::unbounded();
-
-        let even_port0_collector =
-            ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-
-        runnables.push(Box::new(even_port0_collector));
-        runnables.push(Box::new(even_port1_collector));
-
-        run_tokio(runnables);
-
-        let even_port0_output: Vec<_> = even_port0_collector_output.iter().collect();
-        assert_eq!(even_port0_output, vec![0, 2, 420, 4, 6, 8]);
-
-        let even_port1_output: Vec<_> = even_port1_collector_output.iter().collect();
-        assert_eq!(even_port1_output, vec![1, 1337, 3, 5, 7, 9]);
+        let results = run_link(even_classifier(Box::new(packet_generator)));
+        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+        assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
     fn only_odd() {
-        let number_branches = 2;
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let classifier = ClassifyEvenness::new();
-
-        let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressor(packet_generator)
-            .num_egressors(number_branches)
-            .classifier(classifier)
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link();
-
-        let (s1, port1_collector_output) = crossbeam_channel::unbounded();
-        let port1_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
-
-        let (s0, port0_collector_output) = crossbeam_channel::unbounded();
-        let port0_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-
-        runnables.push(Box::new(port0_collector));
-        runnables.push(Box::new(port1_collector));
-
-        run_tokio(runnables);
-
-        let port0_output: Vec<_> = port0_collector_output.iter().collect();
-        assert!(port0_output.is_empty());
-
-        let port1_output: Vec<_> = port1_collector_output.iter().collect();
-        assert_eq!(port1_output, vec![1, 1337, 3, 5, 7, 9]);
+        let results = run_link(even_classifier(packet_generator));
+        assert_eq!(results[0], []);
+        assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
     }
 
     #[test]
     fn even_odd_long_stream() {
-        let number_branches = 2;
         let packet_generator = immediate_stream(0..2000);
 
-        let classifier = ClassifyEvenness::new();
-
-        let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressor(packet_generator)
-            .num_egressors(number_branches)
-            .classifier(classifier)
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link();
-
-        let (s1, odd_collector_output) = crossbeam_channel::unbounded();
-        let odd_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
-
-        let (s0, even_collector_output) = crossbeam_channel::unbounded();
-        let even_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-
-        runnables.push(Box::new(odd_collector));
-        runnables.push(Box::new(even_collector));
-
-        run_tokio(runnables);
-
-        let even_output: Vec<_> = even_collector_output.iter().collect();
-        assert_eq!(even_output.len(), 1000);
-
-        let odd_output: Vec<_> = odd_collector_output.iter().collect();
-        assert_eq!(odd_output.len(), 1000);
+        let results = run_link(even_classifier(packet_generator));
+        assert_eq!(results[0].len(), 1000);
+        assert_eq!(results[1].len(), 1000);
     }
 
     enum FizzBuzz {
@@ -453,139 +385,52 @@ mod tests {
         }
     }
 
-    #[test]
-    fn fizz_buzz() {
-        let packet_generator = immediate_stream(0..=30);
-
-        let classifier = ClassifyFizzBuzz::new();
-
-        let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressor(packet_generator)
+    fn fizz_buzz_classifier(stream: PacketStream<i32>) -> Link<i32> {
+        ClassifyLink::new()
+            .ingressor(stream)
             .num_egressors(4)
-            .classifier(classifier)
+            .classifier(ClassifyFizzBuzz::new())
             .dispatcher(Box::new(|fb| match fb {
                 FizzBuzz::FizzBuzz => 0,
                 FizzBuzz::Fizz => 1,
                 FizzBuzz::Buzz => 2,
                 FizzBuzz::None => 3,
             }))
-            .build_link();
+            .build_link()
+    }
 
-        let (s3, other_output) = crossbeam_channel::unbounded();
-        let port3_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s3);
+    #[test]
+    fn fizz_buzz() {
+        let packet_generator = immediate_stream(0..=30);
 
-        let (s2, buzz_output) = crossbeam_channel::unbounded();
-        let port2_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s2);
+        let results = run_link(fizz_buzz_classifier(packet_generator));
 
-        let (s1, fizz_output) = crossbeam_channel::unbounded();
-        let port1_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
-
-        let (s0, fizz_buzz_output) = crossbeam_channel::unbounded();
-        let port0_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-
-        runnables.push(Box::new(port3_collector));
-        runnables.push(Box::new(port2_collector));
-        runnables.push(Box::new(port1_collector));
-        runnables.push(Box::new(port0_collector));
-
-        run_tokio(runnables);
-
-        let actual_fizz_buzz = fizz_buzz_output.iter().collect::<Vec<i32>>();
         let expected_fizz_buzz = vec![0, 15, 30];
-        assert_eq!(expected_fizz_buzz, actual_fizz_buzz);
+        assert_eq!(results[0], expected_fizz_buzz);
 
-        let actual_fizz = fizz_output.iter().collect::<Vec<i32>>();
         let expected_fizz = vec![3, 6, 9, 12, 18, 21, 24, 27];
-        assert_eq!(expected_fizz, actual_fizz);
+        assert_eq!(results[1], expected_fizz);
 
-        let actual_buzz = buzz_output.iter().collect::<Vec<i32>>();
         let expected_buzz = vec![5, 10, 20, 25];
-        assert_eq!(expected_buzz, actual_buzz);
+        assert_eq!(results[2], expected_buzz);
 
-        let actual_other = other_output.iter().collect::<Vec<i32>>();
         let expected_other = vec![1, 2, 4, 7, 8, 11, 13, 14, 16, 17, 19, 22, 23, 26, 28, 29];
-        assert_eq!(expected_other, actual_other);
+        assert_eq!(results[3], expected_other);
     }
 
     #[test]
     fn fizz_buzz_to_even_odd() {
         let packet_generator = immediate_stream(0..=30);
 
-        let fizz_buzz_classifier = ClassifyFizzBuzz::new();
+        let (mut fb_runnables, mut fb_egressors) = fizz_buzz_classifier(packet_generator);
 
-        let (mut fb_runnables, mut fb_egressors) = ClassifyLink::new()
-            .ingressor(packet_generator)
-            .num_egressors(4)
-            .classifier(fizz_buzz_classifier)
-            .dispatcher(Box::new(|fb| match fb {
-                FizzBuzz::FizzBuzz => 0,
-                FizzBuzz::Fizz => 1,
-                FizzBuzz::Buzz => 2,
-                FizzBuzz::None => 3,
-            }))
-            .build_link();
+        let (mut eo_runnables, eo_egressors) = even_classifier(fb_egressors.pop().unwrap());
 
-        let even_odd_classifier = ClassifyEvenness::new();
+        fb_runnables.append(&mut eo_runnables);
 
-        let (mut eo_runnables, mut eo_egressors) = ClassifyLink::new()
-            .ingressor(fb_egressors.pop().unwrap())
-            .num_egressors(2)
-            .classifier(even_odd_classifier)
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link();
-
-        let (s1, odd_collector_output) = crossbeam_channel::unbounded();
-        let odd_collector = ExhaustiveCollector::new(0, Box::new(eo_egressors.pop().unwrap()), s1);
-
-        let (s0, even_collector_output) = crossbeam_channel::unbounded();
-        let even_collector = ExhaustiveCollector::new(0, Box::new(eo_egressors.pop().unwrap()), s0);
-
-        eo_runnables.append(&mut fb_runnables);
-        eo_runnables.push(Box::new(odd_collector));
-        eo_runnables.push(Box::new(even_collector));
-
-        run_tokio(eo_runnables);
-
-        let actual_evens = even_collector_output.iter().collect::<Vec<i32>>();
-        assert_eq!(actual_evens, vec![2, 4, 8, 14, 16, 22, 26, 28]);
-
-        let actual_odds = odd_collector_output.iter().collect::<Vec<i32>>();
-        assert_eq!(actual_odds, vec![1, 7, 11, 13, 17, 19, 23, 29]);
-    }
-
-    #[test]
-    fn even_odd_wait_between_packets() {
-        let number_branches = 2;
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(10),
-            packets.clone().into_iter(),
-        );
-
-        let classifier = ClassifyEvenness::new();
-
-        let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressor(Box::new(packet_generator))
-            .num_egressors(number_branches)
-            .classifier(classifier)
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link();
-
-        let (s1, port1_collector_output) = crossbeam_channel::unbounded();
-        let port1_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
-
-        let (s0, port0_collector_output) = crossbeam_channel::unbounded();
-        let port0_collector = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-
-        runnables.push(Box::new(port1_collector));
-        runnables.push(Box::new(port0_collector));
-
-        run_tokio(runnables);
-
-        let port0_output: Vec<_> = port0_collector_output.iter().collect();
-        assert_eq!(port0_output, vec![0, 2, 420, 4, 6, 8]);
-
-        let port1_output: Vec<_> = port1_collector_output.iter().collect();
-        assert_eq!(port1_output, vec![1, 1337, 3, 5, 7, 9]);
+        let link = (fb_runnables, eo_egressors);
+        let results = run_link(link);
+        assert_eq!(results[0], vec![2, 4, 8, 14, 16, 22, 26, 28]);
+        assert_eq!(results[1], vec![1, 7, 11, 13, 17, 19, 23, 29]);
     }
 }
