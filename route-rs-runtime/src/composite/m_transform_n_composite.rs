@@ -143,57 +143,31 @@ impl<E: Element + Send + 'static> ElementLinkBuilder<E> for MtransformNComposite
 mod tests {
     use super::*;
     use crate::element::TransformElement;
-    use crate::link::{LinkBuilder, TokioRunnable};
-    use crate::utils::test::packet_collectors::ExhaustiveCollector;
+    use crate::link::LinkBuilder;
     use crate::utils::test::packet_generators::immediate_stream;
-    use crossbeam::crossbeam_channel;
     use std::net::Ipv4Addr;
 
-    use futures::future::lazy;
-
-    fn run_tokio(runnables: Vec<TokioRunnable>) {
-        tokio::run(lazy(|| {
-            for runnable in runnables {
-                tokio::spawn(runnable);
-            }
-            Ok(())
-        }));
-    }
+    use crate::utils::test::harness::run_link;
 
     #[test]
     fn m_transform_n_composite() {
         let packets = vec![0xDEAD_BEEF, 0xBEEF_DEAD, 0x0A00_0001, 0xFFFF_FFFF];
-        let number_num_egressors = 2;
-        let packet_generator0 = immediate_stream(packets.clone());
-        let packet_generator1 = immediate_stream(packets.clone());
 
         let mut input_streams: Vec<PacketStream<u32>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+        input_streams.push(immediate_stream(packets.clone()));
+        input_streams.push(immediate_stream(packets.clone()));
 
-        //Simple element that calls the From<u32> function of Ipv4Addr over all inputs.
-        let transform_element = TransformElement::<u32, Ipv4Addr>::new();
-
-        let (mut runnables, mut egressors) = MtransformNComposite::new()
-            .num_egressors(number_num_egressors)
+        let link = MtransformNComposite::new()
+            .num_egressors(5)
             .ingressors(input_streams)
-            .element(transform_element)
+            .element(TransformElement::<u32, Ipv4Addr>::new())
             .build_link();
 
-        let (s1, collector1_output) = crossbeam_channel::unbounded();
-        let collector1 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s1);
-        runnables.push(Box::new(collector1));
-
-        let (s0, collector0_output) = crossbeam_channel::unbounded();
-        let collector0 = ExhaustiveCollector::new(0, Box::new(egressors.pop().unwrap()), s0);
-        runnables.push(Box::new(collector0));
-
-        run_tokio(runnables);
-
-        let output0: Vec<_> = collector0_output.iter().collect();
-        assert_eq!(output0.len(), packets.len() * 2);
-
-        let output1: Vec<_> = collector1_output.iter().collect();
-        assert_eq!(output1.len(), packets.len() * 2);
+        let results = run_link(link);
+        assert_eq!(results[0].len(), packets.len() * 2);
+        assert_eq!(results[1].len(), packets.len() * 2);
+        assert_eq!(results[2].len(), packets.len() * 2);
+        assert_eq!(results[3].len(), packets.len() * 2);
+        assert_eq!(results[4].len(), packets.len() * 2);
     }
 }
