@@ -5,3 +5,4 @@ echo "Installing Rust style tools..."
 rustup update
 rustup component add rustfmt
 rustup component add clippy
+cargo install -f cargo-deny

@@ -13,6 +13,7 @@ allow = [
     "ISC",
     "MIT",
     "Unlicense",
+    "LLVM-exception"
 ]
 
 [[licenses.ignore]]
