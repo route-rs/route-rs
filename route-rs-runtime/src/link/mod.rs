@@ -4,8 +4,8 @@ use futures::{Future, Stream};
 /// when a packet is requested from the output. This link does not have the abilty store packets internally,
 /// so all packets that enter either immediatly leave or are dropped, as dictated by the element. Both sides of
 /// this link are on the same thread, hence the label synchronous.
-mod sync_link;
-pub use self::sync_link::*;
+mod process_link;
+pub use self::process_link::*;
 
 /// Input packets are placed into an intermediate channel that are pulled from the output asynchronously.
 /// Asynchronous in that a packets may enter and leave this link asynchronously to each other.  This link is
@@ -47,7 +47,7 @@ pub type Link<Output> = (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
 /// You can tell because the ingress/egress streams are of type `PacketStream<Input>`/`PacketStream<Output>` respectively.
 pub trait LinkBuilder<Input, Output> {
     /// Links need a way to receive input from upstream.
-    /// Some Links such as `SyncLink` will only need at most 1, but others can accept many.
+    /// Some Links such as `ProcessLink` will only need at most 1, but others can accept many.
     fn ingressors(self, in_streams: Vec<PacketStream<Input>>) -> Self;
 
     /// Provides any tokio-driven Futures needed to drive the Link, as well as handles for downstream
@@ -56,7 +56,7 @@ pub trait LinkBuilder<Input, Output> {
     fn build_link(self) -> Link<Output>;
 }
 
-/// `SyncLink` and `AsyncLink` should impl `ElementLink`, since they are required to have their
+/// `ProcessLink` and `AsyncLink` should impl `ElementLink`, since they are required to have their
 /// Inputs and Outputs match that of their `Element`.
 pub trait ElementLinkBuilder<E: Element>: LinkBuilder<E::Input, E::Output> {
     fn element(self, element: E) -> Self;

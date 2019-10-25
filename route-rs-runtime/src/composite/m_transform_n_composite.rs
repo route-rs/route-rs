@@ -1,6 +1,6 @@
 use crate::element::Element;
 use crate::link::{
-    ElementLinkBuilder, ForkLink, JoinLink, Link, LinkBuilder, PacketStream, SyncLink,
+    ElementLinkBuilder, ForkLink, JoinLink, Link, LinkBuilder, PacketStream, ProcessLink,
 };
 
 #[derive(Default)]
@@ -108,18 +108,17 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
 
-            let (mut sync_runnables, sync_egressors) = SyncLink::new()
+            let (_, process_egressors) = ProcessLink::new()
                 .ingressors(join_egressors)
                 .element(self.element.unwrap())
                 .build_link();
 
             let (mut fork_link_runnables, fork_link_egressors) = ForkLink::new()
-                .ingressors(sync_egressors)
+                .ingressors(process_egressors)
                 .queue_capacity(self.fork_queue_capacity)
                 .num_egressors(self.num_egressors.unwrap())
                 .build_link();
             fork_link_runnables.append(&mut join_runnables);
-            fork_link_runnables.append(&mut sync_runnables);
 
             (fork_link_runnables, fork_link_egressors)
         }

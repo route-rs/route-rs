@@ -21,7 +21,7 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
 
         let link_1 = InputChannelLink::new(input_channel);
 
-        let link_2 = SyncLink::new(Box::new(link_1), elem_1_identityelement);
+        let link_2 = ProcessLink::new(Box::new(link_1), elem_1_identityelement);
 
         let link_3 = OutputChannelLink::new(Box::new(link_2), output_channel);
 

@@ -23,7 +23,7 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
 
         let link_1 = InputChannelLink::new(input_channel);
 
-        let link_2 = SyncLink::new(Box::new(link_1), elem_1_setinterfacebydestination);
+        let link_2 = ProcessLink::new(Box::new(link_1), elem_1_setinterfacebydestination);
 
         let link_3 = ClassifyLink::new(
             Box::new(link_2),
@@ -40,7 +40,7 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
         let link_3_egressor_0 = link_3_egressors.next().unwrap();
         let link_3_egressor_1 = link_3_egressors.next().unwrap();
 
-        let link_4 = SyncLink::new(Box::new(link_3_egressor_0), elem_3_localdnsinterceptor);
+        let link_4 = ProcessLink::new(Box::new(link_3_egressor_0), elem_3_localdnsinterceptor);
 
         let link_5 = JoinLink::new(vec![Box::new(link_4), Box::new(link_3_egressor_1)], 10);
         let link_5_egressor = link_5.egressor;
