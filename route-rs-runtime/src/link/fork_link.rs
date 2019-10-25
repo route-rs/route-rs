@@ -7,15 +7,15 @@ use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
 #[derive(Default)]
-pub struct CloneLink<Packet: Clone + Send> {
+pub struct ForkLink<Packet: Clone + Send> {
     in_stream: Option<PacketStream<Packet>>,
     queue_capacity: usize,
     num_egressors: Option<usize>,
 }
 
-impl<Packet: Clone + Send> CloneLink<Packet> {
+impl<Packet: Clone + Send> ForkLink<Packet> {
     pub fn new() -> Self {
-        CloneLink {
+        ForkLink {
             in_stream: None,
             queue_capacity: 10,
             num_egressors: None,
@@ -33,7 +33,7 @@ impl<Packet: Clone + Send> CloneLink<Packet> {
             )
         );
 
-        CloneLink {
+        ForkLink {
             in_stream: self.in_stream,
             queue_capacity,
             num_egressors: self.num_egressors,
@@ -49,7 +49,7 @@ impl<Packet: Clone + Send> CloneLink<Packet> {
             )
         );
 
-        CloneLink {
+        ForkLink {
             in_stream: self.in_stream,
             queue_capacity: self.queue_capacity,
             num_egressors: Some(num_egressors),
@@ -57,7 +57,7 @@ impl<Packet: Clone + Send> CloneLink<Packet> {
     }
 
     pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
-        CloneLink {
+        ForkLink {
             in_stream: Some(in_stream),
             queue_capacity: self.queue_capacity,
             num_egressors: self.num_egressors,
@@ -65,14 +65,14 @@ impl<Packet: Clone + Send> CloneLink<Packet> {
     }
 }
 
-impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for CloneLink<Packet> {
+impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for ForkLink<Packet> {
     fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
-            "Clone links may only take one input stream!"
+            "ForkLinks may only take one input stream!"
         );
-        CloneLink {
+        ForkLink {
             in_stream: Some(in_streams.remove(0)),
             queue_capacity: self.queue_capacity,
             num_egressors: self.num_egressors,
@@ -105,26 +105,26 @@ impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for CloneLink<P
                 task_parks.push(task_park);
             }
 
-            let ingressor = CloneIngressor::new(self.in_stream.unwrap(), to_egressors, task_parks);
+            let ingressor = ForkIngressor::new(self.in_stream.unwrap(), to_egressors, task_parks);
 
             (vec![Box::new(ingressor)], egressors)
         }
     }
 }
 
-pub struct CloneIngressor<P> {
+pub struct ForkIngressor<P> {
     input_stream: PacketStream<P>,
     to_egressors: Vec<Sender<Option<P>>>,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
-impl<P> CloneIngressor<P> {
+impl<P> ForkIngressor<P> {
     fn new(
         input_stream: PacketStream<P>,
         to_egressors: Vec<Sender<Option<P>>>,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
     ) -> Self {
-        CloneIngressor {
+        ForkIngressor {
             input_stream,
             to_egressors,
             task_parks,
@@ -132,7 +132,7 @@ impl<P> CloneIngressor<P> {
     }
 }
 
-impl<P> Drop for CloneIngressor<P> {
+impl<P> Drop for ForkIngressor<P> {
     fn drop(&mut self) {
         //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
@@ -146,7 +146,7 @@ impl<P> Drop for CloneIngressor<P> {
     }
 }
 
-impl<P: Send + Clone> Future for CloneIngressor<P> {
+impl<P: Send + Clone> Future for ForkIngressor<P> {
     type Item = ();
     type Error = ();
 
@@ -190,25 +190,25 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        CloneLink::<i32>::new().num_egressors(10).build_link();
+        ForkLink::<i32>::new().num_egressors(10).build_link();
     }
 
     #[test]
     #[should_panic]
     fn panics_when_built_without_num_egressors() {
-        CloneLink::<i32>::new()
+        ForkLink::<i32>::new()
             .ingressors(vec![immediate_stream(vec![])])
             .build_link();
     }
 
     #[test]
     fn builder_methods_work_in_any_order() {
-        CloneLink::<i32>::new()
+        ForkLink::<i32>::new()
             .ingressor(immediate_stream(vec![]))
             .num_egressors(2)
             .build_link();
 
-        CloneLink::<i32>::new()
+        ForkLink::<i32>::new()
             .num_egressors(2)
             .ingressor(immediate_stream(vec![]))
             .build_link();
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn no_input() {
-        let link = CloneLink::<i32>::new()
+        let link = ForkLink::<i32>::new()
             .ingressor(immediate_stream(vec![]))
             .num_egressors(1)
             .build_link();
@@ -229,7 +229,7 @@ mod tests {
     fn one_way() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = CloneLink::new()
+        let link = ForkLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .num_egressors(1)
             .build_link();
@@ -242,7 +242,7 @@ mod tests {
     fn two_way() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = CloneLink::new()
+        let link = ForkLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .num_egressors(2)
             .build_link();
@@ -256,7 +256,7 @@ mod tests {
     fn three_way() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = CloneLink::new()
+        let link = ForkLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .num_egressors(3)
             .build_link();

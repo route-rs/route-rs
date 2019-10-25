@@ -1,6 +1,6 @@
 use crate::element::Element;
 use crate::link::{
-    CloneLink, ElementLinkBuilder, JoinLink, Link, LinkBuilder, PacketStream, SyncLink,
+    ElementLinkBuilder, ForkLink, JoinLink, Link, LinkBuilder, PacketStream, SyncLink,
 };
 
 #[derive(Default)]
@@ -8,7 +8,7 @@ pub struct MtransformNComposite<E: Element + Send> {
     in_streams: Option<Vec<PacketStream<E::Input>>>,
     element: Option<E>,
     join_queue_capacity: usize,
-    clone_queue_capacity: usize,
+    fork_queue_capacity: usize,
     num_egressors: Option<usize>,
 }
 
@@ -18,7 +18,7 @@ impl<E: Element + Send> MtransformNComposite<E> {
             in_streams: None,
             element: None,
             join_queue_capacity: 10,
-            clone_queue_capacity: 10,
+            fork_queue_capacity: 10,
             num_egressors: None,
         }
     }
@@ -38,18 +38,18 @@ impl<E: Element + Send> MtransformNComposite<E> {
             in_streams: self.in_streams,
             element: self.element,
             join_queue_capacity: queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
 
     /// Changes tee_queue_capcity, default value is 10.
     /// Valid range is 1..=1000
-    pub fn clone_queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn fork_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
             (1..=1000).contains(&queue_capacity),
             format!(
-                "clone_queue_capacity: {} must be in range 1..=1000",
+                "fork_queue_capacity: {} must be in range 1..=1000",
                 queue_capacity
             )
         );
@@ -58,7 +58,7 @@ impl<E: Element + Send> MtransformNComposite<E> {
             in_streams: self.in_streams,
             element: self.element,
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: queue_capacity,
+            fork_queue_capacity: queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
@@ -74,7 +74,7 @@ impl<E: Element + Send> MtransformNComposite<E> {
             in_streams: self.in_streams,
             element: self.element,
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: Some(num_egressors),
         }
     }
@@ -90,7 +90,7 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
             in_streams: Some(in_streams),
             element: self.element,
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
@@ -113,15 +113,15 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
                 .element(self.element.unwrap())
                 .build_link();
 
-            let (mut clone_link_runnables, clone_link_egressors) = CloneLink::new()
+            let (mut fork_link_runnables, fork_link_egressors) = ForkLink::new()
                 .ingressors(sync_egressors)
-                .queue_capacity(self.clone_queue_capacity)
+                .queue_capacity(self.fork_queue_capacity)
                 .num_egressors(self.num_egressors.unwrap())
                 .build_link();
-            clone_link_runnables.append(&mut join_runnables);
-            clone_link_runnables.append(&mut sync_runnables);
+            fork_link_runnables.append(&mut join_runnables);
+            fork_link_runnables.append(&mut sync_runnables);
 
-            (clone_link_runnables, clone_link_egressors)
+            (fork_link_runnables, fork_link_egressors)
         }
     }
 }
@@ -132,7 +132,7 @@ impl<E: Element + Send + 'static> ElementLinkBuilder<E> for MtransformNComposite
             in_streams: self.in_streams,
             element: Some(element),
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }

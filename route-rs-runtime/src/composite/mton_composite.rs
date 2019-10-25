@@ -1,10 +1,10 @@
-use crate::link::{CloneLink, JoinLink, Link, LinkBuilder, PacketStream};
+use crate::link::{ForkLink, JoinLink, Link, LinkBuilder, PacketStream};
 
 #[derive(Default)]
 pub struct MtoNComposite<Packet: Sized + Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
     join_queue_capacity: usize,
-    clone_queue_capacity: usize,
+    fork_queue_capacity: usize,
     num_egressors: Option<usize>,
 }
 
@@ -13,7 +13,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
         MtoNComposite {
             in_streams: None,
             join_queue_capacity: 10,
-            clone_queue_capacity: 10,
+            fork_queue_capacity: 10,
             num_egressors: None,
         }
     }
@@ -32,7 +32,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
         MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
@@ -51,7 +51,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
         MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: queue_capacity,
+            fork_queue_capacity: queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
@@ -68,7 +68,7 @@ impl<Packet: Sized + Send + Clone> MtoNComposite<Packet> {
         MtoNComposite {
             in_streams: self.in_streams,
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: Some(num_egressors),
         }
     }
@@ -86,7 +86,7 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
         MtoNComposite {
             in_streams: Some(in_streams),
             join_queue_capacity: self.join_queue_capacity,
-            clone_queue_capacity: self.clone_queue_capacity,
+            fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
@@ -101,13 +101,13 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
                 .ingressors(self.in_streams.unwrap())
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
-            let (mut clone_link_runnables, clone_link_egressors) = CloneLink::new()
+            let (mut fork_link_runnables, fork_link_egressors) = ForkLink::new()
                 .ingressors(join_egressors)
-                .queue_capacity(self.clone_queue_capacity)
+                .queue_capacity(self.fork_queue_capacity)
                 .num_egressors(self.num_egressors.unwrap())
                 .build_link();
-            clone_link_runnables.append(&mut join_runnables);
-            (clone_link_runnables, clone_link_egressors)
+            fork_link_runnables.append(&mut join_runnables);
+            (fork_link_runnables, fork_link_egressors)
         }
     }
 }
