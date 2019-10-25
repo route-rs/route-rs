@@ -139,7 +139,7 @@ fn gen_link_decls(
                     link_decls_map.insert((id.to_owned(), None), symbol.clone());
                     codegen::let_new(
                         symbol,
-                        "SyncLink",
+                        "ProcessLink",
                         vec![
                             codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
                             element_decls.get(element.as_str()).unwrap().to_owned(),

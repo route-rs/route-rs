@@ -3,36 +3,40 @@ use crate::link::{ElementLinkBuilder, Link, LinkBuilder, PacketStream};
 use futures::{Async, Poll, Stream};
 
 #[derive(Default)]
-pub struct SyncLink<E: Element> {
+pub struct ProcessLink<E: Element> {
     in_stream: Option<PacketStream<E::Input>>,
     element: Option<E>,
 }
 
-impl<E: Element> SyncLink<E> {
+impl<E: Element> ProcessLink<E> {
     pub fn new() -> Self {
-        SyncLink {
+        ProcessLink {
             in_stream: None,
             element: None,
         }
     }
 
     pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
-        SyncLink {
+        ProcessLink {
             in_stream: Some(in_stream),
             element: self.element,
         }
     }
 }
 
-/// Although `Link` allows an arbitrary number of ingressors and egressors, `SyncLink`
+/// Although `Link` allows an arbitrary number of ingressors and egressors, `ProcessLink`
 /// may only have one ingress and egress stream since it lacks some kind of queue
 /// storage. In the future we might decide to restrict the interface for this link
 /// for clearer intent.
-impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for SyncLink<E> {
+impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for ProcessLink<E> {
     fn ingressors(self, mut in_streams: Vec<PacketStream<E::Input>>) -> Self {
-        assert_eq!(in_streams.len(), 1, "SyncLink may only take 1 input stream");
+        assert_eq!(
+            in_streams.len(),
+            1,
+            "ProcessLink may only take 1 input stream"
+        );
 
-        SyncLink {
+        ProcessLink {
             in_stream: Some(in_streams.remove(0)),
             element: self.element,
         }
@@ -44,34 +48,34 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for SyncLink<
         } else if self.element.is_none() {
             panic!("Cannot build link! Missing element");
         } else {
-            let processor = SyncProcessor::new(self.in_stream.unwrap(), self.element.unwrap());
+            let processor = ProcessRunner::new(self.in_stream.unwrap(), self.element.unwrap());
             (vec![], vec![Box::new(processor)])
         }
     }
 }
 
-impl<E: Element + Send + 'static> ElementLinkBuilder<E> for SyncLink<E> {
+impl<E: Element + Send + 'static> ElementLinkBuilder<E> for ProcessLink<E> {
     fn element(self, element: E) -> Self {
-        SyncLink {
+        ProcessLink {
             in_stream: self.in_stream,
             element: Some(element),
         }
     }
 }
 
-/// The single egressor of SyncLink
-struct SyncProcessor<E: Element> {
+/// The single egressor of ProcessLink
+struct ProcessRunner<E: Element> {
     in_stream: PacketStream<E::Input>,
     element: E,
 }
 
-impl<E: Element> SyncProcessor<E> {
+impl<E: Element> ProcessRunner<E> {
     fn new(in_stream: PacketStream<E::Input>, element: E) -> Self {
-        SyncProcessor { in_stream, element }
+        ProcessRunner { in_stream, element }
     }
 }
 
-impl<E: Element> Stream for SyncProcessor<E> {
+impl<E: Element> Stream for ProcessRunner<E> {
     type Item = E::Output;
     type Error = ();
 
@@ -123,13 +127,13 @@ mod tests {
     fn panics_when_built_without_input_streams() {
         let identity_element: IdentityElement<i32> = IdentityElement::new();
 
-        SyncLink::new().element(identity_element).build_link();
+        ProcessLink::new().element(identity_element).build_link();
     }
 
     #[test]
     #[should_panic]
     fn panics_when_built_without_element() {
-        SyncLink::<IdentityElement<i32>>::new()
+        ProcessLink::<IdentityElement<i32>>::new()
             .ingressor(immediate_stream(vec![]))
             .build_link();
     }
@@ -138,22 +142,22 @@ mod tests {
     fn builder_methods_work_in_any_order() {
         let packets: Vec<i32> = vec![];
 
-        SyncLink::new()
+        ProcessLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .element(IdentityElement::new())
             .build_link();
 
-        SyncLink::new()
+        ProcessLink::new()
             .element(IdentityElement::new())
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
     }
 
     #[test]
-    fn sync_link() {
+    fn identity() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = SyncLink::new()
+        let link = ProcessLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .element(IdentityElement::new())
             .build_link();
@@ -170,7 +174,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let link = SyncLink::new()
+        let link = ProcessLink::new()
             .ingressor(Box::new(packet_generator))
             .element(IdentityElement::new())
             .build_link();
@@ -180,11 +184,11 @@ mod tests {
     }
 
     #[test]
-    fn transform_element() {
+    fn type_transform() {
         let packets = "route-rs".chars();
         let packet_generator = immediate_stream(packets.clone());
 
-        let link = SyncLink::new()
+        let link = ProcessLink::new()
             .ingressor(packet_generator)
             .element(TransformElement::<char, u32>::new())
             .build_link();
@@ -195,10 +199,10 @@ mod tests {
     }
 
     #[test]
-    fn drop_element() {
+    fn drop() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = SyncLink::new()
+        let link = ProcessLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .element(DropElement::new())
             .build_link();
