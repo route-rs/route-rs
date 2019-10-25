@@ -1,23 +1,20 @@
 use crate::link::{
-    primitive::{ForkLink, JoinLink, ProcessLink},
-    Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
+    primitive::{ForkLink, JoinLink},
+    Link, LinkBuilder, PacketStream,
 };
-use crate::processor::Processor;
 
 #[derive(Default)]
-pub struct MtransformNComposite<P: Processor + Send> {
-    in_streams: Option<Vec<PacketStream<P::Input>>>,
-    processor: Option<P>,
+pub struct MtoNLink<Packet: Sized + Send + Clone> {
+    in_streams: Option<Vec<PacketStream<Packet>>>,
     join_queue_capacity: usize,
     fork_queue_capacity: usize,
     num_egressors: Option<usize>,
 }
 
-impl<P: Processor + Send> MtransformNComposite<P> {
+impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
     pub fn new() -> Self {
-        MtransformNComposite {
+        MtoNLink {
             in_streams: None,
-            processor: None,
             join_queue_capacity: 10,
             fork_queue_capacity: 10,
             num_egressors: None,
@@ -30,14 +27,13 @@ impl<P: Processor + Send> MtransformNComposite<P> {
         assert!(
             (1..=1000).contains(&queue_capacity),
             format!(
-                "join_queue_capacity: {} must be in range 1..=1000",
+                "queue_capacity: {}, must be in range 1..=1000",
                 queue_capacity
             )
         );
 
-        MtransformNComposite {
+        MtoNLink {
             in_streams: self.in_streams,
-            processor: self.processor,
             join_queue_capacity: queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
@@ -46,18 +42,17 @@ impl<P: Processor + Send> MtransformNComposite<P> {
 
     /// Changes tee_queue_capcity, default value is 10.
     /// Valid range is 1..=1000
-    pub fn fork_queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn tee_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
             (1..=1000).contains(&queue_capacity),
             format!(
-                "fork_queue_capacity: {} must be in range 1..=1000",
+                "queue_capacity: {}, must be in range 1..=1000",
                 queue_capacity
             )
         );
 
-        MtransformNComposite {
+        MtoNLink {
             in_streams: self.in_streams,
-            processor: self.processor,
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: queue_capacity,
             num_egressors: self.num_egressors,
@@ -66,14 +61,15 @@ impl<P: Processor + Send> MtransformNComposite<P> {
 
     pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            num_egressors <= 1000,
-            format!("compsite num_egressors: {} > 1000", num_egressors)
+            (1..=1000).contains(&num_egressors),
+            format!(
+                "num_egressors: {}, must be in range 1..=1000",
+                num_egressors
+            )
         );
-        assert_ne!(num_egressors, 0, "num_egressors must be non-zero");
 
-        MtransformNComposite {
+        MtoNLink {
             in_streams: self.in_streams,
-            processor: self.processor,
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: Some(num_egressors),
@@ -81,59 +77,40 @@ impl<P: Processor + Send> MtransformNComposite<P> {
     }
 }
 
-impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for MtransformNComposite<P> {
-    fn ingressors(self, in_streams: Vec<PacketStream<P::Input>>) -> Self {
+impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNLink<Packet> {
+    fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
-            in_streams.len() > 1 && in_streams.len() <= 1000,
-            format!("Input streams {} not in 2..=1000", in_streams.len())
+            (1..=1000).contains(&in_streams.len()),
+            format!(
+                "Input streams: {} must be in range 1..=1000",
+                in_streams.len()
+            )
         );
-        MtransformNComposite {
+        MtoNLink {
             in_streams: Some(in_streams),
-            processor: self.processor,
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
 
-    fn build_link(self) -> Link<P::Output> {
+    fn build_link(self) -> Link<Packet> {
         if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input stream");
         } else if self.num_egressors.is_none() {
             panic!("Cannot build link! Missing number of num_egressors");
-        } else if self.processor.is_none() {
-            panic!("Cannot build link! Missing processor");
         } else {
             let (mut join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
                 .queue_capacity(self.join_queue_capacity)
                 .build_link();
-
-            let (_, process_egressors) = ProcessLink::new()
-                .ingressors(join_egressors)
-                .processor(self.processor.unwrap())
-                .build_link();
-
             let (mut fork_link_runnables, fork_link_egressors) = ForkLink::new()
-                .ingressors(process_egressors)
+                .ingressors(join_egressors)
                 .queue_capacity(self.fork_queue_capacity)
                 .num_egressors(self.num_egressors.unwrap())
                 .build_link();
             fork_link_runnables.append(&mut join_runnables);
-
             (fork_link_runnables, fork_link_egressors)
-        }
-    }
-}
-
-impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for MtransformNComposite<P> {
-    fn processor(self, processor: P) -> Self {
-        MtransformNComposite {
-            in_streams: self.in_streams,
-            processor: Some(processor),
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: self.num_egressors,
         }
     }
 }
@@ -143,24 +120,21 @@ impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for MtransformNComposi
 mod tests {
     use super::*;
     use crate::link::LinkBuilder;
-    use crate::processor::TransformFrom;
     use crate::utils::test::packet_generators::immediate_stream;
-    use std::net::Ipv4Addr;
 
     use crate::utils::test::harness::run_link;
 
     #[test]
-    fn m_transform_n_composite() {
-        let packets = vec![0xDEAD_BEEF, 0xBEEF_DEAD, 0x0A00_0001, 0xFFFF_FFFF];
+    fn clone_m_streams_on_to_n_egress_streams() {
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
-        let mut input_streams: Vec<PacketStream<u32>> = Vec::new();
+        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(immediate_stream(packets.clone()));
         input_streams.push(immediate_stream(packets.clone()));
 
-        let link = MtransformNComposite::new()
+        let link = MtoNLink::new()
             .num_egressors(5)
             .ingressors(input_streams)
-            .processor(TransformFrom::<u32, Ipv4Addr>::new())
             .build_link();
 
         let results = run_link(link);
