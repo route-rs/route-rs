@@ -1,4 +1,4 @@
-use crate::element::Classifier;
+use crate::classifier::Classifier;
 use crate::link::task_park::*;
 use crate::link::{Link, LinkBuilder, PacketStream, QueueEgressor};
 use crossbeam::atomic::AtomicCell;
@@ -235,33 +235,17 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classifier::{even_link, fizz_buzz_link, Even};
     use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-
-    struct ClassifyEvenness {}
-
-    impl ClassifyEvenness {
-        pub fn new() -> Self {
-            ClassifyEvenness {}
-        }
-    }
-
-    impl Classifier for ClassifyEvenness {
-        type Packet = i32;
-        type Class = bool;
-
-        fn classify(&self, packet: &Self::Packet) -> Self::Class {
-            packet % 2 == 0
-        }
-    }
 
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
         ClassifyLink::new()
             .num_egressors(10)
-            .classifier(ClassifyEvenness::new())
+            .classifier(Even::new())
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
     }
@@ -274,7 +258,7 @@ mod tests {
 
         ClassifyLink::new()
             .ingressor(packet_generator)
-            .classifier(ClassifyEvenness::new())
+            .classifier(Even::new())
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
     }
@@ -285,7 +269,7 @@ mod tests {
         let packets: Vec<i32> = vec![];
         let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
 
-        ClassifyLink::<ClassifyEvenness>::new()
+        ClassifyLink::<Even>::new()
             .ingressor(packet_generator)
             .num_egressors(10)
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
@@ -300,24 +284,15 @@ mod tests {
 
         ClassifyLink::new()
             .ingressor(packet_generator)
-            .classifier(ClassifyEvenness::new())
+            .classifier(Even::new())
             .build_link();
-    }
-
-    fn even_classifier(stream: PacketStream<i32>) -> Link<i32> {
-        ClassifyLink::new()
-            .ingressor(stream)
-            .num_egressors(2)
-            .classifier(ClassifyEvenness::new())
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link()
     }
 
     #[test]
     fn even_odd() {
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let results = run_link(even_classifier(packet_generator));
+        let results = run_link(even_link(packet_generator));
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
     }
@@ -330,7 +305,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let results = run_link(even_classifier(Box::new(packet_generator)));
+        let results = run_link(even_link(Box::new(packet_generator)));
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
     }
@@ -339,7 +314,7 @@ mod tests {
     fn only_odd() {
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let results = run_link(even_classifier(packet_generator));
+        let results = run_link(even_link(packet_generator));
         assert_eq!(results[0], []);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
     }
@@ -348,62 +323,16 @@ mod tests {
     fn even_odd_long_stream() {
         let packet_generator = immediate_stream(0..2000);
 
-        let results = run_link(even_classifier(packet_generator));
+        let results = run_link(even_link(packet_generator));
         assert_eq!(results[0].len(), 1000);
         assert_eq!(results[1].len(), 1000);
-    }
-
-    enum FizzBuzz {
-        FizzBuzz,
-        Fizz,
-        Buzz,
-        None,
-    }
-
-    struct ClassifyFizzBuzz {}
-
-    impl ClassifyFizzBuzz {
-        pub fn new() -> Self {
-            ClassifyFizzBuzz {}
-        }
-    }
-
-    impl Classifier for ClassifyFizzBuzz {
-        type Packet = i32;
-        type Class = FizzBuzz;
-
-        fn classify(&self, packet: &Self::Packet) -> Self::Class {
-            if packet % 3 == 0 && packet % 5 == 0 {
-                FizzBuzz::FizzBuzz
-            } else if packet % 3 == 0 {
-                FizzBuzz::Fizz
-            } else if packet % 5 == 0 {
-                FizzBuzz::Buzz
-            } else {
-                FizzBuzz::None
-            }
-        }
-    }
-
-    fn fizz_buzz_classifier(stream: PacketStream<i32>) -> Link<i32> {
-        ClassifyLink::new()
-            .ingressor(stream)
-            .num_egressors(4)
-            .classifier(ClassifyFizzBuzz::new())
-            .dispatcher(Box::new(|fb| match fb {
-                FizzBuzz::FizzBuzz => 0,
-                FizzBuzz::Fizz => 1,
-                FizzBuzz::Buzz => 2,
-                FizzBuzz::None => 3,
-            }))
-            .build_link()
     }
 
     #[test]
     fn fizz_buzz() {
         let packet_generator = immediate_stream(0..=30);
 
-        let results = run_link(fizz_buzz_classifier(packet_generator));
+        let results = run_link(fizz_buzz_link(packet_generator));
 
         let expected_fizz_buzz = vec![0, 15, 30];
         assert_eq!(results[0], expected_fizz_buzz);
@@ -422,9 +351,9 @@ mod tests {
     fn fizz_buzz_to_even_odd() {
         let packet_generator = immediate_stream(0..=30);
 
-        let (mut fb_runnables, mut fb_egressors) = fizz_buzz_classifier(packet_generator);
+        let (mut fb_runnables, mut fb_egressors) = fizz_buzz_link(packet_generator);
 
-        let (mut eo_runnables, eo_egressors) = even_classifier(fb_egressors.pop().unwrap());
+        let (mut eo_runnables, eo_egressors) = even_link(fb_egressors.pop().unwrap());
 
         fb_runnables.append(&mut eo_runnables);
 

@@ -11,6 +11,8 @@ extern crate tokio;
 /// in their router most likely will implement their own custom elements, conforming to the laid out element standard.
 pub mod element;
 
+pub mod classifier;
+
 /// Links are an abstraction used by the runtime to link elements together, and manage the flow of packets through the router. Elements, which
 /// implement all the non-flow business logic of the router, are loaded into links to create specfic behavior. Links are joined together via their
 /// interfaces, and the links are then dumped into a runtime to being pulling packets through the router. In general, users of route-rs are not
