@@ -1,6 +1,6 @@
 use crate::classifier::Classifier;
-use crate::link::task_park::*;
-use crate::link::{Link, LinkBuilder, PacketStream, QueueEgressor};
+use crate::link::utils::task_park::*;
+use crate::link::{primitive::QueueEgressor, Link, LinkBuilder, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
