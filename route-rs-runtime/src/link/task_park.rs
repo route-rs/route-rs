@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 /**
 The task_park module consists of different utilities needed to manage task waking for concurrent
-route-rs elements. These utilities should not be exposed via the Elements API.
+route-rs processors. These utilities should not be exposed via the Processors API.
 */
 
 /// TaskParkState
@@ -81,7 +81,7 @@ pub fn park_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
 /// Simlar to logic to `park_and_notify`, with the key difference being that it
 /// takes a provided Arc of the task handle that we wish to park. This enables the
 /// callee to park their task handle in multiple locations without fear of overnotificiation.
-/// This is used primarily by the egressor of the join element.
+/// This is used primarily by the egressor of the JoinLink.
 pub fn indirect_park_and_notify(
     task_park: &Arc<AtomicCell<TaskParkState>>,
     task: Arc<AtomicCell<Option<task::Task>>>,

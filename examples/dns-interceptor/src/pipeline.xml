@@ -11,28 +11,28 @@
         <mxCell id="output-1" value="(Interface, SimplePacket)" style="rhombus" parent="1" vertex="1">
           <mxGeometry x="1100" y="100" width="200" height="100" as="geometry"/>
         </mxCell>
-        <mxCell id="element-1" value="SetInterfaceByDestination" style="" parent="1" vertex="1">
+        <mxCell id="processor-1" value="SetInterfaceByDestination" style="" parent="1" vertex="1">
           <mxGeometry x="300" y="100" width="200" height="100" as="geometry"/>
         </mxCell>
-        <mxCell id="link-1" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="input-1" target="element-1" edge="1">
+        <mxCell id="link-1" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="input-1" target="processor-1" edge="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="element-2" value="ClassifyDNS" style="" parent="1" vertex="1">
+        <mxCell id="processor-2" value="ClassifyDNS" style="" parent="1" vertex="1">
           <mxGeometry x="600" y="100" width="100" height="100" as="geometry"/>
         </mxCell>
-        <mxCell id="link-2" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="element-1" target="element-2" edge="1">
+        <mxCell id="link-2" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="processor-1" target="processor-2" edge="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="element-3" value="LocalDNSInterceptor" style="" parent="1" vertex="1">
+        <mxCell id="processor-3" value="LocalDNSInterceptor" style="" parent="1" vertex="1">
           <mxGeometry x="800" y="0" width="200" height="100" as="geometry"/>
         </mxCell>
-        <mxCell id="link-3" value="ClassifyDNSOutput::DNS" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="element-2" target="element-3" edge="1">
+        <mxCell id="link-3" value="ClassifyDNSOutput::DNS" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="processor-2" target="processor-3" edge="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="link-4" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="element-3" target="output-1" edge="1">
+        <mxCell id="link-4" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="processor-3" target="output-1" edge="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="link-5" value="_" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="element-2" target="output-1" edge="1">
+        <mxCell id="link-5" value="_" style="exitX=1;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="processor-2" target="output-1" edge="1">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
       </root>

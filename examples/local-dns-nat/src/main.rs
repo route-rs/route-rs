@@ -3,9 +3,9 @@ use crossbeam::crossbeam_channel;
 use route_rs_runtime::pipeline::Runner;
 use smoltcp::wire::*;
 
-mod elements;
 mod interface;
 mod pipeline;
+mod processors;
 
 fn main() {
     let (input_sender, input_receiver) = crossbeam_channel::unbounded();

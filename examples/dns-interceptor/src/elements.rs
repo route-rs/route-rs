@@ -1,5 +1,6 @@
 use crate::packets::*;
-use route_rs_runtime::element::{Classifier, Element};
+use route_rs_runtime::classifier::Classifier;
+use route_rs_runtime::processor::Processor;
 use std::collections::HashMap;
 
 pub struct SetInterfaceByDestination {
@@ -18,8 +19,8 @@ impl SetInterfaceByDestination {
     }
 }
 
-// NOTE: Should SetInterfaceByDestination be a WAN/LAN Classifier instead of an Element?
-impl Element for SetInterfaceByDestination {
+// NOTE: Should SetInterfaceByDestination be a WAN/LAN Classifier instead of an Processor?
+impl Processor for SetInterfaceByDestination {
     type Input = (Interface, SimplePacket);
     type Output = (Interface, SimplePacket);
 
@@ -74,7 +75,7 @@ impl LocalDNSInterceptor {
     }
 }
 
-impl Element for LocalDNSInterceptor {
+impl Processor for LocalDNSInterceptor {
     type Input = (Interface, SimplePacket);
     type Output = (Interface, SimplePacket);
 

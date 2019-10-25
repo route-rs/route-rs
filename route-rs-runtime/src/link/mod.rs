@@ -2,7 +2,7 @@ use futures::{Future, Stream};
 
 /// A simple pull based link.  It is pull based in the sense that packets are only fetched on the input
 /// when a packet is requested from the output. This link does not have the abilty store packets internally,
-/// so all packets that enter either immediatly leave or are dropped, as dictated by the element. Both sides of
+/// so all packets that enter either immediatly leave or are dropped, as dictated by the processor. Both sides of
 /// this link are on the same thread, hence the label synchronous.
 mod process_link;
 pub use self::process_link::*;
@@ -11,11 +11,11 @@ pub use self::process_link::*;
 /// Asynchronous in that a packets may enter and leave this link asynchronously to each other.  This link is
 /// useful for creating queues in the router, buffering, and creating `Task` boundries that can be processed on
 /// different threads, or even different cores. Before packets are placed into the queue to be output, they are run
-/// through the element defined process function, often performing some sort of transformation.
+/// through the processor defined process function, often performing some sort of transformation.
 mod queue_link;
 pub use self::queue_link::*;
 
-/// Uses element defined classifications to sort input into different channels, a good example would
+/// Uses processor defined classifications to sort input into different channels, a good example would
 /// be a flow that splits IPv4 and IPv6 packets, asynchronous.
 mod classify_link;
 pub use self::classify_link::*;
@@ -31,7 +31,7 @@ pub use self::fork_link::*;
 /// Drops all packets that are ingressed, asynchronous.
 mod drop_link;
 pub use self::drop_link::*;
-use crate::element::Element;
+use crate::processor::Processor;
 
 /// All Links communicate through streams of packets. This allows them to be composable.
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
@@ -56,10 +56,10 @@ pub trait LinkBuilder<Input, Output> {
     fn build_link(self) -> Link<Output>;
 }
 
-/// `ProcessLink` and `AsyncLink` should impl `ElementLink`, since they are required to have their
-/// Inputs and Outputs match that of their `Element`.
-pub trait ElementLinkBuilder<E: Element>: LinkBuilder<E::Input, E::Output> {
-    fn element(self, element: E) -> Self;
+/// `ProcessLink` and `QueueLink` should impl `ProcessorLink`, since they are required to have their
+/// Inputs and Outputs match that of their `Processor`.
+pub trait ProcessLinkBuilder<P: Processor>: LinkBuilder<P::Input, P::Output> {
+    fn processor(self, processor: P) -> Self;
 }
 
 /// Task Park is a structure for tasks to place their task handles when sleeping, and where they can

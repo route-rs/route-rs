@@ -1,22 +1,22 @@
-use crate::element::Element;
 use crate::link::{
-    ElementLinkBuilder, ForkLink, JoinLink, Link, LinkBuilder, PacketStream, ProcessLink,
+    ForkLink, JoinLink, Link, LinkBuilder, PacketStream, ProcessLink, ProcessLinkBuilder,
 };
+use crate::processor::Processor;
 
 #[derive(Default)]
-pub struct MtransformNComposite<E: Element + Send> {
-    in_streams: Option<Vec<PacketStream<E::Input>>>,
-    element: Option<E>,
+pub struct MtransformNComposite<P: Processor + Send> {
+    in_streams: Option<Vec<PacketStream<P::Input>>>,
+    processor: Option<P>,
     join_queue_capacity: usize,
     fork_queue_capacity: usize,
     num_egressors: Option<usize>,
 }
 
-impl<E: Element + Send> MtransformNComposite<E> {
+impl<P: Processor + Send> MtransformNComposite<P> {
     pub fn new() -> Self {
         MtransformNComposite {
             in_streams: None,
-            element: None,
+            processor: None,
             join_queue_capacity: 10,
             fork_queue_capacity: 10,
             num_egressors: None,
@@ -36,7 +36,7 @@ impl<E: Element + Send> MtransformNComposite<E> {
 
         MtransformNComposite {
             in_streams: self.in_streams,
-            element: self.element,
+            processor: self.processor,
             join_queue_capacity: queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
@@ -56,7 +56,7 @@ impl<E: Element + Send> MtransformNComposite<E> {
 
         MtransformNComposite {
             in_streams: self.in_streams,
-            element: self.element,
+            processor: self.processor,
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: queue_capacity,
             num_egressors: self.num_egressors,
@@ -72,7 +72,7 @@ impl<E: Element + Send> MtransformNComposite<E> {
 
         MtransformNComposite {
             in_streams: self.in_streams,
-            element: self.element,
+            processor: self.processor,
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: Some(num_egressors),
@@ -80,28 +80,28 @@ impl<E: Element + Send> MtransformNComposite<E> {
     }
 }
 
-impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for MtransformNComposite<E> {
-    fn ingressors(self, in_streams: Vec<PacketStream<E::Input>>) -> Self {
+impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for MtransformNComposite<P> {
+    fn ingressors(self, in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert!(
             in_streams.len() > 1 && in_streams.len() <= 1000,
             format!("Input streams {} not in 2..=1000", in_streams.len())
         );
         MtransformNComposite {
             in_streams: Some(in_streams),
-            element: self.element,
+            processor: self.processor,
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
         }
     }
 
-    fn build_link(self) -> Link<E::Output> {
+    fn build_link(self) -> Link<P::Output> {
         if self.in_streams.is_none() {
             panic!("Cannot build link! Missing input stream");
         } else if self.num_egressors.is_none() {
             panic!("Cannot build link! Missing number of num_egressors");
-        } else if self.element.is_none() {
-            panic!("Cannot build link! Missing element");
+        } else if self.processor.is_none() {
+            panic!("Cannot build link! Missing processor");
         } else {
             let (mut join_runnables, join_egressors) = JoinLink::new()
                 .ingressors(self.in_streams.unwrap())
@@ -110,7 +110,7 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
 
             let (_, process_egressors) = ProcessLink::new()
                 .ingressors(join_egressors)
-                .element(self.element.unwrap())
+                .processor(self.processor.unwrap())
                 .build_link();
 
             let (mut fork_link_runnables, fork_link_egressors) = ForkLink::new()
@@ -125,11 +125,11 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for Mtransfor
     }
 }
 
-impl<E: Element + Send + 'static> ElementLinkBuilder<E> for MtransformNComposite<E> {
-    fn element(self, element: E) -> Self {
+impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for MtransformNComposite<P> {
+    fn processor(self, processor: P) -> Self {
         MtransformNComposite {
             in_streams: self.in_streams,
-            element: Some(element),
+            processor: Some(processor),
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
@@ -141,8 +141,8 @@ impl<E: Element + Send + 'static> ElementLinkBuilder<E> for MtransformNComposite
 #[allow(dead_code)]
 mod tests {
     use super::*;
-    use crate::element::TransformElement;
     use crate::link::LinkBuilder;
+    use crate::processor::TransformFrom;
     use crate::utils::test::packet_generators::immediate_stream;
     use std::net::Ipv4Addr;
 
@@ -159,7 +159,7 @@ mod tests {
         let link = MtransformNComposite::new()
             .num_egressors(5)
             .ingressors(input_streams)
-            .element(TransformElement::<u32, Ipv4Addr>::new())
+            .processor(TransformFrom::<u32, Ipv4Addr>::new())
             .build_link();
 
         let results = run_link(link);
