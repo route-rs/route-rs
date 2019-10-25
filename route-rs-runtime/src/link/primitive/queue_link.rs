@@ -1,4 +1,4 @@
-use crate::link::task_park::*;
+use crate::link::utils::task_park::*;
 use crate::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
 use crate::processor::Processor;
 use crossbeam::atomic::AtomicCell;
@@ -269,7 +269,7 @@ impl<Packet: Sized> Stream for QueueEgressor<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::link::process_link::ProcessLink;
+    use crate::link::primitive::ProcessLink;
     use crate::link::{LinkBuilder, ProcessLinkBuilder};
     use crate::processor::{Drop, Identity, TransformFrom};
     use crate::utils::test::harness::run_link;

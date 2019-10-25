@@ -1,5 +1,5 @@
 use crate::classifier::Classifier;
-use crate::link::{ClassifyLink, Link, LinkBuilder, PacketStream};
+use crate::link::{primitive::ClassifyLink, Link, LinkBuilder, PacketStream};
 
 #[derive(Default)]
 pub struct Even {}

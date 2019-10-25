@@ -1,4 +1,7 @@
-use crate::link::{ForkLink, JoinLink, Link, LinkBuilder, PacketStream};
+use crate::link::{
+    primitive::{ForkLink, JoinLink},
+    Link, LinkBuilder, PacketStream,
+};
 
 #[derive(Default)]
 pub struct MtoNComposite<Packet: Sized + Send + Clone> {

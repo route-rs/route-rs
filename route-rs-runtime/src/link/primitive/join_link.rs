@@ -1,4 +1,4 @@
-use crate::link::task_park::*;
+use crate::link::utils::task_park::*;
 use crate::link::{Link, LinkBuilder, PacketStream, TokioRunnable};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;

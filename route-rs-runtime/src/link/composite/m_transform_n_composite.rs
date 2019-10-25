@@ -1,5 +1,6 @@
 use crate::link::{
-    ForkLink, JoinLink, Link, LinkBuilder, PacketStream, ProcessLink, ProcessLinkBuilder,
+    primitive::{ForkLink, JoinLink, ProcessLink},
+    Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 use crate::processor::Processor;
 

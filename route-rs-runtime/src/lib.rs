@@ -28,7 +28,3 @@ pub mod pipeline;
 
 /// Utility module
 mod utils;
-
-/// Composites are groups of links pre-assmebled to provide higher level functionality. They are highly customizable and users of the
-/// library are encourged to make their own to encourage code reuse.
-pub mod composite;
