@@ -77,28 +77,11 @@ impl<E: Element> Future for DropIngressor<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::{Classifier, IdentityElement};
-    use crate::link::ClassifyLink;
+    use crate::classifier::even_link;
+    use crate::element::IdentityElement;
     use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
-
-    struct ClassifyEvenness {}
-
-    impl ClassifyEvenness {
-        pub fn new() -> Self {
-            ClassifyEvenness {}
-        }
-    }
-
-    impl Classifier for ClassifyEvenness {
-        type Packet = i32;
-        type Class = bool;
-
-        fn classify(&self, packet: &Self::Packet) -> Self::Class {
-            packet % 2 == 0
-        }
-    }
 
     #[test]
     #[should_panic]
@@ -150,12 +133,7 @@ mod tests {
     fn drops_odd_packets() {
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let (mut runnables, mut egressors) = ClassifyLink::new()
-            .ingressor(packet_generator)
-            .num_egressors(2)
-            .classifier(ClassifyEvenness::new())
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
-            .build_link();
+        let (mut runnables, mut egressors) = even_link(packet_generator);
 
         let (mut drop_runnables, _) = DropLink::<IdentityElement<i32>>::new()
             .ingressor(egressors.pop().unwrap())
