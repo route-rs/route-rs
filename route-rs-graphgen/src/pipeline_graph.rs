@@ -11,13 +11,13 @@ pub type XmlNodeId = String;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeKind {
     Classifier,
-    Element,
+    Processor,
     IO,
 }
 
 impl Default for NodeKind {
     fn default() -> NodeKind {
-        NodeKind::Element
+        NodeKind::Processor
     }
 }
 
@@ -65,7 +65,7 @@ impl PipelineGraph {
         g
     }
 
-    /// Converts elements that have multiple output edges into Classifiers. In the future we'll
+    /// Converts processors that have multiple output edges into Classifiers. In the future we'll
     /// want to distinguish between Classifiers and Tees based on whether they have labels, but for
     /// now we only have a Classifier example.
     pub fn mark_classifiers(&mut self) {
@@ -153,7 +153,7 @@ mod PipelineGraph_ordered_nodes {
 /// extracted from that source.
 ///
 /// Nodes with the rhombus shape are considered IO types. Nodes with the default shape are
-/// considered Element types.
+/// considered Processor types.
 fn nodes_edges_from_xml<R: Read>(xml_source: EventReader<R>) -> (Vec<NodeData>, Vec<EdgeData>) {
     let mut nodes = vec![];
     let mut edges = vec![];
@@ -178,7 +178,7 @@ fn nodes_edges_from_xml<R: Read>(xml_source: EventReader<R>) -> (Vec<NodeData>, 
                         node_kind: if styles.contains_key("rhombus") {
                             NodeKind::IO
                         } else {
-                            NodeKind::Element
+                            NodeKind::Processor
                         },
                     });
                 } else if has_attr(&attrs, "edge") {
@@ -237,7 +237,7 @@ mod nodes_edges_from_xml {
         let (nodes, _) = nodes_edges_from_xml(EventReader::new(Cursor::new(xml)));
 
         assert_eq!(nodes.len(), 1);
-        assert_eq!(nodes[0].node_kind, NodeKind::Element);
+        assert_eq!(nodes[0].node_kind, NodeKind::Processor);
     }
 }
 

@@ -3,9 +3,9 @@ use crate::packets::{Interface, IpAndPort};
 use crossbeam::crossbeam_channel;
 use route_rs_runtime::pipeline::Runner;
 
-mod elements;
 mod packets;
 mod pipeline;
+mod processors;
 
 fn main() {
     let (input_sender, input_receiver) = crossbeam_channel::unbounded();

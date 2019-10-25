@@ -1,4 +1,4 @@
-use crate::element::Element;
+use crate::processor::Processor;
 use smoltcp::wire::*;
 
 /// Decrements the TTL of an IPv4 packet
@@ -11,7 +11,7 @@ impl DecIpv4HopLimit {
     }
 }
 
-impl Element for DecIpv4HopLimit {
+impl Processor for DecIpv4HopLimit {
     type Input = Ipv4Packet<Vec<u8>>;
     type Output = Ipv4Packet<Vec<u8>>;
 
@@ -36,7 +36,7 @@ impl DecIpv6HopLimit {
     }
 }
 
-impl Element for DecIpv6HopLimit {
+impl Processor for DecIpv6HopLimit {
     type Input = Ipv6Packet<Vec<u8>>;
     type Output = Ipv6Packet<Vec<u8>>;
 

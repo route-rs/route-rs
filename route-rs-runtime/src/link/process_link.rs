@@ -1,25 +1,25 @@
-use crate::element::Element;
-use crate::link::{ElementLinkBuilder, Link, LinkBuilder, PacketStream};
+use crate::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
+use crate::processor::Processor;
 use futures::{Async, Poll, Stream};
 
 #[derive(Default)]
-pub struct ProcessLink<E: Element> {
-    in_stream: Option<PacketStream<E::Input>>,
-    element: Option<E>,
+pub struct ProcessLink<P: Processor> {
+    in_stream: Option<PacketStream<P::Input>>,
+    processor: Option<P>,
 }
 
-impl<E: Element> ProcessLink<E> {
+impl<P: Processor> ProcessLink<P> {
     pub fn new() -> Self {
         ProcessLink {
             in_stream: None,
-            element: None,
+            processor: None,
         }
     }
 
-    pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
+    pub fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
         ProcessLink {
             in_stream: Some(in_stream),
-            element: self.element,
+            processor: self.processor,
         }
     }
 }
@@ -28,8 +28,8 @@ impl<E: Element> ProcessLink<E> {
 /// may only have one ingress and egress stream since it lacks some kind of queue
 /// storage. In the future we might decide to restrict the interface for this link
 /// for clearer intent.
-impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for ProcessLink<E> {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<E::Input>>) -> Self {
+impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for ProcessLink<P> {
+    fn ingressors(self, mut in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
@@ -38,57 +38,60 @@ impl<E: Element + Send + 'static> LinkBuilder<E::Input, E::Output> for ProcessLi
 
         ProcessLink {
             in_stream: Some(in_streams.remove(0)),
-            element: self.element,
+            processor: self.processor,
         }
     }
 
-    fn build_link(self) -> Link<E::Output> {
+    fn build_link(self) -> Link<P::Output> {
         if self.in_stream.is_none() {
             panic!("Cannot build link! Missing input streams");
-        } else if self.element.is_none() {
-            panic!("Cannot build link! Missing element");
+        } else if self.processor.is_none() {
+            panic!("Cannot build link! Missing processor");
         } else {
-            let processor = ProcessRunner::new(self.in_stream.unwrap(), self.element.unwrap());
+            let processor = ProcessRunner::new(self.in_stream.unwrap(), self.processor.unwrap());
             (vec![], vec![Box::new(processor)])
         }
     }
 }
 
-impl<E: Element + Send + 'static> ElementLinkBuilder<E> for ProcessLink<E> {
-    fn element(self, element: E) -> Self {
+impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for ProcessLink<P> {
+    fn processor(self, processor: P) -> Self {
         ProcessLink {
             in_stream: self.in_stream,
-            element: Some(element),
+            processor: Some(processor),
         }
     }
 }
 
 /// The single egressor of ProcessLink
-struct ProcessRunner<E: Element> {
-    in_stream: PacketStream<E::Input>,
-    element: E,
+struct ProcessRunner<P: Processor> {
+    in_stream: PacketStream<P::Input>,
+    processor: P,
 }
 
-impl<E: Element> ProcessRunner<E> {
-    fn new(in_stream: PacketStream<E::Input>, element: E) -> Self {
-        ProcessRunner { in_stream, element }
+impl<P: Processor> ProcessRunner<P> {
+    fn new(in_stream: PacketStream<P::Input>, processor: P) -> Self {
+        ProcessRunner {
+            in_stream,
+            processor,
+        }
     }
 }
 
-impl<E: Element> Stream for ProcessRunner<E> {
-    type Item = E::Output;
+impl<P: Processor> Stream for ProcessRunner<P> {
+    type Item = P::Output;
     type Error = ();
 
     /// Intro to `Stream`s:
     /// 4 cases: `Async::Ready(Some)`, `Async::Ready(None)`, `Async::NotReady`, `Err`
     ///
-    /// `Async::Ready(Some)`: We have a packet ready to process from the upstream element.
+    /// `Async::Ready(Some)`: We have a packet ready to process from the upstream processor.
     /// It's passed to our core's process function for... processing
     ///
     /// `Async::Ready(None)`: The input_stream doesn't have anymore input. Semantically,
     /// it's like an iterator has exhausted it's input. We should return `Ok(Async::Ready(None))`
     /// to signify to our downstream components that there's no more input to process.
-    /// Our Elements should rarely return `Async::Ready(None)` since it will effectively
+    /// Our Processors should rarely return `Async::Ready(None)` since it will effectively
     /// kill the Stream chain.
     ///
     /// `Async::NotReady`: There is more input for us to process, but we can't make any more
@@ -104,8 +107,8 @@ impl<E: Element> Stream for ProcessRunner<E> {
             match try_ready!(self.in_stream.poll()) {
                 None => return Ok(Async::Ready(None)),
                 Some(input_packet) => {
-                    // if `element.process` returns None, do nothing, loop around and try polling again.
-                    if let Some(output_packet) = self.element.process(input_packet) {
+                    // if `processor.process` returns None, do nothing, loop around and try polling again.
+                    if let Some(output_packet) = self.processor.process(input_packet) {
                         return Ok(Async::Ready(Some(output_packet)));
                     }
                 }
@@ -117,7 +120,7 @@ impl<E: Element> Stream for ProcessRunner<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::element::{DropElement, IdentityElement, TransformElement};
+    use crate::processor::{Drop, Identity, TransformFrom};
     use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -125,15 +128,17 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_when_built_without_input_streams() {
-        let identity_element: IdentityElement<i32> = IdentityElement::new();
+        let identity_processor: Identity<i32> = Identity::new();
 
-        ProcessLink::new().element(identity_element).build_link();
+        ProcessLink::new()
+            .processor(identity_processor)
+            .build_link();
     }
 
     #[test]
     #[should_panic]
-    fn panics_when_built_without_element() {
-        ProcessLink::<IdentityElement<i32>>::new()
+    fn panics_when_built_without_processor() {
+        ProcessLink::<Identity<i32>>::new()
             .ingressor(immediate_stream(vec![]))
             .build_link();
     }
@@ -144,11 +149,11 @@ mod tests {
 
         ProcessLink::new()
             .ingressor(immediate_stream(packets.clone()))
-            .element(IdentityElement::new())
+            .processor(Identity::new())
             .build_link();
 
         ProcessLink::new()
-            .element(IdentityElement::new())
+            .processor(Identity::new())
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
     }
@@ -159,7 +164,7 @@ mod tests {
 
         let link = ProcessLink::new()
             .ingressor(immediate_stream(packets.clone()))
-            .element(IdentityElement::new())
+            .processor(Identity::new())
             .build_link();
 
         let results = run_link(link);
@@ -176,7 +181,7 @@ mod tests {
 
         let link = ProcessLink::new()
             .ingressor(Box::new(packet_generator))
-            .element(IdentityElement::new())
+            .processor(Identity::new())
             .build_link();
 
         let results = run_link(link);
@@ -190,7 +195,7 @@ mod tests {
 
         let link = ProcessLink::new()
             .ingressor(packet_generator)
-            .element(TransformElement::<char, u32>::new())
+            .processor(TransformFrom::<char, u32>::new())
             .build_link();
 
         let results = run_link(link);
@@ -204,7 +209,7 @@ mod tests {
 
         let link = ProcessLink::new()
             .ingressor(immediate_stream(packets.clone()))
-            .element(DropElement::new())
+            .processor(Drop::new())
             .build_link();
 
         let results = run_link(link);

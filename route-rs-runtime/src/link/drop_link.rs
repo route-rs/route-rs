@@ -1,20 +1,20 @@
-use crate::element::Element;
 use crate::link::{Link, LinkBuilder, PacketStream};
+use crate::processor::Processor;
 use futures::{Async, Future, Poll};
 
 /// Link that drops all packets ingressed.
 #[derive(Default)]
-pub struct DropLink<E: Element> {
-    in_streams: Option<Vec<PacketStream<E::Input>>>,
+pub struct DropLink<P: Processor> {
+    in_streams: Option<Vec<PacketStream<P::Input>>>,
 }
 
-impl<E: Element> DropLink<E> {
+impl<P: Processor> DropLink<P> {
     pub fn new() -> Self {
         DropLink { in_streams: None }
     }
 
     /// Appends the ingressor to the ingressors of the blackhole.
-    pub fn ingressor(self, in_stream: PacketStream<E::Input>) -> Self {
+    pub fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
         match self.in_streams {
             None => {
                 let in_streams = Some(vec![in_stream]);
@@ -30,8 +30,8 @@ impl<E: Element> DropLink<E> {
     }
 }
 
-impl<E: Element + 'static> LinkBuilder<E::Input, ()> for DropLink<E> {
-    fn ingressors(self, ingress_streams: Vec<PacketStream<E::Input>>) -> Self {
+impl<P: Processor + 'static> LinkBuilder<P::Input, ()> for DropLink<P> {
+    fn ingressors(self, ingress_streams: Vec<PacketStream<P::Input>>) -> Self {
         DropLink {
             in_streams: Some(ingress_streams),
         }
@@ -42,24 +42,24 @@ impl<E: Element + 'static> LinkBuilder<E::Input, ()> for DropLink<E> {
             panic!("Cannot build link! Missing input streams");
         } else {
             (
-                vec![Box::new(DropIngressor::<E>::new(self.in_streams.unwrap()))],
+                vec![Box::new(DropIngressor::<P>::new(self.in_streams.unwrap()))],
                 vec![],
             )
         }
     }
 }
 
-struct DropIngressor<E: Element> {
-    in_streams: Vec<PacketStream<E::Input>>,
+struct DropIngressor<P: Processor> {
+    in_streams: Vec<PacketStream<P::Input>>,
 }
 
-impl<E: Element> DropIngressor<E> {
-    fn new(in_streams: Vec<PacketStream<E::Input>>) -> Self {
+impl<P: Processor> DropIngressor<P> {
+    fn new(in_streams: Vec<PacketStream<P::Input>>) -> Self {
         DropIngressor { in_streams }
     }
 }
 
-impl<E: Element> Future for DropIngressor<E> {
+impl<P: Processor> Future for DropIngressor<P> {
     type Item = ();
     type Error = ();
 
@@ -78,7 +78,7 @@ impl<E: Element> Future for DropIngressor<E> {
 mod tests {
     use super::*;
     use crate::classifier::even_link;
-    use crate::element::IdentityElement;
+    use crate::processor::Identity;
     use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -86,14 +86,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_if_no_input_stream_provided() {
-        DropLink::<IdentityElement<i32>>::new().build_link();
+        DropLink::<Identity<i32>>::new().build_link();
     }
 
     #[test]
     fn multiple_ingressor_calls_works() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = DropLink::<IdentityElement<i32>>::new()
+        let link = DropLink::<Identity<i32>>::new()
             .ingressor(immediate_stream(packets.clone()))
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
@@ -105,7 +105,7 @@ mod tests {
     fn finishes() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = DropLink::<IdentityElement<i32>>::new()
+        let link = DropLink::<Identity<i32>>::new()
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
@@ -121,7 +121,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let link = DropLink::<IdentityElement<i32>>::new()
+        let link = DropLink::<Identity<i32>>::new()
             .ingressor(Box::new(packet_generator))
             .build_link();
 
@@ -135,7 +135,7 @@ mod tests {
 
         let (mut runnables, mut egressors) = even_link(packet_generator);
 
-        let (mut drop_runnables, _) = DropLink::<IdentityElement<i32>>::new()
+        let (mut drop_runnables, _) = DropLink::<Identity<i32>>::new()
             .ingressor(egressors.pop().unwrap())
             .build_link();
 

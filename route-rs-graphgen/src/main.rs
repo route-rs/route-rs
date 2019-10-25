@@ -67,19 +67,19 @@ fn get_io_nodes(nodes: &[&NodeData], edges: &[&EdgeData]) -> (NodeData, NodeData
     (input_types[0].to_owned(), output_types[0].to_owned())
 }
 
-fn gen_element_decls(elements: &[&&NodeData]) -> (String, HashMap<String, String>) {
+fn gen_processor_decls(processors: &[&&NodeData]) -> (String, HashMap<String, String>) {
     let mut decl_idx: usize = 1;
-    let mut element_decls_map = HashMap::new();
-    let decls: Vec<String> = elements
+    let mut processor_decls_map = HashMap::new();
+    let decls: Vec<String> = processors
         .iter()
         .map(|e| {
             let symbol = format!("elem_{}_{}", decl_idx, e.node_class.to_lowercase());
             decl_idx += 1;
-            element_decls_map.insert(e.xml_node_id.to_owned(), symbol.clone());
+            processor_decls_map.insert(e.xml_node_id.to_owned(), symbol.clone());
             codegen::let_new(symbol, &e.node_class, Vec::<&str>::new())
         })
         .collect();
-    (decls.join("\n"), element_decls_map)
+    (decls.join("\n"), processor_decls_map)
 }
 
 fn map_get_with_panic<'a, A, B>(map: &'a HashMap<A, B>, key: &A) -> &'a B
@@ -104,7 +104,7 @@ fn unspool_channels(symbol: &str, channels: &mut Vec<String>, index: usize, kind
 
 fn gen_link_decls(
     links: &[(XmlNodeId, Link)],
-    element_decls: HashMap<String, String>,
+    processor_decls: HashMap<String, String>,
 ) -> (String, Vec<String>) {
     let mut decl_idx: usize = 1;
     let mut link_decls_map = HashMap::new();
@@ -135,18 +135,18 @@ fn gen_link_decls(
                         ],
                     )
                 }
-                Link::Sync(feeder, element) => {
+                Link::Sync(feeder, processor) => {
                     link_decls_map.insert((id.to_owned(), None), symbol.clone());
                     codegen::let_new(
                         symbol,
                         "ProcessLink",
                         vec![
                             codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
-                            element_decls.get(element.as_str()).unwrap().to_owned(),
+                            processor_decls.get(processor.as_str()).unwrap().to_owned(),
                         ],
                     )
                 }
-                Link::Classify(feeder, element, branches) => {
+                Link::Classify(feeder, processor, branches) => {
                     let mut match_branches = vec![];
                     let mut egressors = vec![];
                     for branch_index in 0..(branches.len()) {
@@ -171,7 +171,7 @@ fn gen_link_decls(
                             "ClassifyLink",
                             vec![
                                 codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
-                                element_decls.get(element.as_str()).unwrap().to_owned(),
+                                processor_decls.get(processor.as_str()).unwrap().to_owned(),
                                 codegen::box_expr(format!(
                                     "|c| {}",
                                     codegen::match_expr("c", match_branches)
@@ -272,7 +272,7 @@ fn gen_run_body(
     input_node: &NodeData,
     output_node: &NodeData,
 ) -> String {
-    let mut elements = vec![];
+    let mut processors = vec![];
     let mut links = vec![];
 
     for nd in nodes {
@@ -295,8 +295,8 @@ fn gen_run_body(
                     panic!("{:?} is IO but not input_node or output_node", nd)
                 }
             }
-            NodeKind::Element => {
-                elements.push(nd);
+            NodeKind::Processor => {
+                processors.push(nd);
                 expand_join_link(
                     &feeders,
                     &mut links,
@@ -310,7 +310,7 @@ fn gen_run_body(
                     .filter(|e| e.source == nd.xml_node_id)
                     .map(|e| e.label.clone().unwrap())
                     .collect();
-                elements.push(nd);
+                processors.push(nd);
                 expand_join_link(
                     &feeders,
                     &mut links,
@@ -323,9 +323,9 @@ fn gen_run_body(
         }
     }
 
-    let (element_decls_str, element_decls_map) = gen_element_decls(&elements);
-    let (link_decls_str, drivers) = gen_link_decls(&links, element_decls_map);
-    [element_decls_str, link_decls_str, gen_tokio_run(drivers)].join("\n\n")
+    let (processor_decls_str, processor_decls_map) = gen_processor_decls(&processors);
+    let (link_decls_str, drivers) = gen_link_decls(&links, processor_decls_map);
+    [processor_decls_str, link_decls_str, gen_tokio_run(drivers)].join("\n\n")
 }
 
 fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
@@ -439,7 +439,7 @@ fn main() {
                 .long("local-modules")
                 .value_name("LOCAL_MODULES")
                 .takes_value(true)
-                .default_value("packets,elements"), // TODO: Validate that the modules exist in the target crate
+                .default_value("packets,processors"), // TODO: Validate that the modules exist in the target crate
         )
         .arg(
             Arg::with_name("runtime-modules")
@@ -447,7 +447,7 @@ fn main() {
                 .long("runtime-modules")
                 .value_name("RUNTIME_MODULES")
                 .takes_value(true)
-                .default_value("element,link"), // TODO: Validate that the modules exist in our crate
+                .default_value("processor,link"), // TODO: Validate that the modules exist in our crate
         )
         .get_matches();
 
