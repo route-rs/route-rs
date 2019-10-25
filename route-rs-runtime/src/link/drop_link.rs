@@ -4,13 +4,13 @@ use futures::{Async, Future, Poll};
 
 /// Link that drops all packets ingressed.
 #[derive(Default)]
-pub struct BlackHoleLink<E: Element> {
+pub struct DropLink<E: Element> {
     in_streams: Option<Vec<PacketStream<E::Input>>>,
 }
 
-impl<E: Element> BlackHoleLink<E> {
+impl<E: Element> DropLink<E> {
     pub fn new() -> Self {
-        BlackHoleLink { in_streams: None }
+        DropLink { in_streams: None }
     }
 
     /// Appends the ingressor to the ingressors of the blackhole.
@@ -18,11 +18,11 @@ impl<E: Element> BlackHoleLink<E> {
         match self.in_streams {
             None => {
                 let in_streams = Some(vec![in_stream]);
-                BlackHoleLink { in_streams }
+                DropLink { in_streams }
             }
             Some(mut in_streams) => {
                 in_streams.push(in_stream);
-                BlackHoleLink {
+                DropLink {
                     in_streams: Some(in_streams),
                 }
             }
@@ -30,9 +30,9 @@ impl<E: Element> BlackHoleLink<E> {
     }
 }
 
-impl<E: Element + 'static> LinkBuilder<E::Input, ()> for BlackHoleLink<E> {
+impl<E: Element + 'static> LinkBuilder<E::Input, ()> for DropLink<E> {
     fn ingressors(self, ingress_streams: Vec<PacketStream<E::Input>>) -> Self {
-        BlackHoleLink {
+        DropLink {
             in_streams: Some(ingress_streams),
         }
     }
@@ -42,26 +42,24 @@ impl<E: Element + 'static> LinkBuilder<E::Input, ()> for BlackHoleLink<E> {
             panic!("Cannot build link! Missing input streams");
         } else {
             (
-                vec![Box::new(BlackHoleIngressor::<E>::new(
-                    self.in_streams.unwrap(),
-                ))],
+                vec![Box::new(DropIngressor::<E>::new(self.in_streams.unwrap()))],
                 vec![],
             )
         }
     }
 }
 
-struct BlackHoleIngressor<E: Element> {
+struct DropIngressor<E: Element> {
     in_streams: Vec<PacketStream<E::Input>>,
 }
 
-impl<E: Element> BlackHoleIngressor<E> {
+impl<E: Element> DropIngressor<E> {
     fn new(in_streams: Vec<PacketStream<E::Input>>) -> Self {
-        BlackHoleIngressor { in_streams }
+        DropIngressor { in_streams }
     }
 }
 
-impl<E: Element> Future for BlackHoleIngressor<E> {
+impl<E: Element> Future for DropIngressor<E> {
     type Item = ();
     type Error = ();
 
@@ -105,14 +103,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_if_no_input_stream_provided() {
-        BlackHoleLink::<IdentityElement<i32>>::new().build_link();
+        DropLink::<IdentityElement<i32>>::new().build_link();
     }
 
     #[test]
     fn multiple_ingressor_calls_works() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = BlackHoleLink::<IdentityElement<i32>>::new()
+        let link = DropLink::<IdentityElement<i32>>::new()
             .ingressor(immediate_stream(packets.clone()))
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
@@ -124,7 +122,7 @@ mod tests {
     fn finishes() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = BlackHoleLink::<IdentityElement<i32>>::new()
+        let link = DropLink::<IdentityElement<i32>>::new()
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
@@ -140,7 +138,7 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let link = BlackHoleLink::<IdentityElement<i32>>::new()
+        let link = DropLink::<IdentityElement<i32>>::new()
             .ingressor(Box::new(packet_generator))
             .build_link();
 
@@ -159,11 +157,11 @@ mod tests {
             .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
             .build_link();
 
-        let (mut black_hole_runnables, _) = BlackHoleLink::<IdentityElement<i32>>::new()
+        let (mut drop_runnables, _) = DropLink::<IdentityElement<i32>>::new()
             .ingressor(egressors.pop().unwrap())
             .build_link();
 
-        runnables.append(&mut black_hole_runnables);
+        runnables.append(&mut drop_runnables);
 
         let link = (runnables, vec![egressors.pop().unwrap()]);
         let results: Vec<Vec<i32>> = run_link(link);

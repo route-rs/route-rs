@@ -29,8 +29,8 @@ mod clone_link;
 pub use self::clone_link::*;
 
 /// Drops all packets that are ingressed, asynchronous.
-mod blackhole_link;
-pub use self::blackhole_link::*;
+mod drop_link;
+pub use self::drop_link::*;
 use crate::element::Element;
 
 /// All Links communicate through streams of packets. This allows them to be composable.
