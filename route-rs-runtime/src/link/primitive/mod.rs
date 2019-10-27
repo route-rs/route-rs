@@ -26,3 +26,7 @@ pub use self::join_link::*;
 /// Copies all input to each of its outputs, asynchronous.
 mod fork_link;
 pub use self::fork_link::*;
+
+/// Takes a channel for input and converts it to a stream.
+mod input_channel_link;
+pub use self::input_channel_link::*;
