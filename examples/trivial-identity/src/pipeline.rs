@@ -5,7 +5,7 @@ use crate::packets::*;
 use futures::lazy;
 use route_rs_runtime::link::primitive::*;
 use route_rs_runtime::link::*;
-use route_rs_runtime::pipeline::{InputChannelLink, OutputChannelLink};
+use route_rs_runtime::pipeline::OutputChannelLink;
 use route_rs_runtime::processor::*;
 
 pub struct Pipeline {}
@@ -22,10 +22,13 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
 
         let elem_1_identity = Identity::new();
 
-        let link_1 = InputChannelLink::new(input_channel);
+        let (mut runnables_1, mut egressors_1) =
+            InputChannelLink::new().channel(input_channel).build_link();
+        all_runnables.append(&mut runnables_1);
+        let link_1_egress_0 = egressors_1.remove(0);
 
         let (mut runnables_2, mut egressors_2) = ProcessLink::new()
-            .ingressor(Box::new(link_1))
+            .ingressor(link_1_egress_0)
             .processor(elem_1_identity)
             .build_link();
         all_runnables.append(&mut runnables_2);
