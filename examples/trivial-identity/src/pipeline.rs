@@ -3,6 +3,7 @@
 
 use crate::packets::*;
 use futures::lazy;
+use route_rs_runtime::link::primitive::*;
 use route_rs_runtime::link::*;
 use route_rs_runtime::pipeline::{InputChannelLink, OutputChannelLink};
 use route_rs_runtime::processor::*;
@@ -17,15 +18,25 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
         input_channel: crossbeam::Receiver<Self::Input>,
         output_channel: crossbeam::Sender<Self::Output>,
     ) {
-        let elem_1_identityprocessor = IdentityProcessor::new();
+        let mut all_runnables: Vec<TokioRunnable> = vec![];
+
+        let elem_1_identity = Identity::new();
 
         let link_1 = InputChannelLink::new(input_channel);
 
-        let link_2 = ProcessLink::new(Box::new(link_1), elem_1_identityprocessor);
+        let (mut runnables_2, mut egressors_2) = ProcessLink::new()
+            .ingressor(Box::new(link_1))
+            .processor(elem_1_identity)
+            .build_link();
+        all_runnables.append(&mut runnables_2);
+        let link_2_egress_0 = egressors_2.remove(0);
 
-        let link_3 = OutputChannelLink::new(Box::new(link_2), output_channel);
+        let link_3 = OutputChannelLink::new(link_2_egress_0, output_channel);
 
         tokio::run(lazy(move || {
+            for r in all_runnables {
+                tokio::spawn(r);
+            }
             tokio::spawn(link_3);
             Ok(())
         }));
