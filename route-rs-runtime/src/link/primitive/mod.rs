@@ -30,3 +30,7 @@ pub use self::fork_link::*;
 /// Takes a channel for input and converts it to a stream.
 mod input_channel_link;
 pub use self::input_channel_link::*;
+
+/// Takes a stream and converts it to a channel for output.
+mod output_channel_link;
+pub use self::output_channel_link::*;
