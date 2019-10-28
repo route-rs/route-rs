@@ -5,7 +5,6 @@ use crate::packets::*;
 use futures::lazy;
 use route_rs_runtime::link::primitive::*;
 use route_rs_runtime::link::*;
-use route_rs_runtime::pipeline::OutputChannelLink;
 use route_rs_runtime::processor::*;
 
 pub struct Pipeline {}
@@ -34,13 +33,16 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
         all_runnables.append(&mut runnables_2);
         let link_2_egress_0 = egressors_2.remove(0);
 
-        let link_3 = OutputChannelLink::new(link_2_egress_0, output_channel);
+        let (mut runnables_3, mut _egressors_3) = OutputChannelLink::new()
+            .ingressor(link_2_egress_0)
+            .channel(output_channel)
+            .build_link();
+        all_runnables.append(&mut runnables_3);
 
         tokio::run(lazy(move || {
             for r in all_runnables {
                 tokio::spawn(r);
             }
-            tokio::spawn(link_3);
             Ok(())
         }));
     }
