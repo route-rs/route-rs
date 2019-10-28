@@ -1,75 +1,83 @@
-use crate::link::{Link, LinkBuilder, PacketStream};
-use crate::processor::Processor;
-use futures::{Async, Future, Poll};
+use crate::link::primitive::ProcessLink;
+use crate::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
+use crate::processor::Drop;
 
-/// Link that drops all packets ingressed.
+/// Link that drops packets.
+/// Can specify a weighted uniform distribution for dropping,
+/// otherwise, will drop all incoming packets.
 #[derive(Default)]
-pub struct DropLink<P: Processor> {
-    in_streams: Option<Vec<PacketStream<P::Input>>>,
+pub struct DropLink<I> {
+    in_stream: Option<PacketStream<I>>,
+    drop_chance: Option<f64>,
+    seed: Option<u64>,
 }
 
-impl<P: Processor> DropLink<P> {
+impl<I> DropLink<I> {
     pub fn new() -> Self {
-        DropLink { in_streams: None }
+        DropLink {
+            in_stream: None,
+            drop_chance: None,
+            seed: None,
+        }
     }
 
-    /// Appends the ingressor to the ingressors of the blackhole.
-    pub fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
-        match self.in_streams {
-            None => {
-                let in_streams = Some(vec![in_stream]);
-                DropLink { in_streams }
-            }
-            Some(mut in_streams) => {
-                in_streams.push(in_stream);
-                DropLink {
-                    in_streams: Some(in_streams),
-                }
-            }
+    pub fn ingressor(self, in_stream: PacketStream<I>) -> Self {
+        DropLink {
+            in_stream: Some(in_stream),
+            drop_chance: self.drop_chance,
+            seed: self.seed,
+        }
+    }
+
+    pub fn drop_chance(self, chance: f64) -> Self {
+        DropLink {
+            in_stream: self.in_stream,
+            drop_chance: Some(chance),
+            seed: self.seed,
+        }
+    }
+
+    pub fn seed(self, int_seed: u64) -> Self {
+        DropLink {
+            in_stream: self.in_stream,
+            drop_chance: self.drop_chance,
+            seed: Some(int_seed),
         }
     }
 }
 
-impl<P: Processor + 'static> LinkBuilder<P::Input, ()> for DropLink<P> {
-    fn ingressors(self, ingress_streams: Vec<PacketStream<P::Input>>) -> Self {
+impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
+    fn ingressors(self, mut ingress_streams: Vec<PacketStream<I>>) -> Self {
+        assert_eq!(
+            ingress_streams.len(),
+            1,
+            "DropLink can only take 1 ingress stream"
+        );
         DropLink {
-            in_streams: Some(ingress_streams),
+            in_stream: Some(ingress_streams.remove(0)),
+            drop_chance: self.drop_chance,
+            seed: self.seed,
         }
     }
 
-    fn build_link(self) -> Link<()> {
-        if self.in_streams.is_none() {
+    fn build_link(self) -> Link<I> {
+        if self.in_stream.is_none() {
             panic!("Cannot build link! Missing input streams");
         } else {
-            (
-                vec![Box::new(DropIngressor::<P>::new(self.in_streams.unwrap()))],
-                vec![],
-            )
-        }
-    }
-}
+            let mut dropper: Drop<I> = Drop::new();
 
-struct DropIngressor<P: Processor> {
-    in_streams: Vec<PacketStream<P::Input>>,
-}
-
-impl<P: Processor> DropIngressor<P> {
-    fn new(in_streams: Vec<PacketStream<P::Input>>) -> Self {
-        DropIngressor { in_streams }
-    }
-}
-
-impl<P: Processor> Future for DropIngressor<P> {
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            for in_stream in self.in_streams.iter_mut() {
-                if try_ready!(in_stream.poll()).is_none() {
-                    return Ok(Async::Ready(()));
-                }
+            if let Some(dc) = self.drop_chance {
+                dropper = dropper.drop_chance(dc);
             }
+
+            if let Some(s) = self.seed {
+                dropper = dropper.seed(s);
+            }
+
+            ProcessLink::new()
+                .ingressor(self.in_stream.unwrap())
+                .processor(dropper)
+                .build_link()
         }
     }
 }
@@ -78,7 +86,6 @@ impl<P: Processor> Future for DropIngressor<P> {
 mod tests {
     use super::*;
     use crate::classifier::even_link;
-    use crate::processor::Identity;
     use crate::utils::test::harness::run_link;
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
@@ -86,31 +93,19 @@ mod tests {
     #[test]
     #[should_panic]
     fn panics_if_no_input_stream_provided() {
-        DropLink::<Identity<i32>>::new().build_link();
-    }
-
-    #[test]
-    fn multiple_ingressor_calls_works() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-
-        let link = DropLink::<Identity<i32>>::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .ingressor(immediate_stream(packets.clone()))
-            .build_link();
-
-        run_link(link);
+        DropLink::<()>::new().build_link();
     }
 
     #[test]
     fn finishes() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = DropLink::<Identity<i32>>::new()
+        let link: Link<i32> = DropLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
-        let results = run_link(link);
-        assert!(results.is_empty());
+        let results: Vec<Vec<i32>> = run_link(link);
+        assert_eq!(results[0], vec![]);
     }
 
     #[test]
@@ -121,28 +116,45 @@ mod tests {
             packets.clone().into_iter(),
         );
 
-        let link = DropLink::<Identity<i32>>::new()
+        let link = DropLink::new()
             .ingressor(Box::new(packet_generator))
             .build_link();
 
         let results = run_link(link);
-        assert!(results.is_empty());
+        assert_eq!(results[0], vec![]);
     }
 
     #[test]
     fn drops_odd_packets() {
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let (mut runnables, mut egressors) = even_link(packet_generator);
+        let (mut even_runnables, mut even_egressors) = even_link(packet_generator);
 
-        let (mut drop_runnables, _) = DropLink::<Identity<i32>>::new()
-            .ingressor(egressors.pop().unwrap())
+        let (mut drop_runnables, mut drop_egressors) = DropLink::new()
+            .ingressor(even_egressors.pop().unwrap())
             .build_link();
 
-        runnables.append(&mut drop_runnables);
+        even_runnables.append(&mut drop_runnables);
 
-        let link = (runnables, vec![egressors.pop().unwrap()]);
+        let link = (
+            even_runnables,
+            vec![even_egressors.pop().unwrap(), drop_egressors.remove(0)],
+        );
         let results: Vec<Vec<i32>> = run_link(link);
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+    }
+
+    #[test]
+    fn drops_randomly() {
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+
+        let link: Link<i32> = DropLink::new()
+            .ingressor(immediate_stream(packets.clone()))
+            .drop_chance(0.7)
+            .seed(0)
+            .build_link();
+
+        let results: Vec<Vec<i32>> = run_link(link);
+        assert_eq!(results[0], vec![1, 2, 1337, 7]);
     }
 }
