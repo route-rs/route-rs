@@ -100,11 +100,11 @@ mod tests {
     fn finishes() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link: Link<i32> = DropLink::new()
+        let link = DropLink::new()
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
-        let results: Vec<Vec<i32>> = run_link(link);
+        let results = run_link(link);
         assert_eq!(results[0], vec![]);
     }
 
@@ -140,7 +140,7 @@ mod tests {
             even_runnables,
             vec![even_egressors.pop().unwrap(), drop_egressors.remove(0)],
         );
-        let results: Vec<Vec<i32>> = run_link(link);
+        let results = run_link(link);
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
     }
 
@@ -154,7 +154,7 @@ mod tests {
             .seed(0)
             .build_link();
 
-        let results: Vec<Vec<i32>> = run_link(link);
+        let results = run_link(link);
         assert_eq!(results[0], vec![1, 2, 1337, 7]);
     }
 }

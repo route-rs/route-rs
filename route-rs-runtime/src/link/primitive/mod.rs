@@ -26,7 +26,3 @@ pub use self::join_link::*;
 /// Copies all input to each of its outputs, asynchronous.
 mod fork_link;
 pub use self::fork_link::*;
-
-/// Drops all packets that are ingressed, asynchronous.
-mod drop_link;
-pub use self::drop_link::*;

@@ -7,3 +7,7 @@ pub use self::mton_link::*;
 /// and transforms it using a user provided processor to M Output streams.
 mod m_transform_n_link;
 pub use self::m_transform_n_link::*;
+
+/// Drops packets with weighted randomness.
+mod drop_link;
+pub use self::drop_link::*;
