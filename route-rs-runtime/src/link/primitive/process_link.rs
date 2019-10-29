@@ -2,6 +2,10 @@ use crate::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
 use crate::processor::Processor;
 use futures::{Async, Poll, Stream};
 
+/// `ProcessLink` is a simple links used to process packets through the user-defined processor
+/// It does not have the ability to store packets internally, and is pull-based. So it only does
+/// work when it is called, and must either immediatly return recieved packets, or drop them.  This
+/// link is used for transformation logic.
 #[derive(Default)]
 pub struct ProcessLink<P: Processor> {
     in_stream: Option<PacketStream<P::Input>>,

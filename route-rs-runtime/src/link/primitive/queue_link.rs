@@ -7,6 +7,8 @@ use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
 use futures::{Async, Future, Poll, Stream};
 use std::sync::Arc;
 
+/// A link that can be used to create queues or buffers. It also takes a processor so
+/// packets may be transformed prior to being enqueued.
 #[derive(Default)]
 pub struct QueueLink<P: Processor> {
     in_stream: Option<PacketStream<P::Input>>,

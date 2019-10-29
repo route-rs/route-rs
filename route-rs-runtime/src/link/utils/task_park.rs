@@ -11,7 +11,7 @@ route-rs processors. These utilities should not be exposed via the Processors AP
 ///
 /// This enum represents the state machine of a task_park; A place where a task can 'park' its
 /// task handle, and expect the other task sharing this task_park to wake it up at a later time
-/// when there is work to do. A simple example exists in  `AsyncLink`. When the provider attempts
+/// when there is work to do. A simple example exists in  `QueueLink`. When the provider attempts
 /// to pull a packet from the channel, and finds it empty, it must await more packets
 /// before it can make forward progress. So it calls `park_and_notify`, which will awaken any
 /// task handle inside in the task_park, and place the task_park in the `Parked(task::Task)` state.
