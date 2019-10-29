@@ -28,10 +28,12 @@ impl<'packet> TcpSegment<'packet> {
         let ip_version = (segment[packet_offset] & 0xF0) >> 4;
         match ip_version {
             4 => {
-                protocol = get_ipv4_payload_type(segment, packet_offset);
+                protocol = get_ipv4_payload_type(segment, packet_offset)
+                    .expect("Malformed IPv4 Header in TcpSegment");
             }
             6 => {
-                protocol = get_ipv6_payload_type(segment, packet_offset);
+                protocol = get_ipv6_payload_type(segment, packet_offset)
+                    .expect("Malformed IPv6 Header in TcpSegment");
             }
             _ => {
                 return Err("IP Header has invalid version number");

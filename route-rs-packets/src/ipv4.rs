@@ -150,7 +150,7 @@ impl<'packet> Ipv4Packet<'packet> {
         )
     }
 
-    pub fn dcsp(&self) -> u8 {
+    pub fn dscp(&self) -> u8 {
         self.data[self.packet_offset + 1] >> 2
     }
 
@@ -223,13 +223,16 @@ impl<'packet> Ipv4Packet<'packet> {
 
 /// Returns Ipv4 payload type, reads the header information to get the type
 /// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
-pub fn get_ipv4_payload_type(data: &[u8], packet_offset: usize) -> IpProtocol {
+pub fn get_ipv4_payload_type(
+    data: &[u8],
+    packet_offset: usize,
+) -> Result<IpProtocol, &'static str> {
     if data.len() <= packet_offset + 9 || (data[packet_offset] & 0xF0) != 0x40 {
         // Either data isn't big enough, or the version field does not indicate this is
         // an Ipv4 packet.
-        return IpProtocol::Reserved;
+        return Err("Is not an Ipv4 packet");
     }
-    IpProtocol::from(data[packet_offset + 9])
+    Ok(IpProtocol::from(data[packet_offset + 9]))
 }
 
 impl<'packet> TryFrom<EthernetFrame<'packet>> for Ipv4Packet<'packet> {
@@ -283,7 +286,7 @@ mod tests {
         assert_eq!(packet.total_len(), 20);
         assert_eq!(packet.ttl(), 64);
         assert_eq!(packet.checksum(), 0);
-        assert_eq!(packet.dcsp(), 0);
+        assert_eq!(packet.dscp(), 0);
         assert_eq!(packet.ecn(), 0);
         assert_eq!(packet.indentification(), 0);
         assert_eq!(packet.fragment_offet(), 0);
