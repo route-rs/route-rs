@@ -5,10 +5,12 @@ use futures::{Future, Stream};
 /// library are encourged to make their own to encourage code reuse.
 pub mod composite;
 
-// TODO: primitives docs
+/// Primitive links are links that individually implement all the flow based logic that can be combined to create more compilcated
+/// composite links. Users of the library should not have to implement their own primitive links, but should rather combine them into
+/// their own custom composite links. 
 pub mod primitive;
 
-// TODO: util docs
+/// Commmon utilities used by links, for instance the `task_park` utility used in primitive links to facilite sleeping and waking.
 mod utils;
 
 /// All Links communicate through streams of packets. This allows them to be composable.
