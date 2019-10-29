@@ -6,6 +6,7 @@ use smoltcp::{phy::ChecksumCapabilities, wire};
 use std::{ffi::CString, sync::mpsc, thread, time::Duration};
 
 #[test]
+#[ignore]
 fn layer2_loopback() {
     // If this takes more than a second to occur, something's definitely wrong.
     let timeout = Duration::from_secs(1);

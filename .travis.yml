@@ -15,4 +15,4 @@ jobs:
                 cargo clippy --all-targets -- -D warnings &&
                 cargo deny check &&
                 cargo build --verbose &&
-                cargo test --verbose --all --exclude afpacket
+                cargo test --verbose
