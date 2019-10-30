@@ -1,0 +1,117 @@
+:root{
+    --RUST-BLACK: #000000;
+    --RUST-BROWN:#3B2E2A;
+    --RUST-RED:#C14566;
+    --RUST-PURPLE:#403D58;
+    --RUST-PURPLE-SECONDARY: #2d2a45;
+    --RUST-GREEN:#398277;
+    --RUST-TAN:#E1E1DB;
+
+    --MAIN-TEXT-color:var(--RUST-BLACK);                            /* Color of text by default */
+    --MAIN-TITLES-TEXT-color:var(--RUST-BLACK);                     /* Color of titles h2-h3-h4-h5 */
+    --MAIN-LINK-color:var(--RUST-PURPLE);                           /* Color of links */
+    --MAIN-LINK-HOVER-color:var(--RUST-RED);                        /* Color of hovered links */
+    --MAIN-ANCHOR-color: var(--RUST-BLACK);                         /* color of anchors on titles */
+
+    --MENU-HEADER-BG-color: var(--RUST-GREEN);                      /* Background color of menu header */
+    --MENU-HEADER-BORDER-color:var(--RUST-PURPLE);                  /*Color of menu header border */
+
+    --MENU-SEARCH-BG-color:var(--RUST-TAN);                         /* Search field background color (by default borders + icons) */
+    --MENU-SEARCH-BOX-color: var(--RUST-BROWN);                     /* Override search field border color */
+    --MENU-SEARCH-BOX-ICONS-color: var(--RUST-BROWN);               /* Override search field icons color */
+
+    --MENU-SECTIONS-ACTIVE-BG-color:var(--RUST-PURPLE-SECONDARY);   /* Background color of the active section and its childs */
+    --MENU-SECTIONS-BG-color:var(--RUST-PURPLE);;                   /* Background color of other sections */
+    --MENU-SECTIONS-LINK-color: var(--RUST-TAN);                    /* Color of links in menu */
+    --MENU-SECTIONS-LINK-HOVER-color: var(--RUST-GREEN);            /* Color of links in menu, when hovered */
+    --MENU-SECTION-ACTIVE-CATEGORY-color: var(--RUST-BLACK);;       /* Color of active category text */
+    --MENU-SECTION-ACTIVE-CATEGORY-BG-color: var(--RUST-TAN);       /* Color of background for the active category (only) */
+
+    --MENU-VISITED-color: var(--RUST-RED);                          /* Color of 'page visited' icons in menu */
+    --MENU-SECTION-HR-color: var(--RUST-TAN);                       /* Color of <hr> separator in menu */
+}
+
+body {
+    color: var(--MAIN-TEXT-color) !important;
+    background-color: #e1e1db;
+}
+
+textarea:focus, input[type="email"]:focus, input[type="number"]:focus, input[type="password"]:focus, input[type="search"]:focus, input[type="tel"]:focus, input[type="text"]:focus, input[type="url"]:focus, input[type="color"]:focus, input[type="date"]:focus, input[type="datetime"]:focus, input[type="datetime-local"]:focus, input[type="month"]:focus, input[type="time"]:focus, input[type="week"]:focus, select[multiple=multiple]:focus {
+    border-color: none;
+    box-shadow: none;
+}
+
+h2, h3, h4, h5 {
+    color: var(--MAIN-TITLES-TEXT-color) !important;
+}
+
+a {
+    color: var(--MAIN-LINK-color);
+}
+
+.anchor {
+    color: var(--MAIN-ANCHOR-color);
+}
+
+a:hover {
+    color: var(--MAIN-LINK-HOVER-color);
+}
+
+#sidebar ul li.visited > a .read-icon {
+    color: var(--MENU-VISITED-color);
+}
+
+#body a.highlight:after {
+    display: block;
+    content: "";
+    height: 1px;
+    width: 0%;
+    -webkit-transition: width 0.5s ease;
+    -moz-transition: width 0.5s ease;
+    -ms-transition: width 0.5s ease;
+    transition: width 0.5s ease;
+    background-color: var(--MAIN-LINK-HOVER-color);
+}
+#sidebar {
+    background-color: var(--MENU-SECTIONS-BG-color);
+}
+#sidebar #header-wrapper {
+    background: var(--MENU-HEADER-BG-color);
+    color: var(--MENU-SEARCH-BOX-color);
+    border-color: var(--MENU-HEADER-BORDER-color);
+}
+#sidebar .searchbox {
+    border-color: var(--MENU-SEARCH-BOX-color);
+    background: var(--MENU-SEARCH-BG-color);
+}
+#sidebar ul.topics > li.parent, #sidebar ul.topics > li.active {
+    background: var(--MENU-SECTIONS-ACTIVE-BG-color);
+}
+#sidebar .searchbox * {
+    color: var(--MENU-SEARCH-BOX-ICONS-color);
+}
+
+#sidebar a {
+    color: var(--MENU-SECTIONS-LINK-color);
+}
+
+#sidebar a:hover {
+    color: var(--MENU-SECTIONS-LINK-HOVER-color);
+}
+
+#sidebar ul li.active > a {
+    background: var(--MENU-SECTION-ACTIVE-CATEGORY-BG-color);
+    color: var(--MENU-SECTION-ACTIVE-CATEGORY-color) !important;
+}
+
+#sidebar hr {
+    border-color: var(--MENU-SECTION-HR-color);
+}
+
+#sidebar #shortcuts h3 {
+    color: var(--RUST-TAN) !important;
+}
+
+input#search-by::placeholder {
+    color: var(--MENU-SEARCH-BOX-ICONS-color);
+}

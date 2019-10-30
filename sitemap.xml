@@ -8,16 +8,47 @@
   </url>
   
   <url>
-    <loc>http://route-rs.github.io/route-rs/basics/second-content/</loc>
+    <loc>http://route-rs.github.io/route-rs/basics/a-content/</loc>
     <lastmod>2019-10-29T17:03:37-07:00</lastmod>
   </url>
   
   <url>
-    <loc>http://route-rs.github.io/route-rs/categories/</loc>
+    <loc>http://route-rs.github.io/route-rs/basics/b-content/</loc>
+    <lastmod>2019-10-29T17:03:37-07:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://route-rs.github.io/route-rs/basics/a-content/a-first/</loc>
+    <lastmod>2019-10-29T17:03:34-07:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://route-rs.github.io/route-rs/basics/a-content/a-second/</loc>
+    <lastmod>2019-10-29T17:03:34-07:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://route-rs.github.io/route-rs/basics/b-content/b-first/</loc>
+    <lastmod>2019-10-29T17:03:34-07:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://route-rs.github.io/route-rs/basics/b-content/b-second/</loc>
+    <lastmod>2019-10-29T17:03:34-07:00</lastmod>
   </url>
   
   <url>
     <loc>http://route-rs.github.io/route-rs/</loc>
+    <lastmod>2019-10-29T17:03:34-07:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://route-rs.github.io/route-rs/credits/</loc>
+    <lastmod>2019-10-29T17:03:31-07:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://route-rs.github.io/route-rs/categories/</loc>
   </url>
   
   <url>
