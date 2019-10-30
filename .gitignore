@@ -3,3 +3,7 @@
 Cargo.lock
 .idea
 *.code-workspace
+
+# Ignore the public directory that hugo generates.
+# This folder will be pushed to the orphaned gh-pages branch
+public
