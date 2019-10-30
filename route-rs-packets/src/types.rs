@@ -31,6 +31,18 @@ impl fmt::Display for MacAddr {
     }
 }
 
+/// Encapsulates behavior of EtherType field in EthernetFrame
+/// If value is <= 1500, this number repreasents the payload_len of the frame
+/// If the value is >= 1536, is the EtherType number
+/// Other values are undefined
+/// https://en.wikipedia.org/wiki/EtherType
+#[derive(Eq, PartialEq, Debug)]
+pub enum EtherType {
+    PayloadLen(u16),
+    Undefined(u16),
+    EtherTypeNum(u16),
+}
+
 #[allow(non_camel_case_types)]
 #[derive(Eq, PartialEq, Debug)]
 pub enum IpProtocol {

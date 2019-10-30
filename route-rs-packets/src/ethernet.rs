@@ -20,15 +20,22 @@ impl<'frame> EthernetFrame<'frame> {
         if frame.len() < 14 {
             return Err("Frame is less than the minimum of 14 bytes");
         }
-        // Can't use helper here, since we don't have the object yet :(.
+
+        // This value is either the EtherType, or the Payload length
+        // Values <= 1500 mean this is payload length
+        // Values >= 1536 indicate EtherType
+        // Other values are undefined.
+        // https://en.wikipedia.org/wiki/EtherType
         let payload_len = u16::from_be_bytes([frame[12], frame[13]]) as usize;
-        if payload_len + 14 != frame.len() {
-            return Err("Frame has invalivd payload len field");
+        if payload_len + 14 != frame.len() && payload_len <= 1500 {
+            return Err("Frame has invalid ether_type::payload_len field");
+        } else if (1501..1536).contains(&payload_len) {
+            return Err("Frame has invalid ether_type value");
         }
 
         Ok(EthernetFrame {
             data: frame,
-            payload_offset: 14,
+            payload_offset: 14, // To support 802.1Q VLAN Tagging, this number may be different.
         })
     }
 
@@ -50,8 +57,15 @@ impl<'frame> EthernetFrame<'frame> {
         self.data[6..12].copy_from_slice(&mac.bytes[..6]);
     }
 
-    pub fn payload_len(&self) -> u16 {
-        u16::from_be_bytes(self.data[12..=13].try_into().unwrap())
+    pub fn ether_type(&self) -> EtherType {
+        let num = u16::from_be_bytes(self.data[12..=13].try_into().unwrap());
+        if num <= 1500 {
+            EtherType::PayloadLen(num)
+        } else if num >= 1536 {
+            EtherType::EtherTypeNum(num)
+        } else {
+            EtherType::Undefined(num)
+        }
     }
 
     // This gives you a cow of a slice of the payload.
@@ -61,10 +75,15 @@ impl<'frame> EthernetFrame<'frame> {
 
     pub fn set_payload(&mut self, payload: &[u8]) {
         let payload_len = payload.len() as u16;
-        self.data.truncate(self.payload_offset - 2); // Cut off and drop the entire payload and payload_len
-        let payload_len_bytes = payload_len.to_be_bytes();
-        self.data.reserve_exact(payload_len as usize + 2); // Reserve room for payload and len field.
-        self.data.extend(payload_len_bytes.iter());
+        if let EtherType::PayloadLen(_) = self.ether_type() {
+            self.data.truncate(self.payload_offset - 2);
+            let payload_len_bytes = payload_len.to_be_bytes();
+            self.data.reserve_exact(payload_len as usize + 2);
+            self.data.extend(payload_len_bytes.iter());
+        } else {
+            self.data.truncate(self.payload_offset);
+            self.data.reserve_exact(payload_len as usize);
+        }
         self.data.extend(payload);
     }
 }
@@ -115,7 +134,7 @@ mod tests {
             MacAddr::new([0xde, 0xad, 0xbe, 0xef, 0xff, 0xff])
         );
         assert_eq!(frame.src_mac(), MacAddr::new([1, 2, 3, 4, 5, 6]));
-        assert_eq!(frame.payload_len(), 0);
+        assert_eq!(frame.ether_type(), EtherType::PayloadLen(0));
         assert_eq!(frame.payload().len(), 0);
     }
 
@@ -123,12 +142,15 @@ mod tests {
     fn set_payload() {
         let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let mut frame = EthernetFrame::new(&mut data).unwrap();
-        assert_eq!(frame.payload_len(), 0);
+        assert_eq!(frame.ether_type(), EtherType::PayloadLen(0));
         assert_eq!(frame.payload().len(), 0);
 
         let new_payload: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         frame.set_payload(&new_payload);
-        assert_eq!(frame.payload_len(), new_payload.len() as u16);
+        assert_eq!(
+            frame.ether_type(),
+            EtherType::PayloadLen(new_payload.len() as u16)
+        );
         assert_eq!(frame.payload(), new_payload);
         assert_eq!(frame.payload()[2], 3);
     }
@@ -141,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Frame has invalivd payload len field")]
+    #[should_panic(expected = "Frame has invalid ether_type::payload_len field")]
     fn invalid_payload_length() {
         let mut data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0xff, 1, 2,
@@ -165,5 +187,17 @@ mod tests {
         let new_src = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
         frame.set_src_mac(new_src);
         assert_eq!(frame.src_mac(), new_src);
+    }
+
+    #[test]
+    fn ether_type() {
+        let mut data: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0xff, 0xff,
+        ];
+        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        assert_eq!(frame.ether_type(), EtherType::EtherTypeNum(0xffff));
+        let payload: Vec<u8> = vec![1, 2, 3, 4];
+        frame.set_payload(&payload);
+        assert_eq!(frame.ether_type(), EtherType::EtherTypeNum(0xffff));
     }
 }
