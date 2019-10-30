@@ -2,13 +2,13 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Basics on route-rs documentation</title>
-    <link>http://route-rs.github.com/route-rs/basics/</link>
+    <link>http://route-rs.github.io/route-rs/basics/</link>
     <description>Recent content in Basics on route-rs documentation</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <lastBuildDate>Tue, 29 Oct 2019 17:03:31 -0700</lastBuildDate>
     
-	<atom:link href="http://route-rs.github.com/route-rs/basics/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="http://route-rs.github.io/route-rs/basics/index.xml" rel="self" type="application/rss+xml" />
     
     
   </channel>

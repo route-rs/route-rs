@@ -2,12 +2,12 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>route-rs documentation</title>
-    <link>http://route-rs.github.com/route-rs/</link>
+    <link>http://route-rs.github.io/route-rs/</link>
     <description>Recent content on route-rs documentation</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     
-	<atom:link href="http://route-rs.github.com/route-rs/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="http://route-rs.github.io/route-rs/index.xml" rel="self" type="application/rss+xml" />
     
     
   </channel>

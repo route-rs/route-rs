@@ -1,34 +1,34 @@
 [
 {
-	"uri": "http://route-rs.github.com/route-rs/basics/",
+	"uri": "http://route-rs.github.io/route-rs/basics/",
 	"title": "Basics",
 	"tags": [],
 	"description": "",
 	"content": " Chapter X Some Chapter title Lorem Ipsum.\n"
 },
 {
-	"uri": "http://route-rs.github.com/route-rs/basics/second-content/",
+	"uri": "http://route-rs.github.io/route-rs/basics/second-content/",
 	"title": "Second Content",
 	"tags": [],
 	"description": "",
 	"content": ""
 },
 {
-	"uri": "http://route-rs.github.com/route-rs/categories/",
+	"uri": "http://route-rs.github.io/route-rs/categories/",
 	"title": "Categories",
 	"tags": [],
 	"description": "",
 	"content": ""
 },
 {
-	"uri": "http://route-rs.github.com/route-rs/",
+	"uri": "http://route-rs.github.io/route-rs/",
 	"title": "route-rs documentation",
 	"tags": [],
 	"description": "",
 	"content": ""
 },
 {
-	"uri": "http://route-rs.github.com/route-rs/tags/",
+	"uri": "http://route-rs.github.io/route-rs/tags/",
 	"title": "Tags",
 	"tags": [],
 	"description": "",
