@@ -190,7 +190,7 @@ pub enum IpProtocol {
     WESP,
     ROHC,
     Unassigned,
-    Use_for_expiramentation_and_testing,
+    Use_for_experimentation_and_testing,
     Reserved,
 }
 
@@ -341,7 +341,7 @@ impl From<u8> for IpProtocol {
             141 => IpProtocol::WESP,
             142 => IpProtocol::ROHC,
             143..=252 => IpProtocol::Unassigned,
-            253..=254 => IpProtocol::Use_for_expiramentation_and_testing,
+            253..=254 => IpProtocol::Use_for_experimentation_and_testing,
             255 => IpProtocol::Reserved,
         }
     }

@@ -140,7 +140,7 @@ impl<'packet> Ipv6Packet<'packet> {
                 | IpProtocol::Mobility_Header
                 | IpProtocol::HIP
                 | IpProtocol::Shim6
-                | IpProtocol::Use_for_expiramentation_and_testing => {
+                | IpProtocol::Use_for_experimentation_and_testing => {
                     header_ext_len = self.data[offset + 1];
                     if header_ext_len == 0 {
                         // Fragments have the minimum of 8, but it set to zero for some dumb reason
@@ -205,7 +205,7 @@ pub fn get_ipv6_payload_type(
             | IpProtocol::Mobility_Header
             | IpProtocol::HIP
             | IpProtocol::Shim6
-            | IpProtocol::Use_for_expiramentation_and_testing => {
+            | IpProtocol::Use_for_experimentation_and_testing => {
                 if data.len() <= offset + 1 {
                     // Check for length overrun
                     return Ok(IpProtocol::Reserved);
