@@ -9,3 +9,9 @@ license = "MIT"
 clap = "2.33.0"
 xml-rs = "0.8.0"
 petgraph = "0.4.13"
+proc-macro2 = "1.0.6"
+quote = "1.0.2"
+
+[dependencies.syn]
+version = "1.0.7"
+features = ["full"]
