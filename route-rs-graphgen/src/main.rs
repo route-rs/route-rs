@@ -26,24 +26,50 @@ enum Link {
 }
 
 fn gen_source_imports(local_modules: Vec<&str>, runtime_modules: Vec<&str>) -> String {
-    let local_imports = local_modules
-        .iter()
-        .map(|m| format!("crate::{}::*", m))
-        .collect::<Vec<String>>();
-    let runtime_imports = runtime_modules
-        .iter()
-        .map(|m| format!("route_rs_runtime::{}::*", m))
-        .collect::<Vec<String>>();
-    let external_imports = vec![
-        "futures::lazy",
-        "route_rs_runtime::pipeline::{InputChannelLink, OutputChannelLink}",
-    ];
-    [
-        codegen::import(local_imports),
-        codegen::import(runtime_imports),
-        codegen::import(external_imports),
-    ]
-    .join("\n")
+    let mut imports = vec![];
+    for lm in local_modules {
+        imports.push(syn::UseTree::Path(codegen::use_path(
+            "crate",
+            syn::UseTree::Path(codegen::use_path(
+                lm,
+                syn::UseTree::Glob(codegen::use_glob()),
+            )),
+        )))
+    }
+    imports.push(syn::UseTree::Path(codegen::use_path(
+        "route_rs_runtime",
+        syn::UseTree::Path(codegen::use_path(
+            "link",
+            syn::UseTree::Glob(codegen::use_glob()),
+        )),
+    )));
+    imports.push(syn::UseTree::Path(codegen::use_path(
+        "route_rs_runtime",
+        syn::UseTree::Path(codegen::use_path(
+            "link",
+            syn::UseTree::Path(codegen::use_path(
+                "primitive",
+                syn::UseTree::Glob(codegen::use_glob()),
+            )),
+        )),
+    )));
+    for rm in runtime_modules {
+        imports.push(syn::UseTree::Path(codegen::use_path(
+            "route_rs_runtime",
+            syn::UseTree::Path(codegen::use_path(
+                rm,
+                syn::UseTree::Glob(codegen::use_glob()),
+            )),
+        )))
+    }
+    imports.push(syn::UseTree::Path(codegen::use_path(
+        "futures",
+        syn::UseTree::Name(syn::UseName {
+            ident: codegen::ident("lazy"),
+        }),
+    )));
+
+    codegen::import(&imports)
 }
 
 fn get_io_nodes(nodes: &[&NodeData], edges: &[&EdgeData]) -> (NodeData, NodeData) {
@@ -377,7 +403,12 @@ fn generate_pipeline_source(
 }
 
 fn get_array_arg<'a>(arg_matches: &'a ArgMatches, name: &str) -> Vec<&'a str> {
-    arg_matches.value_of(name).unwrap().split(',').collect()
+    let args: Vec<&str> = arg_matches.value_of(name).unwrap().split(',').collect();
+    if args.eq(&[""]) {
+        vec![]
+    } else {
+        args
+    }
 }
 
 fn get_pathbuf_arg(arg_matches: &ArgMatches, name: &str) -> PathBuf {
@@ -447,7 +478,7 @@ fn main() {
                 .long("runtime-modules")
                 .value_name("RUNTIME_MODULES")
                 .takes_value(true)
-                .default_value("processor,link"), // TODO: Validate that the modules exist in our crate
+                .default_value(""), // TODO: Validate that the modules exist in our crate
         )
         .get_matches();
 

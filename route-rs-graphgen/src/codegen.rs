@@ -1,3 +1,8 @@
+extern crate proc_macro2;
+extern crate quote;
+
+use quote::ToTokens;
+
 /// Indents every non-blank line in the input text by the given string.
 pub fn indent<S, T>(indentation: S, text: T) -> String
 where
@@ -79,11 +84,50 @@ mod comment {
     }
 }
 
+pub fn ident(name: &str) -> syn::Ident {
+    syn::Ident::new(name, proc_macro2::Span::call_site())
+}
+
+pub fn use_path(name: &str, cont: syn::UseTree) -> syn::UsePath {
+    syn::UsePath {
+        ident: ident(name),
+        colon2_token: syn::token::Colon2 {
+            spans: [
+                proc_macro2::Span::call_site(),
+                proc_macro2::Span::call_site(),
+            ],
+        },
+        tree: Box::new(cont),
+    }
+}
+
+pub fn use_glob() -> syn::UseGlob {
+    syn::UseGlob {
+        star_token: syn::token::Star {
+            spans: [proc_macro2::Span::call_site()],
+        },
+    }
+}
+
 /// Generates use statements for the provided package imports
-pub fn import<S: Into<String>>(imports: Vec<S>) -> String {
+pub fn import(imports: &[syn::UseTree]) -> String {
     imports
-        .into_iter()
-        .map(|i| format!("use {};", i.into()))
+        .iter()
+        .map(|i| {
+            syn::Item::Use(syn::ItemUse {
+                attrs: vec![],
+                vis: syn::Visibility::Inherited,
+                use_token: syn::token::Use {
+                    span: proc_macro2::Span::call_site(),
+                },
+                leading_colon: None,
+                tree: i.to_owned(),
+                semi_token: syn::token::Semi {
+                    spans: [proc_macro2::Span::call_site()],
+                },
+            })
+        })
+        .map(|i| i.to_token_stream().to_string())
         .collect::<Vec<String>>()
         .join("\n")
 }
@@ -91,31 +135,64 @@ pub fn import<S: Into<String>>(imports: Vec<S>) -> String {
 #[cfg(test)]
 mod import {
     use super::*;
+    use std::iter::FromIterator;
 
-    #[test]
-    fn single_import() {
-        assert_eq!(import(vec!["package::function"]), "use package::function;");
+    fn use_group(subtrees: Vec<syn::UseTree>) -> syn::UseGroup {
+        syn::UseGroup {
+            brace_token: syn::token::Brace {
+                span: proc_macro2::Span::call_site(),
+            },
+            items: syn::punctuated::Punctuated::from_iter(subtrees.into_iter()),
+        }
     }
 
     #[test]
-    fn multi_import() {
+    fn single_identifier() {
+        let tree = syn::UseTree::Name(syn::UseName {
+            ident: ident("foobarbaz"),
+        });
+        assert_eq!(import(&[tree]), "use foobarbaz ;");
+    }
+
+    #[test]
+    fn multiple_identifier() {
+        let trees = &[
+            syn::UseTree::Name(syn::UseName {
+                ident: ident("foobarbaz"),
+            }),
+            syn::UseTree::Name(syn::UseName {
+                ident: ident("fooasdfbar"),
+            }),
+            syn::UseTree::Name(syn::UseName {
+                ident: ident("barasdffoo"),
+            }),
+        ];
         assert_eq!(
-            import(vec!["package::somefunction", "library::otherfunction"]),
-            "use package::somefunction;\nuse library::otherfunction;"
+            import(trees),
+            "use foobarbaz ;\nuse fooasdfbar ;\nuse barasdffoo ;"
         );
     }
 
     #[test]
-    fn brace_notation() {
-        assert_eq!(
-            import(vec!["package::{somefunction, otherfunction}"]),
-            "use package::{somefunction, otherfunction};"
-        );
+    fn path_with_glob() {
+        let tree = syn::UseTree::Path(use_path("fooasdfbar", syn::UseTree::Glob(use_glob())));
+        assert_eq!(import(&[tree]), "use fooasdfbar :: * ;");
     }
 
     #[test]
-    fn wildcards() {
-        assert_eq!(import(vec!["package::*"]), "use package::*;");
+    fn path_with_group() {
+        let tree = syn::UseTree::Path(use_path(
+            "fooasdfbar",
+            syn::UseTree::Group(use_group(vec![
+                syn::UseTree::Name(syn::UseName {
+                    ident: ident("hello"),
+                }),
+                syn::UseTree::Name(syn::UseName {
+                    ident: ident("goodbye"),
+                }),
+            ])),
+        ));
+        assert_eq!(import(&[tree]), "use fooasdfbar :: { hello , goodbye } ;");
     }
 }
 
