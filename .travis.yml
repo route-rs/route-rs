@@ -10,7 +10,7 @@ jobs:
     - stage: test
       install: rustup component add rustfmt &&
                 rustup component add clippy &&
-                cargo install -f cargo-deny
+                cargo install -f --version 0.3.0 cargo-deny
       script: cargo fmt -- --check &&
                 cargo clippy --all-targets -- -D warnings &&
                 cargo deny check &&
