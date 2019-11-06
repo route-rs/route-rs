@@ -2,6 +2,7 @@ extern crate proc_macro2;
 extern crate quote;
 
 use quote::ToTokens;
+use std::iter::FromIterator;
 
 /// Indents every non-blank line in the input text by the given string.
 pub fn indent<S, T>(indentation: S, text: T) -> String
@@ -309,6 +310,27 @@ mod impl_struct {
     }
 }
 
+pub fn simple_path(segments: Vec<syn::Ident>, with_leading_colon: bool) -> syn::Path {
+    syn::Path {
+        leading_colon: if with_leading_colon {
+            Some(syn::token::Colon2 {
+                spans: [
+                    proc_macro2::Span::call_site(),
+                    proc_macro2::Span::call_site(),
+                ],
+            })
+        } else {
+            None
+        },
+        segments: syn::punctuated::Punctuated::from_iter(segments.into_iter().map(|s| {
+            syn::PathSegment {
+                ident: s,
+                arguments: syn::PathArguments::None,
+            }
+        })),
+    }
+}
+
 /// Generates type declaration statements
 pub fn typedef(types: Vec<(syn::Ident, syn::Type)>) -> String {
     types
@@ -342,38 +364,16 @@ pub fn typedef(types: Vec<(syn::Ident, syn::Type)>) -> String {
 #[cfg(test)]
 mod typedef {
     use super::*;
-    use std::iter::FromIterator;
-
-    fn simple_type_path(segments: Vec<syn::Ident>, with_leading_colon: bool) -> syn::TypePath {
-        syn::TypePath {
-            qself: None, // Maybe we'll use this in the future but we don't need it now
-            path: syn::Path {
-                leading_colon: if with_leading_colon {
-                    Some(syn::token::Colon2 {
-                        spans: [
-                            proc_macro2::Span::call_site(),
-                            proc_macro2::Span::call_site(),
-                        ],
-                    })
-                } else {
-                    None
-                },
-                segments: syn::punctuated::Punctuated::from_iter(segments.into_iter().map(|s| {
-                    syn::PathSegment {
-                        ident: s,
-                        arguments: syn::PathArguments::None,
-                    }
-                })),
-            },
-        }
-    }
 
     #[test]
     fn single_import() {
         assert_eq!(
             typedef(vec![(
                 ident("FooAsdfBar"),
-                syn::Type::Path(simple_type_path(vec![ident("usize")], false))
+                syn::Type::Path(syn::TypePath {
+                    qself: None,
+                    path: simple_path(vec![ident("usize")], false)
+                })
             )]),
             "type FooAsdfBar = usize ;"
         );
@@ -385,15 +385,52 @@ mod typedef {
             typedef(vec![
                 (
                     ident("FooAsdfBar"),
-                    syn::Type::Path(simple_type_path(vec![ident("usize")], false))
+                    syn::Type::Path(syn::TypePath {
+                        qself: None,
+                        path: simple_path(vec![ident("usize")], false)
+                    })
                 ),
                 (
                     ident("BarAsdfFoo"),
-                    syn::Type::Path(simple_type_path(vec![ident("isize")], false))
+                    syn::Type::Path(syn::TypePath {
+                        qself: None,
+                        path: simple_path(vec![ident("isize")], false)
+                    })
                 )
             ]),
             "type FooAsdfBar = usize ;\ntype BarAsdfFoo = isize ;"
         );
+    }
+}
+
+pub fn let_simple(identifier: syn::Ident, expression: syn::Expr, mutable: bool) -> syn::Local {
+    syn::Local {
+        attrs: vec![],
+        let_token: syn::token::Let {
+            span: proc_macro2::Span::call_site(),
+        },
+        pat: syn::Pat::Ident(syn::PatIdent {
+            attrs: vec![],
+            by_ref: None,
+            mutability: if mutable {
+                Some(syn::token::Mut {
+                    span: proc_macro2::Span::call_site(),
+                })
+            } else {
+                None
+            },
+            ident: identifier,
+            subpat: None,
+        }),
+        init: Some((
+            syn::token::Eq {
+                spans: [proc_macro2::Span::call_site()],
+            },
+            Box::new(expression),
+        )),
+        semi_token: syn::token::Semi {
+            spans: [proc_macro2::Span::call_site()],
+        },
     }
 }
 
