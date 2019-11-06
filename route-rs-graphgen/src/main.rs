@@ -13,6 +13,7 @@ use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNode
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
+use syn::export::ToTokens;
 
 mod codegen;
 mod pipeline_graph;
@@ -102,7 +103,27 @@ fn gen_processor_decls(processors: &[&&NodeData]) -> (String, HashMap<String, St
             let symbol = format!("elem_{}_{}", decl_idx, e.node_class.to_lowercase());
             decl_idx += 1;
             processor_decls_map.insert(e.xml_node_id.to_owned(), symbol.clone());
-            codegen::let_new(symbol, &e.node_class, Vec::<&str>::new())
+            syn::Stmt::Local(codegen::let_simple(
+                codegen::ident(symbol.as_str()),
+                syn::Expr::Call(syn::ExprCall {
+                    attrs: vec![],
+                    func: Box::new(syn::Expr::Path(syn::ExprPath {
+                        attrs: vec![],
+                        qself: None,
+                        path: codegen::simple_path(
+                            vec![codegen::ident(&e.node_class), codegen::ident("new")],
+                            false,
+                        ),
+                    })),
+                    paren_token: syn::token::Paren {
+                        span: proc_macro2::Span::call_site(),
+                    },
+                    args: syn::punctuated::Punctuated::new(),
+                }),
+                false,
+            ))
+            .to_token_stream()
+            .to_string()
         })
         .collect();
     (decls.join("\n"), processor_decls_map)
