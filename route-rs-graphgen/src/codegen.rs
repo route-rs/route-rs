@@ -310,16 +310,31 @@ mod impl_struct {
 }
 
 /// Generates type declaration statements
-pub fn typedef<S, T>(types: Vec<(S, T)>) -> String
-where
-    S: Into<String>,
-    T: Into<String>,
-{
+pub fn typedef(types: Vec<(syn::Ident, syn::Type)>) -> String {
     types
         .into_iter()
-        .map(|(new_type, existing_type)| {
-            format!("type {} = {};", new_type.into(), existing_type.into())
+        .map(|(new_type, existing_type)| syn::ItemType {
+            attrs: vec![],
+            vis: syn::Visibility::Inherited,
+            type_token: syn::token::Type {
+                span: proc_macro2::Span::call_site(),
+            },
+            ident: new_type,
+            generics: syn::Generics {
+                lt_token: None,
+                params: syn::punctuated::Punctuated::new(),
+                gt_token: None,
+                where_clause: None,
+            },
+            eq_token: syn::token::Eq {
+                spans: [proc_macro2::Span::call_site()],
+            },
+            ty: Box::new(existing_type),
+            semi_token: syn::token::Semi {
+                spans: [proc_macro2::Span::call_site()],
+            },
         })
+        .map(|t| t.to_token_stream().to_string())
         .collect::<Vec<String>>()
         .join("\n")
 }
@@ -327,20 +342,57 @@ where
 #[cfg(test)]
 mod typedef {
     use super::*;
+    use std::iter::FromIterator;
+
+    fn simple_type_path(segments: Vec<syn::Ident>, with_leading_colon: bool) -> syn::TypePath {
+        syn::TypePath {
+            qself: None, // Maybe we'll use this in the future but we don't need it now
+            path: syn::Path {
+                leading_colon: if with_leading_colon {
+                    Some(syn::token::Colon2 {
+                        spans: [
+                            proc_macro2::Span::call_site(),
+                            proc_macro2::Span::call_site(),
+                        ],
+                    })
+                } else {
+                    None
+                },
+                segments: syn::punctuated::Punctuated::from_iter(segments.into_iter().map(|s| {
+                    syn::PathSegment {
+                        ident: s,
+                        arguments: syn::PathArguments::None,
+                    }
+                })),
+            },
+        }
+    }
 
     #[test]
     fn single_import() {
         assert_eq!(
-            typedef(vec![("FooAsdfBar", "usize")]),
-            "type FooAsdfBar = usize;"
+            typedef(vec![(
+                ident("FooAsdfBar"),
+                syn::Type::Path(simple_type_path(vec![ident("usize")], false))
+            )]),
+            "type FooAsdfBar = usize ;"
         );
     }
 
     #[test]
     fn multi_import() {
         assert_eq!(
-            typedef(vec![("FooAsdfBar", "usize"), ("BarAsdfFoo", "isize")]),
-            "type FooAsdfBar = usize;\ntype BarAsdfFoo = isize;"
+            typedef(vec![
+                (
+                    ident("FooAsdfBar"),
+                    syn::Type::Path(simple_type_path(vec![ident("usize")], false))
+                ),
+                (
+                    ident("BarAsdfFoo"),
+                    syn::Type::Path(simple_type_path(vec![ident("isize")], false))
+                )
+            ]),
+            "type FooAsdfBar = usize ;\ntype BarAsdfFoo = isize ;"
         );
     }
 }

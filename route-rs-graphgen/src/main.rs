@@ -363,8 +363,14 @@ fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
             "Pipeline",
             [
                 codegen::typedef(vec![
-                    ("Input", &input_node.node_class),
-                    ("Output", &output_node.node_class),
+                    (
+                        codegen::ident("Input"),
+                        syn::parse_str::<syn::Type>(&input_node.node_class).unwrap(),
+                    ),
+                    (
+                        codegen::ident("Output"),
+                        syn::parse_str::<syn::Type>(&output_node.node_class).unwrap(),
+                    ),
                 ]),
                 codegen::function(
                     "run",
