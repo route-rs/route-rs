@@ -4,16 +4,16 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::net::Ipv6Addr;
 
-#[allow(dead_code)]
-pub struct Ipv6Packet<'packet> {
-    pub data: PacketData<'packet>,
+#[derive(Clone)]
+pub struct Ipv6Packet{
+    pub data: PacketData,
     // There may be various "Extension Headers", so we should figure out the actual offset and store it here for
     // easy access in the helper functions.
     pub packet_offset: usize,
     pub payload_offset: usize,
 }
 
-impl<'packet> Ipv6Packet<'packet> {
+impl Ipv6Packet {
     fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv6Packet, &'static str> {
         // Header of Ethernet Frame: 14bytes
         // Haeder of IPv6 Frame: 40bytes minimum
@@ -226,26 +226,26 @@ pub fn get_ipv6_payload_type(
     }
 }
 
-impl<'packet> TryFrom<EthernetFrame<'packet>> for Ipv6Packet<'packet> {
+impl TryFrom<EthernetFrame> for Ipv6Packet {
     type Error = &'static str;
 
-    fn try_from(frame: EthernetFrame<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
         Ipv6Packet::new(frame.data, frame.payload_offset)
     }
 }
 
-impl<'packet> TryFrom<TcpSegment<'packet>> for Ipv6Packet<'packet> {
+impl TryFrom<TcpSegment> for Ipv6Packet {
     type Error = &'static str;
 
-    fn try_from(segment: TcpSegment<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
         Ipv6Packet::new(segment.data, segment.packet_offset)
     }
 }
 
-impl<'packet> TryFrom<UdpSegment<'packet>> for Ipv6Packet<'packet> {
+impl TryFrom<UdpSegment> for Ipv6Packet {
     type Error = &'static str;
 
-    fn try_from(segment: UdpSegment<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
         Ipv6Packet::new(segment.data, segment.packet_offset)
     }
 }
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn ipv6_packet() {
-        let mut mac_data: Vec<u8> =
+        let mac_data: Vec<u8> =
             vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ip_data: Vec<u8> = vec![
             0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
@@ -272,7 +272,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         );
 
-        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data).unwrap();
         frame.set_payload(&ip_data);
 
         let packet = Ipv6Packet::try_from(frame).unwrap();
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn set_src_addr() {
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x60, 0, 0, 0, 0, 4, 17,
             64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
@@ -303,7 +303,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         );
 
-        let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
+        let mut packet = Ipv6Packet::new(data, 14).unwrap();
 
         assert_eq!(packet.src_addr(), src_addr);
         packet.set_src_addr(new_src_addr);
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn set_dest_addr() {
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x60, 0, 0, 0, 0, 4, 17,
             64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
@@ -326,7 +326,7 @@ mod tests {
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
         );
 
-        let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
+        let mut packet = Ipv6Packet::new(data, 14).unwrap();
 
         assert_eq!(packet.dest_addr(), dest_addr);
         packet.set_dest_addr(new_dest_addr);
@@ -335,13 +335,13 @@ mod tests {
 
     #[test]
     fn set_payload() {
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x60, 0, 0, 0, 0, 4, 17,
             64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let mut packet = Ipv6Packet::new(&mut data, 14).unwrap();
+        let mut packet = Ipv6Packet::new(data, 14).unwrap();
 
         assert_eq!(packet.data[packet.payload_offset], 0xa);
 

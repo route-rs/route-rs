@@ -2,12 +2,13 @@ use crate::*;
 use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 
-pub struct EthernetFrame<'packet> {
-    pub data: PacketData<'packet>,
+#[derive(Clone)]
+pub struct EthernetFrame {
+    pub data: PacketData,
     pub payload_offset: usize,
 }
 
-impl<'frame> EthernetFrame<'frame> {
+impl EthernetFrame {
     pub fn new(frame: PacketData) -> Result<EthernetFrame, &'static str> {
         // Ethernet II frames must be at least the header, which is 14bytes
         // 0                    6                    12                      14
@@ -59,34 +60,34 @@ impl<'frame> EthernetFrame<'frame> {
     }
 }
 
-impl<'packet> TryFrom<TcpSegment<'packet>> for EthernetFrame<'packet> {
+impl TryFrom<TcpSegment> for EthernetFrame {
     type Error = &'static str;
 
-    fn try_from(segment: TcpSegment<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
         EthernetFrame::new(segment.data)
     }
 }
 
-impl<'packet> TryFrom<UdpSegment<'packet>> for EthernetFrame<'packet> {
+impl TryFrom<UdpSegment> for EthernetFrame {
     type Error = &'static str;
 
-    fn try_from(segment: UdpSegment<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
         EthernetFrame::new(segment.data)
     }
 }
 
-impl<'packet> TryFrom<Ipv4Packet<'packet>> for EthernetFrame<'packet> {
+impl TryFrom<Ipv4Packet> for EthernetFrame {
     type Error = &'static str;
 
-    fn try_from(packet: Ipv4Packet<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
         EthernetFrame::new(packet.data)
     }
 }
 
-impl<'packet> TryFrom<Ipv6Packet<'packet>> for EthernetFrame<'packet> {
+impl TryFrom<Ipv6Packet> for EthernetFrame {
     type Error = &'static str;
 
-    fn try_from(packet: Ipv6Packet<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
         EthernetFrame::new(packet.data)
     }
 }
@@ -98,8 +99,8 @@ mod tests {
 
     #[test]
     fn ethernet_frame() {
-        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let frame = EthernetFrame::new(&mut data).unwrap();
+        let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let frame = EthernetFrame::new(data).unwrap();
         assert_eq!(
             frame.dest_mac(),
             MacAddr::new([0xde, 0xad, 0xbe, 0xef, 0xff, 0xff])
@@ -111,8 +112,8 @@ mod tests {
 
     #[test]
     fn set_payload() {
-        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mut frame = EthernetFrame::new(data).unwrap();
         assert_eq!(frame.ether_type(), 0);
         assert_eq!(frame.payload().len(), 0);
 
@@ -125,14 +126,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "Frame is less than the minimum of 14 bytes")]
     fn invalid_data_length() {
-        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6];
-        let _frame = EthernetFrame::new(&mut data).unwrap();
+        let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6];
+        let _frame = EthernetFrame::new(data).unwrap();
     }
 
     #[test]
     fn set_dest_mac() {
-        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mut frame = EthernetFrame::new(data).unwrap();
         let new_dest = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
         frame.set_dest_mac(new_dest);
         assert_eq!(frame.dest_mac(), new_dest);
@@ -140,8 +141,8 @@ mod tests {
 
     #[test]
     fn set_src_mac() {
-        let mut data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let mut frame = EthernetFrame::new(&mut data).unwrap();
+        let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mut frame = EthernetFrame::new(data).unwrap();
         let new_src = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
         frame.set_src_mac(new_src);
         assert_eq!(frame.src_mac(), new_src);
@@ -149,10 +150,10 @@ mod tests {
 
     #[test]
     fn ether_type() {
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0xff, 0xff,
         ];
-        let frame = EthernetFrame::new(&mut data).unwrap();
+        let frame = EthernetFrame::new(data).unwrap();
         assert_eq!(frame.ether_type(), 0xffff);
     }
 }
