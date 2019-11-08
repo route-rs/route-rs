@@ -5,7 +5,7 @@ use std::convert::TryInto;
 use std::net::Ipv6Addr;
 
 #[derive(Clone)]
-pub struct Ipv6Packet{
+pub struct Ipv6Packet {
     pub data: PacketData,
     // There may be various "Extension Headers", so we should figure out the actual offset and store it here for
     // easy access in the helper functions.
@@ -257,8 +257,7 @@ mod tests {
 
     #[test]
     fn ipv6_packet() {
-        let mac_data: Vec<u8> =
-            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mac_data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ip_data: Vec<u8> = vec![
             0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
             0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,

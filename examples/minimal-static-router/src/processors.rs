@@ -1,6 +1,6 @@
-use route_rs_packets::{EthernetFrame, Ipv6Packet, Ipv4Packet};
-use route_rs_runtime::processor::Processor;
+use route_rs_packets::{EthernetFrame, Ipv4Packet, Ipv6Packet};
 use route_rs_runtime::classifier::Classifier;
+use route_rs_runtime::processor::Processor;
 use std::convert::TryFrom;
 
 pub struct Ipv6Encap;
@@ -36,7 +36,7 @@ pub struct Ipv4Encap;
 impl Processor for Ipv4Encap {
     type Input = EthernetFrame;
     type Output = Ipv4Packet;
-    
+
     fn process(&mut self, frame: Self::Input) -> Option<Self::Output> {
         match Ipv4Packet::try_from(frame) {
             Ok(packet) => Some(packet),
@@ -86,6 +86,3 @@ impl Classifier for ClassifyIP {
         }
     }
 }
-
-
-
