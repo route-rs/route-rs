@@ -40,6 +40,7 @@ pub enum ClassifyDNSOutput {
     Other,
 }
 
+//TODO: This should be a Unit struct, then you do not have to call New.
 pub struct ClassifyDNS {}
 
 impl ClassifyDNS {
