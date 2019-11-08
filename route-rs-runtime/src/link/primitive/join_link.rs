@@ -37,7 +37,7 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
         }
     }
 
-    /// Appends the ingressor to the ingressors of the blackhole.
+    /// Appends the ingressor to the ingressors of the link.
     pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
         match self.in_streams {
             None => {
