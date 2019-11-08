@@ -60,6 +60,11 @@ impl<EthernetFrame> LinkBuilder<EthernetFrame, EthernetFrame> for Router<Etherne
         } else {
             // TODO: Build the router here
 
+            // Skeleton Concept:
+            //                /---Ipv4Encap ---SetIpv4Subnet---Ipv4Decap--\                       /-- Interface 0
+            //   ClassifyIP <                                               > ClassifyInterface <  -- Interface 1
+            //                \---Ipv6Encap ---SetIpv6Subnet---Ipv6Decap--/                       \-- Interface 2
+
             //return an empty thing for now so it compiles.
             (vec![], vec![])
         }
