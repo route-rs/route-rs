@@ -31,6 +31,19 @@ impl Processor for Ipv6Decap {
     }
 }
 
+// Implement as a no-op for now, so I can work around this
+pub struct SetIpv6Subnet;
+
+impl Processor for SetIpv6Subnet {
+    type Input = Ipv6Packet;
+    type Output = Ipv6Packet;
+
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        unimplemented!(); //This is a no-op right now,
+                          // some(packet)
+    }
+}
+
 pub struct Ipv4Encap;
 
 impl Processor for Ipv4Encap {
@@ -56,6 +69,18 @@ impl Processor for Ipv4Decap {
             Ok(frame) => Some(frame),
             Err(_) => None,
         }
+    }
+}
+
+pub struct SetIpv4Subnet;
+
+impl Processor for SetIpv4Subnet {
+    type Input = Ipv4Packet;
+    type Output = Ipv4Packet;
+
+    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+        unimplemented!();
+        // some(packet)
     }
 }
 
