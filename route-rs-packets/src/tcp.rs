@@ -2,9 +2,9 @@ use crate::*;
 use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 
-#[allow(dead_code)]
-pub struct TcpSegment<'packet> {
-    pub data: PacketData<'packet>,
+#[derive(Clone)]
+pub struct TcpSegment {
+    pub data: PacketData,
     pub packet_offset: usize,
     pub segment_offset: usize,
     pub payload_offset: usize,
@@ -12,7 +12,7 @@ pub struct TcpSegment<'packet> {
     validated_checksum: bool,
 }
 
-impl<'packet> TcpSegment<'packet> {
+impl TcpSegment {
     fn new(
         segment: PacketData,
         packet_offset: usize,
@@ -28,11 +28,11 @@ impl<'packet> TcpSegment<'packet> {
         let ip_version = (segment[packet_offset] & 0xF0) >> 4;
         match ip_version {
             4 => {
-                protocol = get_ipv4_payload_type(segment, packet_offset)
+                protocol = get_ipv4_payload_type(&segment, packet_offset)
                     .expect("Malformed IPv4 Header in TcpSegment");
             }
             6 => {
-                protocol = get_ipv6_payload_type(segment, packet_offset)
+                protocol = get_ipv6_payload_type(&segment, packet_offset)
                     .expect("Malformed IPv6 Header in TcpSegment");
             }
             _ => {
@@ -189,18 +189,18 @@ impl<'packet> TcpSegment<'packet> {
     //TODO: Create functions to calculate and set checksum.
 }
 
-impl<'packet> TryFrom<Ipv4Packet<'packet>> for TcpSegment<'packet> {
+impl TryFrom<Ipv4Packet> for TcpSegment {
     type Error = &'static str;
 
-    fn try_from(packet: Ipv4Packet<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
         TcpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
     }
 }
 
-impl<'packet> TryFrom<Ipv6Packet<'packet>> for TcpSegment<'packet> {
+impl TryFrom<Ipv6Packet> for TcpSegment {
     type Error = &'static str;
 
-    fn try_from(packet: Ipv6Packet<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
         TcpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
     }
 }
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn tcp_segment() {
-        let mut mac_data: Vec<u8> =
+        let mac_data: Vec<u8> =
             vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ipv4_data: Vec<u8> = vec![
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 6, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
@@ -222,7 +222,7 @@ mod tests {
             2, 3, 4, 5, 6, 7, 8, 9, 10,
         ];
 
-        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data).unwrap();
         frame.set_payload(&ipv4_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         packet.set_payload(&tcp_data);

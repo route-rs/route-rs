@@ -3,14 +3,15 @@ use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 use std::net::Ipv4Addr;
 
-pub struct Ipv4Packet<'packet> {
-    pub data: PacketData<'packet>,
+#[derive(Clone)]
+pub struct Ipv4Packet {
+    pub data: PacketData,
     pub packet_offset: usize,
     pub payload_offset: usize,
     validated_checksum: bool,
 }
 
-impl<'packet> Ipv4Packet<'packet> {
+impl Ipv4Packet {
     fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv4Packet, &'static str> {
         // Header of Ethernet Frame: 14 bytes
         // Header of IPv4 Frame: 20 bytes
@@ -235,26 +236,26 @@ pub fn get_ipv4_payload_type(
     Ok(IpProtocol::from(data[packet_offset + 9]))
 }
 
-impl<'packet> TryFrom<EthernetFrame<'packet>> for Ipv4Packet<'packet> {
+impl TryFrom<EthernetFrame> for Ipv4Packet {
     type Error = &'static str;
 
-    fn try_from(frame: EthernetFrame<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
         Ipv4Packet::new(frame.data, frame.payload_offset)
     }
 }
 
-impl<'packet> TryFrom<TcpSegment<'packet>> for Ipv4Packet<'packet> {
+impl TryFrom<TcpSegment> for Ipv4Packet {
     type Error = &'static str;
 
-    fn try_from(segment: TcpSegment<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
         Ipv4Packet::new(segment.data, segment.packet_offset)
     }
 }
 
-impl<'packet> TryFrom<UdpSegment<'packet>> for Ipv4Packet<'packet> {
+impl TryFrom<UdpSegment> for Ipv4Packet {
     type Error = &'static str;
 
-    fn try_from(segment: UdpSegment<'packet>) -> Result<Self, Self::Error> {
+    fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
         Ipv4Packet::new(segment.data, segment.packet_offset)
     }
 }
@@ -266,13 +267,13 @@ mod tests {
 
     #[test]
     fn ipv4_packet() {
-        let mut mac_data: Vec<u8> =
+        let mac_data: Vec<u8> =
             vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ip_data: Vec<u8> = vec![
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data).unwrap();
         frame.set_payload(&ip_data);
 
         let packet = Ipv4Packet::try_from(frame).unwrap();
@@ -295,13 +296,13 @@ mod tests {
 
     #[test]
     fn validate_checksum() {
-        let mut mac_data: Vec<u8> =
+        let mac_data: Vec<u8> =
             vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let invalid_checksum_data: Vec<u8> = vec![
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data).unwrap();
         frame.set_payload(&invalid_checksum_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
@@ -318,13 +319,13 @@ mod tests {
 
     #[test]
     fn set_checksum() {
-        let mut mac_data: Vec<u8> =
+        let mac_data: Vec<u8> =
             vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ip_data: Vec<u8> = vec![
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrame::new(&mut mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data).unwrap();
         frame.set_payload(&ip_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
@@ -334,12 +335,12 @@ mod tests {
 
     #[test]
     fn set_ihl() {
-        let mut data: Vec<u8> = vec![
+        let data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0, 0x45, 0, 0, 20, 0, 0, 0, 0,
             64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut packet = Ipv4Packet::new(&mut data, 14).unwrap();
+        let mut packet = Ipv4Packet::new(data, 14).unwrap();
         assert_eq!(packet.ihl(), 5);
         packet.set_ihl(24);
         assert_eq!(packet.ihl(), 6);
