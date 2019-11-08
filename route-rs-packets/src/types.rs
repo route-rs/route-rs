@@ -2,7 +2,7 @@
 use std::fmt;
 
 /// The common datatype that all packet structures share to repreasent their data
-pub type PacketData= Vec<u8>;
+pub type PacketData = Vec<u8>;
 
 // Most significant byte is 0th
 #[derive(Eq, Clone, Copy, Hash, PartialEq, Debug)]

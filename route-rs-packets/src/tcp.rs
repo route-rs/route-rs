@@ -212,8 +212,7 @@ mod tests {
 
     #[test]
     fn tcp_segment() {
-        let mac_data: Vec<u8> =
-            vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
+        let mac_data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
         let ipv4_data: Vec<u8> = vec![
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 6, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
