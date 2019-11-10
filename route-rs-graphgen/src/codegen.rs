@@ -403,25 +403,56 @@ mod typedef {
     }
 }
 
-pub fn let_simple(identifier: syn::Ident, expression: syn::Expr, mutable: bool) -> syn::Local {
+pub fn angle_bracketed_types(types: Vec<syn::Type>) -> syn::AngleBracketedGenericArguments {
+    syn::AngleBracketedGenericArguments {
+        colon2_token: None,
+        lt_token: syn::token::Lt {
+            spans: [proc_macro2::Span::call_site()],
+        },
+        args: syn::punctuated::Punctuated::from_iter(
+            types.into_iter().map(syn::GenericArgument::Type),
+        ),
+        gt_token: syn::token::Gt {
+            spans: [proc_macro2::Span::call_site()],
+        },
+    }
+}
+
+pub fn let_simple(
+    identifier: syn::Ident,
+    type_annotation: Option<syn::Type>,
+    expression: syn::Expr,
+    mutable: bool,
+) -> syn::Local {
+    let id = syn::Pat::Ident(syn::PatIdent {
+        attrs: vec![],
+        by_ref: None,
+        mutability: if mutable {
+            Some(syn::token::Mut {
+                span: proc_macro2::Span::call_site(),
+            })
+        } else {
+            None
+        },
+        ident: identifier,
+        subpat: None,
+    });
     syn::Local {
         attrs: vec![],
         let_token: syn::token::Let {
             span: proc_macro2::Span::call_site(),
         },
-        pat: syn::Pat::Ident(syn::PatIdent {
-            attrs: vec![],
-            by_ref: None,
-            mutability: if mutable {
-                Some(syn::token::Mut {
-                    span: proc_macro2::Span::call_site(),
-                })
-            } else {
-                None
-            },
-            ident: identifier,
-            subpat: None,
-        }),
+        pat: match type_annotation {
+            None => id,
+            Some(ty) => syn::Pat::Type(syn::PatType {
+                attrs: vec![],
+                pat: Box::new(id),
+                colon_token: syn::token::Colon {
+                    spans: [proc_macro2::Span::call_site()],
+                },
+                ty: Box::new(ty),
+            }),
+        },
         init: Some((
             syn::token::Eq {
                 spans: [proc_macro2::Span::call_site()],
