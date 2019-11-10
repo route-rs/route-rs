@@ -3,9 +3,9 @@ use route_rs_runtime::classifier::Classifier;
 use route_rs_runtime::processor::Processor;
 use std::convert::TryFrom;
 
-pub struct Ipv6Encap;
+pub struct Ipv6Dencap;
 
-impl Processor for Ipv6Encap {
+impl Processor for Ipv6Dencap {
     type Input = EthernetFrame;
     type Output = Ipv6Packet;
 
@@ -17,9 +17,9 @@ impl Processor for Ipv6Encap {
     }
 }
 
-pub struct Ipv6Decap;
+pub struct Ipv6Encap;
 
-impl Processor for Ipv6Decap {
+impl Processor for Ipv6Encap {
     type Input = Ipv6Packet;
     type Output = EthernetFrame;
 
@@ -31,22 +31,9 @@ impl Processor for Ipv6Decap {
     }
 }
 
-// Implement as a no-op for now, so I can work around this
-pub struct SetIpv6Subnet;
+pub struct Ipv4Dencap;
 
-impl Processor for SetIpv6Subnet {
-    type Input = Ipv6Packet;
-    type Output = Ipv6Packet;
-
-    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
-        unimplemented!(); //This is a no-op right now,
-                          // some(packet)
-    }
-}
-
-pub struct Ipv4Encap;
-
-impl Processor for Ipv4Encap {
+impl Processor for Ipv4Dencap {
     type Input = EthernetFrame;
     type Output = Ipv4Packet;
 
@@ -58,9 +45,9 @@ impl Processor for Ipv4Encap {
     }
 }
 
-pub struct Ipv4Decap;
+pub struct Ipv4Encap;
 
-impl Processor for Ipv4Decap {
+impl Processor for Ipv4Encap {
     type Input = Ipv4Packet;
     type Output = EthernetFrame;
 
@@ -72,15 +59,33 @@ impl Processor for Ipv4Decap {
     }
 }
 
-pub struct SetIpv4Subnet;
+pub enum Interface {
+    Interface0,
+    Interface1,
+    Interface2,
+}
 
-impl Processor for SetIpv4Subnet {
-    type Input = Ipv4Packet;
-    type Output = Ipv4Packet;
+pub struct Ipv4SubnetRouter;
 
-    fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
+impl Classifier for Ipv4SubnetRouter {
+    type Packet = Ipv4Packet;
+    type Class = Interface;
+
+    fn classify(&self, frame: &Self::Packet) -> Self::Class {
+        //Unimplemented, examine the subnet and decide which interface to send this out of.
         unimplemented!();
-        // some(packet)
+    }
+}
+
+// Implement as a no-op for now, so I can work around this
+pub struct Ipv6SubnetRouter;
+
+impl Classifier for Ipv6SubnetRouter {
+    type Packet = Ipv6Packet;
+    type Class = Interface;
+
+    fn classify(&self, packet: &Self::Packet) -> Self::Class {
+        unimplemented!();
     }
 }
 
