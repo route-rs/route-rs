@@ -13,6 +13,7 @@ use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNode
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::iter::FromIterator;
 use syn::export::ToTokens;
 
 mod codegen;
@@ -105,6 +106,7 @@ fn gen_processor_decls(processors: &[&&NodeData]) -> (String, HashMap<String, St
             processor_decls_map.insert(e.xml_node_id.to_owned(), symbol.clone());
             syn::Stmt::Local(codegen::let_simple(
                 codegen::ident(symbol.as_str()),
+                None,
                 syn::Expr::Call(syn::ExprCall {
                     attrs: vec![],
                     func: Box::new(syn::Expr::Path(syn::ExprPath {
@@ -370,9 +372,52 @@ fn gen_run_body(
         }
     }
 
+    let all_runnables_str = codegen::let_simple(
+        codegen::ident("all_runnables"),
+        Some(syn::Type::Path(syn::TypePath {
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: syn::punctuated::Punctuated::from_iter(vec![syn::PathSegment {
+                    ident: codegen::ident("Vec"),
+                    arguments: syn::PathArguments::AngleBracketed(codegen::angle_bracketed_types(
+                        vec![syn::Type::Path(syn::TypePath {
+                            qself: None,
+                            path: codegen::simple_path(
+                                vec![codegen::ident("TokioRunnable")],
+                                false,
+                            ),
+                        })],
+                    )),
+                }]),
+            },
+        })),
+        syn::Expr::Macro(syn::ExprMacro {
+            attrs: vec![],
+            mac: syn::Macro {
+                path: codegen::simple_path(vec![codegen::ident("vec")], false),
+                bang_token: syn::token::Bang {
+                    spans: [proc_macro2::Span::call_site()],
+                },
+                delimiter: syn::MacroDelimiter::Bracket(syn::token::Bracket {
+                    span: proc_macro2::Span::call_site(),
+                }),
+                tokens: proc_macro2::TokenStream::new(),
+            },
+        }),
+        true,
+    )
+    .to_token_stream()
+    .to_string();
     let (processor_decls_str, processor_decls_map) = gen_processor_decls(&processors);
     let (link_decls_str, drivers) = gen_link_decls(&links, processor_decls_map);
-    [processor_decls_str, link_decls_str, gen_tokio_run(drivers)].join("\n\n")
+    [
+        all_runnables_str,
+        processor_decls_str,
+        link_decls_str,
+        gen_tokio_run(drivers),
+    ]
+    .join("\n\n")
 }
 
 fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
