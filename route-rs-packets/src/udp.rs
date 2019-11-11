@@ -5,31 +5,34 @@ use std::convert::{TryFrom, TryInto};
 #[derive(Clone)]
 pub struct UdpSegment {
     pub data: PacketData,
-    pub packet_offset: usize,
-    pub segment_offset: usize,
-    validated_checksum: bool,
+    pub layer2_offset: usize,
+    pub layer3_offset: usize,
+    pub layer4_offset: usize,
+    pub payload_offset: usize,
 }
 
 impl<'packet> UdpSegment {
     fn new(
-        segment: PacketData,
-        packet_offset: usize,
-        segment_offset: usize,
+        data: PacketData,
+        layer2_offset: usize, // Prep to switch to optional
+        layer3_offset: usize, // Prep to switch to optional
+        layer4_offset: usize,
     ) -> Result<UdpSegment, &'static str> {
-        // First let's check that the Frame and IP Header is present
-        if segment.len() < packet_offset + 20 {
+        // Do we need to check that the appropriate frame and IP are present? I don't think that will be required
+        // once the layer3 and layer2 are optional.
+        if data.len() < layer4_offset + 8 {
             return Err("Segment to short to contain valid IP Header");
         }
 
         let protocol;
-        let ip_version = (segment[packet_offset] & 0xF0) >> 4;
+        let ip_version = (data[layer3_offset] & 0xF0) >> 4;
         match ip_version {
             4 => {
-                protocol = get_ipv4_payload_type(&segment, packet_offset)
+                protocol = get_ipv4_payload_type(&data, layer3_offset)
                     .expect("Malformed IPv4 Header in UdpSegment");
             }
             6 => {
-                protocol = get_ipv6_payload_type(&segment, packet_offset)
+                protocol = get_ipv6_payload_type(&data, layer3_offset)
                     .expect("Malformed IPv6 Header in UdpSegment");
             }
             _ => {
@@ -43,52 +46,52 @@ impl<'packet> UdpSegment {
         }
 
         let length = u16::from_be_bytes(
-            segment[segment_offset + 4..=segment_offset + 5]
+            data[layer4_offset + 4..=layer4_offset + 5]
                 .try_into()
                 .unwrap(),
         );
 
-        if segment.len() < segment_offset + length as usize {
+        if data.len() < layer4_offset + length as usize {
             return Err("Segment is not correct length as given by it's length field");
         }
 
         Ok(UdpSegment {
-            data: segment,
-            packet_offset,
-            segment_offset,
-            validated_checksum: false,
+            data,
+            layer2_offset,
+            layer3_offset,
+            layer4_offset,
+            payload_offset: layer4_offset + 8,
         })
     }
 
     pub fn src_port(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset..=self.segment_offset + 1]
+            self.data[self.layer4_offset..=self.layer4_offset + 1]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn set_src_port(&mut self, port: u16) {
-        self.data[self.segment_offset..=self.segment_offset + 1]
-            .copy_from_slice(&port.to_be_bytes());
+        self.data[self.layer4_offset..=self.layer4_offset + 1].copy_from_slice(&port.to_be_bytes());
     }
 
     pub fn dest_port(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 2..=self.segment_offset + 3]
+            self.data[self.layer4_offset + 2..=self.layer4_offset + 3]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn set_dest_port(&mut self, port: u16) {
-        self.data[self.segment_offset + 2..=self.segment_offset + 3]
+        self.data[self.layer4_offset + 2..=self.layer4_offset + 3]
             .copy_from_slice(&port.to_be_bytes());
     }
 
     pub fn length(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 4..=self.segment_offset + 5]
+            self.data[self.layer4_offset + 4..=self.layer4_offset + 5]
                 .try_into()
                 .unwrap(),
         )
@@ -96,14 +99,14 @@ impl<'packet> UdpSegment {
 
     pub fn checksum(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 6..=self.segment_offset + 7]
+            self.data[self.layer4_offset + 6..=self.layer4_offset + 7]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
-        Cow::from(&self.data[self.segment_offset + 8..])
+        Cow::from(&self.data[self.layer4_offset + 8..])
     }
 }
 
@@ -111,7 +114,12 @@ impl TryFrom<Ipv4Packet> for UdpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
-        UdpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
+        UdpSegment::new(
+            packet.data,
+            packet.layer2_offset,
+            packet.layer3_offset,
+            packet.payload_offset,
+        )
     }
 }
 
@@ -119,7 +127,12 @@ impl TryFrom<Ipv6Packet> for UdpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
-        UdpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
+        UdpSegment::new(
+            packet.data,
+            packet.layer2_offset,
+            packet.layer3_offset,
+            packet.payload_offset,
+        )
     }
 }
 
@@ -138,7 +151,7 @@ mod tests {
             0, 99, 0, 88, 0, 19, 0xDE, 0xAD, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
         frame.set_payload(&ipv4_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         packet.set_payload(&udp_data);

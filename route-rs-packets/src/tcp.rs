@@ -5,34 +5,34 @@ use std::convert::{TryFrom, TryInto};
 #[derive(Clone)]
 pub struct TcpSegment {
     pub data: PacketData,
-    pub packet_offset: usize,
-    pub segment_offset: usize,
+    pub layer2_offset: usize,
+    pub layer3_offset: usize,
+    pub layer4_offset: usize,
     pub payload_offset: usize,
     ip_version: u8,
-    validated_checksum: bool,
 }
 
 impl TcpSegment {
     fn new(
-        segment: PacketData,
-        packet_offset: usize,
-        segment_offset: usize,
+        data: PacketData,
+        layer2_offset: usize,
+        layer3_offset: usize,
+        layer4_offset: usize,
     ) -> Result<TcpSegment, &'static str> {
-        // First let's check that the Frame and IP Header is present
-        if segment.len() < packet_offset + 20 {
-            return Err("Segment to short to contain valid IP Header");
+        if data.len() < layer4_offset + 20 {
+            return Err("Segment to short to contain valid TCP Header");
         }
 
         let protocol;
         // This requires reaching into the packet. Not ideal
-        let ip_version = (segment[packet_offset] & 0xF0) >> 4;
+        let ip_version = (data[layer3_offset] & 0xF0) >> 4;
         match ip_version {
             4 => {
-                protocol = get_ipv4_payload_type(&segment, packet_offset)
+                protocol = get_ipv4_payload_type(&data, layer3_offset)
                     .expect("Malformed IPv4 Header in TcpSegment");
             }
             6 => {
-                protocol = get_ipv6_payload_type(&segment, packet_offset)
+                protocol = get_ipv6_payload_type(&data, layer3_offset)
                     .expect("Malformed IPv6 Header in TcpSegment");
             }
             _ => {
@@ -44,52 +44,47 @@ impl TcpSegment {
             return Err("Protocol is incorrect, since it isn't six");
         }
 
-        if segment.len() < segment_offset + 20 {
-            return Err("Segment is too short to have valid TCP Header");
-        }
-
         let payload_offset =
-            segment_offset + (((segment[segment_offset + 12] & 0xF0) >> 4) as usize * 4);
+            layer4_offset + (((data[layer4_offset + 12] & 0xF0) >> 4) as usize * 4);
 
         Ok(TcpSegment {
-            data: segment,
-            packet_offset,
-            segment_offset,
+            data,
+            layer2_offset,
+            layer3_offset,
+            layer4_offset,
             payload_offset,
             ip_version,
-            validated_checksum: false,
         })
     }
 
     pub fn src_port(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset..=self.segment_offset + 1]
+            self.data[self.layer4_offset..=self.layer4_offset + 1]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn set_src_port(&mut self, port: u16) {
-        self.data[self.segment_offset..=self.segment_offset + 1]
-            .copy_from_slice(&port.to_be_bytes());
+        self.data[self.layer4_offset..=self.layer4_offset + 1].copy_from_slice(&port.to_be_bytes());
     }
 
     pub fn dest_port(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 2..=self.segment_offset + 3]
+            self.data[self.layer4_offset + 2..=self.layer4_offset + 3]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn set_dest_port(&mut self, port: u16) {
-        self.data[self.segment_offset + 2..=self.segment_offset + 3]
+        self.data[self.layer4_offset + 2..=self.layer4_offset + 3]
             .copy_from_slice(&port.to_be_bytes());
     }
 
     pub fn sequence_number(&self) -> u32 {
         u32::from_be_bytes(
-            self.data[self.segment_offset + 4..=self.segment_offset + 7]
+            self.data[self.layer4_offset + 4..=self.layer4_offset + 7]
                 .try_into()
                 .unwrap(),
         )
@@ -97,20 +92,20 @@ impl TcpSegment {
 
     pub fn acknowledgment_number(&self) -> u32 {
         u32::from_be_bytes(
-            self.data[self.segment_offset + 8..=self.segment_offset + 11]
+            self.data[self.layer4_offset + 8..=self.layer4_offset + 11]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn data_offset(&self) -> u8 {
-        (self.data[self.segment_offset + 12] & 0xF0) >> 4
+        (self.data[self.layer4_offset + 12] & 0xF0) >> 4
     }
 
     /// Data offset is the value wanted in BYTES
     pub fn set_data_offset(&mut self, data_offset: usize) {
-        self.data[self.segment_offset + 12] &= 0xF0;
-        self.data[self.segment_offset + 12] |= (((data_offset / 4) << 4) & 0xF0) as u8;
+        self.data[self.layer4_offset + 12] &= 0xF0;
+        self.data[self.layer4_offset + 12] |= (((data_offset / 4) << 4) & 0xF0) as u8;
         self.payload_offset = data_offset;
     }
 
@@ -118,7 +113,7 @@ impl TcpSegment {
     /// represent the bits in question
     pub fn control_bits(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 12..=self.segment_offset + 13]
+            self.data[self.layer4_offset + 12..=self.layer4_offset + 13]
                 .try_into()
                 .unwrap(),
         ) & 0x01FF
@@ -126,7 +121,7 @@ impl TcpSegment {
 
     pub fn window_size(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 14..=self.segment_offset + 15]
+            self.data[self.layer4_offset + 14..=self.layer4_offset + 15]
                 .try_into()
                 .unwrap(),
         )
@@ -134,7 +129,7 @@ impl TcpSegment {
 
     pub fn checksum(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 16..=self.segment_offset + 17]
+            self.data[self.layer4_offset + 16..=self.layer4_offset + 17]
                 .try_into()
                 .unwrap(),
         )
@@ -142,7 +137,7 @@ impl TcpSegment {
 
     pub fn urgent_pointer(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.segment_offset + 18..=self.segment_offset + 19]
+            self.data[self.layer4_offset + 18..=self.layer4_offset + 19]
                 .try_into()
                 .unwrap(),
         )
@@ -153,7 +148,7 @@ impl TcpSegment {
             return None;
         }
         Some(Cow::from(
-            &self.data[self.segment_offset + 20..self.payload_offset],
+            &self.data[self.layer4_offset + 20..self.payload_offset],
         ))
     }
 
@@ -163,12 +158,11 @@ impl TcpSegment {
     /// To be valid, options must be padded by the user to 32bits
     pub fn set_options(&mut self, options: &[u8]) {
         let payload = self.data.split_off(self.payload_offset);
-        self.data.truncate(self.segment_offset + 20);
+        self.data.truncate(self.layer4_offset + 20);
         self.data.reserve_exact(payload.len() + options.len());
         self.data.extend(options);
         self.data.extend(payload);
         self.set_data_offset(options.len() + 20);
-        self.validated_checksum = false;
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
@@ -183,7 +177,6 @@ impl TcpSegment {
         self.data.truncate(self.payload_offset);
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
-        self.validated_checksum = false;
     }
 
     //TODO: Create functions to calculate and set checksum.
@@ -193,7 +186,12 @@ impl TryFrom<Ipv4Packet> for TcpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
-        TcpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
+        TcpSegment::new(
+            packet.data,
+            packet.layer2_offset,
+            packet.layer3_offset,
+            packet.payload_offset,
+        )
     }
 }
 
@@ -201,7 +199,12 @@ impl TryFrom<Ipv6Packet> for TcpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
-        TcpSegment::new(packet.data, packet.packet_offset, packet.payload_offset)
+        TcpSegment::new(
+            packet.data,
+            packet.layer2_offset,
+            packet.layer3_offset,
+            packet.payload_offset,
+        )
     }
 }
 
@@ -221,7 +224,7 @@ mod tests {
             2, 3, 4, 5, 6, 7, 8, 9, 10,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
         frame.set_payload(&ipv4_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         packet.set_payload(&tcp_data);

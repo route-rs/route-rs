@@ -6,80 +6,81 @@ use std::net::Ipv4Addr;
 #[derive(Clone)]
 pub struct Ipv4Packet {
     pub data: PacketData,
-    pub packet_offset: usize,
+    pub layer2_offset: usize,
+    pub layer3_offset: usize,
     pub payload_offset: usize,
-    validated_checksum: bool,
 }
 
 impl Ipv4Packet {
-    fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv4Packet, &'static str> {
+    fn new(
+        data: PacketData,
+        layer2_offset: usize,
+        layer3_offset: usize,
+    ) -> Result<Ipv4Packet, &'static str> {
         // Header of Ethernet Frame: 14 bytes
         // Header of IPv4 Frame: 20 bytes
-        if packet.len() < packet_offset + 20 {
+        if data.len() < layer3_offset + 20 {
             return Err("Data is too short to be an IPv4 Packet");
         }
 
         // Check version number
-        let version: u8 = (packet[packet_offset] & 0xF0) >> 4;
+        let version: u8 = (data[layer3_offset] & 0xF0) >> 4;
         if version != 4 {
             return Err("Packet has incorrect version, is not Ipv4Packet");
         }
 
         // TotalLen is the 3rd and 4th byte of the IP Header
         let total_len = u16::from_be_bytes(
-            packet[packet_offset + 2..=packet_offset + 3]
+            data[layer3_offset + 2..=layer3_offset + 3]
                 .try_into()
                 .unwrap(),
         ) as usize;
-        if packet.len() != total_len + packet_offset {
+        if data.len() != total_len + layer3_offset {
             return Err("Packet has invalid total length field");
         }
 
         // This is the header length in 32bit words
-        let ihl = (packet[packet_offset] & 0x0F) as usize;
-        let payload_offset = packet_offset + (ihl * 4);
+        let ihl = (data[layer3_offset] & 0x0F) as usize;
+        let payload_offset = layer3_offset + (ihl * 4);
 
         Ok(Ipv4Packet {
-            data: packet,
-            packet_offset,
+            data,
+            layer2_offset,
+            layer3_offset,
             payload_offset,
-            validated_checksum: false,
         })
     }
 
     pub fn src_addr(&self) -> Ipv4Addr {
-        let data: [u8; 4] = self.data[self.packet_offset + 12..self.packet_offset + 16]
+        let data: [u8; 4] = self.data[self.layer3_offset + 12..self.layer3_offset + 16]
             .try_into()
             .unwrap();
         Ipv4Addr::from(data)
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
-        self.data[self.packet_offset + 12..self.packet_offset + 16].copy_from_slice(&addr.octets());
-        self.validated_checksum = false;
+        self.data[self.layer3_offset + 12..self.layer3_offset + 16].copy_from_slice(&addr.octets());
     }
 
     pub fn dest_addr(&self) -> Ipv4Addr {
-        let data: [u8; 4] = self.data[self.packet_offset + 16..self.packet_offset + 20]
+        let data: [u8; 4] = self.data[self.layer3_offset + 16..self.layer3_offset + 20]
             .try_into()
             .unwrap();
         Ipv4Addr::from(data)
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
-        self.data[self.packet_offset + 16..self.packet_offset + 20].copy_from_slice(&addr.octets());
-        self.validated_checksum = false;
+        self.data[self.layer3_offset + 16..self.layer3_offset + 20].copy_from_slice(&addr.octets());
     }
 
     pub fn ihl(&self) -> u8 {
-        self.data[self.packet_offset] & 0x0F
+        self.data[self.layer3_offset] & 0x0F
     }
 
     pub fn set_ihl(&mut self, header_length: usize) {
-        self.data[self.packet_offset] &= 0xF0; // Clear least sig 4 bits
-        self.data[self.packet_offset] |= 0x0F & ((header_length / 4) as u8);
+        self.data[self.layer3_offset] &= 0xF0; // Clear least sig 4 bits
+        self.data[self.layer3_offset] |= 0x0F & ((header_length / 4) as u8);
         self.payload_offset = header_length;
-        self.validated_checksum = false;
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
@@ -92,11 +93,10 @@ impl Ipv4Packet {
         self.data.truncate(self.payload_offset);
 
         let total_len = (payload_len as u16 + u16::from(self.ihl() * 4)).to_be_bytes();
-        self.data[self.packet_offset + 2..=self.packet_offset + 3].copy_from_slice(&total_len);
+        self.data[self.layer3_offset + 2..=self.layer3_offset + 3].copy_from_slice(&total_len);
 
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
-        self.validated_checksum = false;
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
@@ -104,7 +104,7 @@ impl Ipv4Packet {
             return None;
         }
         Some(Cow::from(
-            &self.data[self.packet_offset + 20..self.payload_offset],
+            &self.data[self.layer3_offset + 20..self.payload_offset],
         ))
     }
 
@@ -114,54 +114,52 @@ impl Ipv4Packet {
     /// Note: The user should provide options that are padded to a 32bit length.
     pub fn set_options(&mut self, options: &[u8]) {
         let payload = self.data.split_off(self.payload_offset);
-        self.data.truncate(self.packet_offset + 20);
+        self.data.truncate(self.layer3_offset + 20);
         self.data.reserve_exact(payload.len() + options.len());
         self.data.extend(options);
         self.data.extend(payload);
         self.set_ihl(options.len() + 20);
-        self.validated_checksum = false;
     }
 
     pub fn protocol(&self) -> IpProtocol {
-        IpProtocol::from(self.data[self.packet_offset + 9])
+        IpProtocol::from(self.data[self.layer3_offset + 9])
     }
 
     pub fn total_len(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.packet_offset + 2..=self.packet_offset + 3]
+            self.data[self.layer3_offset + 2..=self.layer3_offset + 3]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn ttl(&self) -> u8 {
-        self.data[self.packet_offset + 8]
+        self.data[self.layer3_offset + 8]
     }
 
     pub fn set_ttl(&mut self, ttl: u8) {
-        self.data[self.packet_offset + 8] = ttl;
-        self.validated_checksum = false;
+        self.data[self.layer3_offset + 8] = ttl;
     }
 
     pub fn checksum(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.packet_offset + 10..=self.packet_offset + 11]
+            self.data[self.layer3_offset + 10..=self.layer3_offset + 11]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn dscp(&self) -> u8 {
-        self.data[self.packet_offset + 1] >> 2
+        self.data[self.layer3_offset + 1] >> 2
     }
 
     pub fn ecn(&self) -> u8 {
-        self.data[self.packet_offset + 1] & 0x03
+        self.data[self.layer3_offset + 1] & 0x03
     }
 
     pub fn indentification(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.packet_offset + 4..=self.packet_offset + 5]
+            self.data[self.layer3_offset + 4..=self.layer3_offset + 5]
                 .try_into()
                 .unwrap(),
         )
@@ -169,35 +167,34 @@ impl Ipv4Packet {
 
     pub fn fragment_offet(&self) -> u16 {
         u16::from_be_bytes([
-            self.data[self.packet_offset + 6] & 0x1F,
-            self.data[self.packet_offset + 7],
+            self.data[self.layer3_offset + 6] & 0x1F,
+            self.data[self.layer3_offset + 7],
         ])
     }
 
     /// Returns tuple of (Don't Fragment, More Fragments)
     pub fn flags(&self) -> (bool, bool) {
-        let df = (self.data[self.packet_offset + 6] & 0x40) != 0;
-        let mf = (self.data[self.packet_offset + 6] & 0x20) != 0;
+        let df = (self.data[self.layer3_offset + 6] & 0x40) != 0;
+        let mf = (self.data[self.layer3_offset + 6] & 0x20) != 0;
         (df, mf)
     }
 
     /// Verifies the IP header checksum, returns the value and also sets
     /// the internal bookeeping field. As such we need a mutable reference.
     pub fn validate_checksum(&mut self) -> bool {
-        let full_sum = &self.data[self.packet_offset..self.payload_offset]
+        let full_sum = &self.data[self.layer3_offset..self.payload_offset]
             .chunks_exact(2)
             .fold(0, |acc: u32, x| {
                 acc + u32::from(u16::from_be_bytes([x[0], x[1]]))
             });
         let (carry, mut sum) = (((full_sum & 0xFFFF_0000) >> 16), (full_sum & 0x0000_FFFF));
         sum += carry;
-        self.validated_checksum = 0 == (!sum & 0xFFFF);
-        self.validated_checksum
+        0 == (!sum & 0xFFFF)
     }
 
     /// Calculates what the checksum should be set to given the current header
     pub fn caclulate_checksum(&self) -> u16 {
-        let full_sum = &self.data[self.packet_offset..self.payload_offset]
+        let full_sum = &self.data[self.layer3_offset..self.payload_offset]
             .chunks_exact(2)
             .enumerate()
             .filter(|x| x.0 != 5)
@@ -216,9 +213,8 @@ impl Ipv4Packet {
     /// Sets checksum field to valid value
     pub fn set_checksum(&mut self) {
         let new_checksum = self.caclulate_checksum();
-        self.data[self.packet_offset + 10] = ((new_checksum & 0xFF00) >> 8) as u8;
-        self.data[self.packet_offset + 11] = (new_checksum & 0x00FF) as u8;
-        self.validated_checksum = true;
+        self.data[self.layer3_offset + 10] = ((new_checksum & 0xFF00) >> 8) as u8;
+        self.data[self.layer3_offset + 11] = (new_checksum & 0x00FF) as u8;
     }
 }
 
@@ -226,21 +222,21 @@ impl Ipv4Packet {
 /// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
 pub fn get_ipv4_payload_type(
     data: &[u8],
-    packet_offset: usize,
+    layer3_offset: usize,
 ) -> Result<IpProtocol, &'static str> {
-    if data.len() <= packet_offset + 9 || (data[packet_offset] & 0xF0) != 0x40 {
+    if data.len() <= layer3_offset + 9 || (data[layer3_offset] & 0xF0) != 0x40 {
         // Either data isn't big enough, or the version field does not indicate this is
         // an Ipv4 packet.
         return Err("Is not an Ipv4 packet");
     }
-    Ok(IpProtocol::from(data[packet_offset + 9]))
+    Ok(IpProtocol::from(data[layer3_offset + 9]))
 }
 
 impl TryFrom<EthernetFrame> for Ipv4Packet {
     type Error = &'static str;
 
     fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
-        Ipv4Packet::new(frame.data, frame.payload_offset)
+        Ipv4Packet::new(frame.data, frame.layer2_offset, frame.payload_offset)
     }
 }
 
@@ -248,7 +244,7 @@ impl TryFrom<TcpSegment> for Ipv4Packet {
     type Error = &'static str;
 
     fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
-        Ipv4Packet::new(segment.data, segment.packet_offset)
+        Ipv4Packet::new(segment.data, segment.layer2_offset, segment.layer3_offset)
     }
 }
 
@@ -256,7 +252,7 @@ impl TryFrom<UdpSegment> for Ipv4Packet {
     type Error = &'static str;
 
     fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
-        Ipv4Packet::new(segment.data, segment.packet_offset)
+        Ipv4Packet::new(segment.data, segment.layer2_offset, segment.layer3_offset)
     }
 }
 
@@ -272,7 +268,7 @@ mod tests {
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let packet = Ipv4Packet::try_from(frame).unwrap();
@@ -300,7 +296,7 @@ mod tests {
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrame::new(mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
         frame.set_payload(&invalid_checksum_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
@@ -322,7 +318,7 @@ mod tests {
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrame::new(mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
@@ -337,7 +333,7 @@ mod tests {
             64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut packet = Ipv4Packet::new(data, 14).unwrap();
+        let mut packet = Ipv4Packet::new(data, 0, 14).unwrap();
         assert_eq!(packet.ihl(), 5);
         packet.set_ihl(24);
         assert_eq!(packet.ihl(), 6);
