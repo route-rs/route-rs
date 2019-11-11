@@ -59,6 +59,7 @@ impl Processor for Ipv4Encap {
     }
 }
 
+#[allow(dead_code)]
 pub enum Interface {
     Interface0,
     Interface1,
@@ -71,7 +72,7 @@ impl Classifier for Ipv4SubnetRouter {
     type Packet = Ipv4Packet;
     type Class = Interface;
 
-    fn classify(&self, frame: &Self::Packet) -> Self::Class {
+    fn classify(&self, _packet: &Self::Packet) -> Self::Class {
         //Unimplemented, examine the subnet and decide which interface to send this out of.
         unimplemented!();
     }
@@ -84,7 +85,7 @@ impl Classifier for Ipv6SubnetRouter {
     type Packet = Ipv6Packet;
     type Class = Interface;
 
-    fn classify(&self, packet: &Self::Packet) -> Self::Class {
+    fn classify(&self, _packet: &Self::Packet) -> Self::Class {
         unimplemented!();
     }
 }

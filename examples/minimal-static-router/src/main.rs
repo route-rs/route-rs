@@ -4,8 +4,6 @@ use route_rs_runtime::link::{
     primitive::{ClassifyLink, JoinLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
-use route_rs_runtime::pipeline::Runner;
-use route_rs_runtime::processor::Processor;
 
 // I'd really like to use something like this.
 // use route_rs_runtime::utils::test::harness::run_link;
@@ -14,7 +12,7 @@ use route_rs_runtime::processor::Processor;
 mod processors;
 
 fn main() {
-    let (input_packet_sender, input_receiver) = crossbeam_channel::unbounded();
+    let (input_packet_sender, _input_receiver) = crossbeam_channel::unbounded();
     let input_packets: Vec<EthernetFrame> = vec![]; //Put packets here.
 
     for p in input_packets {
