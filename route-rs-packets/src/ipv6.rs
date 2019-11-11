@@ -7,22 +7,25 @@ use std::net::Ipv6Addr;
 #[derive(Clone)]
 pub struct Ipv6Packet {
     pub data: PacketData,
-    // There may be various "Extension Headers", so we should figure out the actual offset and store it here for
-    // easy access in the helper functions.
-    pub packet_offset: usize,
+    pub layer2_offset: usize,
+    pub layer3_offset: usize,
     pub payload_offset: usize,
 }
 
 impl Ipv6Packet {
-    fn new(packet: PacketData, packet_offset: usize) -> Result<Ipv6Packet, &'static str> {
+    fn new(
+        data: PacketData,
+        layer2_offset: usize,
+        layer3_offset: usize,
+    ) -> Result<Ipv6Packet, &'static str> {
         // Header of Ethernet Frame: 14bytes
         // Haeder of IPv6 Frame: 40bytes minimum
-        if packet.len() < packet_offset + 40 {
+        if data.len() < layer3_offset + 40 {
             return Err("Packet is too short to be an Ipv6Packet");
         }
 
         // Check version number
-        let version = (packet[packet_offset] & 0xF0) >> 4;
+        let version = (data[layer3_offset] & 0xF0) >> 4;
         if version != 6 {
             return Err("Packet has incorrect version, is not Ipv6Packet");
         }
@@ -33,54 +36,55 @@ impl Ipv6Packet {
         // This may also not be true if there are extension headers, so we just check that we will not
         // overrun our array trying to access the entire payload.
         let payload_len = u16::from_be_bytes(
-            packet[packet_offset + 4..=packet_offset + 5]
+            data[layer3_offset + 4..=layer3_offset + 5]
                 .try_into()
                 .unwrap(),
         ) as usize;
-        let packet_len = packet.len();
-        if payload_len + packet_offset + 40 > packet_len {
+        let packet_len = data.len();
+        if payload_len + layer3_offset + 40 > packet_len {
             return Err("Packet has invalid payload len field");
         }
 
         Ok(Ipv6Packet {
-            data: packet,
-            packet_offset,
+            data,
+            layer2_offset,
+            layer3_offset,
             payload_offset: packet_len - payload_len,
         })
     }
 
     pub fn traffic_class(&self) -> u8 {
-        ((self.data[self.packet_offset] & 0x0F) << 4)
-            + (self.data[self.packet_offset + 1] & 0xF0 >> 4)
+        ((self.data[self.layer3_offset] & 0x0F) << 4)
+            + (self.data[self.layer3_offset + 1] & 0xF0 >> 4)
     }
 
     pub fn flow_label(&self) -> u32 {
         u32::from_be_bytes([
             0,
-            self.data[self.packet_offset + 1] & 0x0F,
-            self.data[self.packet_offset + 2],
-            self.data[self.packet_offset + 3],
+            self.data[self.layer3_offset + 1] & 0x0F,
+            self.data[self.layer3_offset + 2],
+            self.data[self.layer3_offset + 3],
         ])
     }
 
     pub fn payload_length(&self) -> u16 {
         u16::from_be_bytes(
-            self.data[self.packet_offset + 4..=self.packet_offset + 5]
+            self.data[self.layer3_offset + 4..=self.layer3_offset + 5]
                 .try_into()
                 .unwrap(),
         )
     }
 
     pub fn next_header(&self) -> IpProtocol {
-        IpProtocol::from(self.data[self.packet_offset + 6])
+        IpProtocol::from(self.data[self.layer3_offset + 6])
     }
 
     pub fn set_next_header(&mut self, header: u8) {
-        self.data[self.packet_offset + 6] = header;
+        self.data[self.layer3_offset + 6] = header;
     }
 
     pub fn hop_limit(&self) -> u8 {
-        self.data[self.packet_offset + 7]
+        self.data[self.layer3_offset + 7]
     }
 
     // Is there a bug here if there is no payload? wonder if
@@ -94,7 +98,7 @@ impl Ipv6Packet {
         self.data.truncate(self.payload_offset);
 
         let payload_len = (new_payload_len as u16).to_be_bytes();
-        self.data[self.packet_offset + 4..self.packet_offset + 6].copy_from_slice(&payload_len);
+        self.data[self.layer3_offset + 4..self.layer3_offset + 6].copy_from_slice(&payload_len);
 
         self.data.reserve_exact(new_payload_len);
         self.data.extend(payload);
@@ -102,25 +106,25 @@ impl Ipv6Packet {
     }
 
     pub fn src_addr(&self) -> Ipv6Addr {
-        let data: [u8; 16] = self.data[self.packet_offset + 8..self.packet_offset + 24]
+        let data: [u8; 16] = self.data[self.layer3_offset + 8..self.layer3_offset + 24]
             .try_into()
             .unwrap();
         Ipv6Addr::from(data)
     }
 
     pub fn dest_addr(&self) -> Ipv6Addr {
-        let data: [u8; 16] = self.data[self.packet_offset + 24..self.packet_offset + 40]
+        let data: [u8; 16] = self.data[self.layer3_offset + 24..self.layer3_offset + 40]
             .try_into()
             .unwrap();
         Ipv6Addr::from(data)
     }
 
     pub fn set_src_addr(&mut self, addr: Ipv6Addr) {
-        self.data[self.packet_offset + 8..self.packet_offset + 24].copy_from_slice(&addr.octets());
+        self.data[self.layer3_offset + 8..self.layer3_offset + 24].copy_from_slice(&addr.octets());
     }
 
     pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
-        self.data[self.packet_offset + 24..self.packet_offset + 40].copy_from_slice(&addr.octets());
+        self.data[self.layer3_offset + 24..self.layer3_offset + 40].copy_from_slice(&addr.octets());
     }
 
     // TODO: Test the get and set for extension headers.
@@ -128,7 +132,7 @@ impl Ipv6Packet {
         let mut headers = Vec::<Cow<[u8]>>::new();
         let mut next_header = self.next_header();
         let mut header_ext_len;
-        let mut offset = self.packet_offset + 40; // First byte of first header
+        let mut offset = self.layer3_offset + 40; // First byte of first header
         loop {
             match next_header {
                 IpProtocol::HOPOPT
@@ -169,7 +173,7 @@ impl Ipv6Packet {
     /// first_header field should be the IpProtocol of the payload.
     pub fn set_extension_headers(&mut self, headers: Vec<&[u8]>, first_header: IpProtocol) {
         let payload = self.data.split_off(self.payload_offset);
-        self.data.truncate(self.packet_offset + 40);
+        self.data.truncate(self.layer3_offset + 40);
         for header in headers.iter() {
             self.data.extend(*header);
         }
@@ -184,16 +188,16 @@ impl Ipv6Packet {
 /// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
 pub fn get_ipv6_payload_type(
     data: &[u8],
-    packet_offset: usize,
+    layer3_offset: usize,
 ) -> Result<IpProtocol, &'static str> {
-    if data.len() < packet_offset + 40 || data[packet_offset] & 0xF0 != 0x60 {
+    if data.len() < layer3_offset + 40 || data[layer3_offset] & 0xF0 != 0x60 {
         // In the case of error, we return the reserved as an error.
         return Err("Is not an Ipv6 Packet");
     }
 
-    let mut header = IpProtocol::from(data[packet_offset + 6]);
+    let mut header = IpProtocol::from(data[layer3_offset + 6]);
     let mut header_ext_len;
-    let mut offset = packet_offset + 40; // First byte of first header
+    let mut offset = layer3_offset + 40; // First byte of first header
     loop {
         match header {
             IpProtocol::HOPOPT
@@ -230,7 +234,7 @@ impl TryFrom<EthernetFrame> for Ipv6Packet {
     type Error = &'static str;
 
     fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
-        Ipv6Packet::new(frame.data, frame.payload_offset)
+        Ipv6Packet::new(frame.data, frame.layer2_offset, frame.payload_offset)
     }
 }
 
@@ -238,7 +242,7 @@ impl TryFrom<TcpSegment> for Ipv6Packet {
     type Error = &'static str;
 
     fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
-        Ipv6Packet::new(segment.data, segment.packet_offset)
+        Ipv6Packet::new(segment.data, segment.layer2_offset, segment.layer3_offset)
     }
 }
 
@@ -246,7 +250,7 @@ impl TryFrom<UdpSegment> for Ipv6Packet {
     type Error = &'static str;
 
     fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
-        Ipv6Packet::new(segment.data, segment.packet_offset)
+        Ipv6Packet::new(segment.data, segment.layer2_offset, segment.layer3_offset)
     }
 }
 
@@ -271,7 +275,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         );
 
-        let mut frame = EthernetFrame::new(mac_data).unwrap();
+        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let packet = Ipv6Packet::try_from(frame).unwrap();
@@ -302,7 +306,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         );
 
-        let mut packet = Ipv6Packet::new(data, 14).unwrap();
+        let mut packet = Ipv6Packet::new(data, 0, 14).unwrap();
 
         assert_eq!(packet.src_addr(), src_addr);
         packet.set_src_addr(new_src_addr);
@@ -325,7 +329,7 @@ mod tests {
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
         );
 
-        let mut packet = Ipv6Packet::new(data, 14).unwrap();
+        let mut packet = Ipv6Packet::new(data, 0, 14).unwrap();
 
         assert_eq!(packet.dest_addr(), dest_addr);
         packet.set_dest_addr(new_dest_addr);
@@ -340,7 +344,7 @@ mod tests {
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let mut packet = Ipv6Packet::new(data, 14).unwrap();
+        let mut packet = Ipv6Packet::new(data, 0, 14).unwrap();
 
         assert_eq!(packet.data[packet.payload_offset], 0xa);
 
