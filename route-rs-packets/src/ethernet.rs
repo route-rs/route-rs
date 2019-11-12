@@ -66,7 +66,11 @@ impl TryFrom<TcpSegment> for EthernetFrame {
     type Error = &'static str;
 
     fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
-        EthernetFrame::new(segment.data, segment.layer2_offset)
+        if let Some(layer2_offset) = segment.layer2_offset {
+            EthernetFrame::new(segment.data, layer2_offset)
+        } else {
+            Err("TCP Segment does not contain an Ethernet Frame")
+        }
     }
 }
 
@@ -74,7 +78,11 @@ impl TryFrom<UdpSegment> for EthernetFrame {
     type Error = &'static str;
 
     fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
-        EthernetFrame::new(segment.data, segment.layer2_offset)
+        if let Some(layer2_offset) = segment.layer2_offset {
+            EthernetFrame::new(segment.data, layer2_offset)
+        } else {
+            Err("UDP Segment does not contain an Ethernet Frame")
+        }
     }
 }
 
@@ -82,7 +90,11 @@ impl TryFrom<Ipv4Packet> for EthernetFrame {
     type Error = &'static str;
 
     fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
-        EthernetFrame::new(packet.data, packet.layer2_offset)
+        if let Some(layer2_offset) = packet.layer2_offset {
+            EthernetFrame::new(packet.data, layer2_offset)
+        } else {
+            Err("IPv4 Packet does not contain an Ethernet Frame")
+        }
     }
 }
 
@@ -90,7 +102,11 @@ impl TryFrom<Ipv6Packet> for EthernetFrame {
     type Error = &'static str;
 
     fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
-        EthernetFrame::new(packet.data, packet.layer2_offset)
+        if let Some(layer2_offset) = packet.layer2_offset {
+            EthernetFrame::new(packet.data, layer2_offset)
+        } else {
+            Err("Ipv6 Packet does not contain an Ethernet Frame")
+        }
     }
 }
 
