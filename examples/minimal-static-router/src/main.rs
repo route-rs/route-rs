@@ -109,6 +109,9 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
             //return an empty thing for now so it compiles.
             let mut all_runnables = vec![];
 
+            let ipv4_router = processors::Ipv4SubnetRouter::new(processors::Interface::Interface0);
+            let ipv6_router = processors::Ipv6SubnetRouter::new(processors::Interface::Interface0);
+
             let (mut classify_runables, mut classify_egressors) = ClassifyLink::new()
                 .ingressors(self.in_streams.unwrap())
                 .num_egressors(2)
@@ -133,7 +136,7 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                 ClassifyLink::new()
                     .ingressors(ipv4_dencap_egressors)
                     .num_egressors(3)
-                    .classifier(processors::Ipv4SubnetRouter)
+                    .classifier(ipv4_router)
                     .dispatcher(Box::new(|c| match c {
                         processors::Interface::Interface0 => 0,
                         processors::Interface::Interface1 => 1,
@@ -168,7 +171,7 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                 ClassifyLink::new()
                     .ingressors(ipv6_dencap_egressors)
                     .num_egressors(3)
-                    .classifier(processors::Ipv6SubnetRouter)
+                    .classifier(ipv6_router)
                     .dispatcher(Box::new(|c| match c {
                         processors::Interface::Interface0 => 0,
                         processors::Interface::Interface1 => 1,
