@@ -5,43 +5,43 @@ use std::convert::{TryFrom, TryInto};
 #[derive(Clone)]
 pub struct TcpSegment {
     pub data: PacketData,
-    pub layer2_offset: usize,
-    pub layer3_offset: usize,
+    pub layer2_offset: Option<usize>,
+    pub layer3_offset: Option<usize>,
     pub layer4_offset: usize,
     pub payload_offset: usize,
-    ip_version: u8,
 }
 
 impl TcpSegment {
     fn new(
         data: PacketData,
-        layer2_offset: usize,
-        layer3_offset: usize,
+        layer2_offset: Option<usize>,
+        layer3_offset: Option<usize>,
         layer4_offset: usize,
     ) -> Result<TcpSegment, &'static str> {
         if data.len() < layer4_offset + 20 {
             return Err("Segment to short to contain valid TCP Header");
         }
 
-        let protocol;
-        // This requires reaching into the packet. Not ideal
-        let ip_version = (data[layer3_offset] & 0xF0) >> 4;
-        match ip_version {
-            4 => {
-                protocol = get_ipv4_payload_type(&data, layer3_offset)
-                    .expect("Malformed IPv4 Header in TcpSegment");
+        if let Some(layer3_offset) = layer3_offset {
+            let protocol;
+            let ip_version = (data[layer3_offset] & 0xF0) >> 4;
+            match ip_version {
+                4 => {
+                    protocol = get_ipv4_payload_type(&data, layer3_offset)
+                        .expect("Malformed IPv4 Header in TcpSegment");
+                }
+                6 => {
+                    protocol = get_ipv6_payload_type(&data, layer3_offset)
+                        .expect("Malformed IPv6 Header in TcpSegment");
+                }
+                _ => {
+                    return Err("IP Header has invalid version number");
+                }
             }
-            6 => {
-                protocol = get_ipv6_payload_type(&data, layer3_offset)
-                    .expect("Malformed IPv6 Header in TcpSegment");
-            }
-            _ => {
-                return Err("IP Header has invalid version number");
-            }
-        }
 
-        if protocol != IpProtocol::TCP {
-            return Err("Protocol is incorrect, since it isn't six");
+            if protocol != IpProtocol::TCP {
+                return Err("Protocol is incorrect, since it isn't six");
+            }
         }
 
         let payload_offset =
@@ -53,7 +53,6 @@ impl TcpSegment {
             layer3_offset,
             layer4_offset,
             payload_offset,
-            ip_version,
         })
     }
 
@@ -189,7 +188,7 @@ impl TryFrom<Ipv4Packet> for TcpSegment {
         TcpSegment::new(
             packet.data,
             packet.layer2_offset,
-            packet.layer3_offset,
+            Some(packet.layer3_offset),
             packet.payload_offset,
         )
     }
@@ -202,7 +201,7 @@ impl TryFrom<Ipv6Packet> for TcpSegment {
         TcpSegment::new(
             packet.data,
             packet.layer2_offset,
-            packet.layer3_offset,
+            Some(packet.layer3_offset),
             packet.payload_offset,
         )
     }

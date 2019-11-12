@@ -6,7 +6,7 @@ use std::net::Ipv4Addr;
 #[derive(Clone)]
 pub struct Ipv4Packet {
     pub data: PacketData,
-    pub layer2_offset: usize,
+    pub layer2_offset: Option<usize>,
     pub layer3_offset: usize,
     pub payload_offset: usize,
 }
@@ -14,7 +14,7 @@ pub struct Ipv4Packet {
 impl Ipv4Packet {
     fn new(
         data: PacketData,
-        layer2_offset: usize,
+        layer2_offset: Option<usize>,
         layer3_offset: usize,
     ) -> Result<Ipv4Packet, &'static str> {
         // Header of Ethernet Frame: 14 bytes
@@ -236,7 +236,7 @@ impl TryFrom<EthernetFrame> for Ipv4Packet {
     type Error = &'static str;
 
     fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
-        Ipv4Packet::new(frame.data, frame.layer2_offset, frame.payload_offset)
+        Ipv4Packet::new(frame.data, Some(frame.layer2_offset), frame.payload_offset)
     }
 }
 
@@ -244,7 +244,11 @@ impl TryFrom<TcpSegment> for Ipv4Packet {
     type Error = &'static str;
 
     fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
-        Ipv4Packet::new(segment.data, segment.layer2_offset, segment.layer3_offset)
+        if let Some(layer3_offset) = segment.layer3_offset {
+            Ipv4Packet::new(segment.data, segment.layer2_offset, layer3_offset)
+        } else {
+            Err("TCP Segment does not contain an IP Packet")
+        }
     }
 }
 
@@ -252,7 +256,11 @@ impl TryFrom<UdpSegment> for Ipv4Packet {
     type Error = &'static str;
 
     fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
-        Ipv4Packet::new(segment.data, segment.layer2_offset, segment.layer3_offset)
+        if let Some(layer3_offset) = segment.layer3_offset {
+            Ipv4Packet::new(segment.data, segment.layer2_offset, layer3_offset)
+        } else {
+            Err("UDP Segment does not contain an IP Packet")
+        }
     }
 }
 
@@ -333,7 +341,7 @@ mod tests {
             64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut packet = Ipv4Packet::new(data, 0, 14).unwrap();
+        let mut packet = Ipv4Packet::new(data, Some(0), 14).unwrap();
         assert_eq!(packet.ihl(), 5);
         packet.set_ihl(24);
         assert_eq!(packet.ihl(), 6);

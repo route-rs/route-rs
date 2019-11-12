@@ -5,8 +5,8 @@ use std::convert::{TryFrom, TryInto};
 #[derive(Clone)]
 pub struct UdpSegment {
     pub data: PacketData,
-    pub layer2_offset: usize,
-    pub layer3_offset: usize,
+    pub layer2_offset: Option<usize>,
+    pub layer3_offset: Option<usize>,
     pub layer4_offset: usize,
     pub payload_offset: usize,
 }
@@ -14,8 +14,8 @@ pub struct UdpSegment {
 impl<'packet> UdpSegment {
     fn new(
         data: PacketData,
-        layer2_offset: usize, // Prep to switch to optional
-        layer3_offset: usize, // Prep to switch to optional
+        layer2_offset: Option<usize>, // Prep to switch to optional
+        layer3_offset: Option<usize>, // Prep to switch to optional
         layer4_offset: usize,
     ) -> Result<UdpSegment, &'static str> {
         // Do we need to check that the appropriate frame and IP are present? I don't think that will be required
@@ -24,25 +24,26 @@ impl<'packet> UdpSegment {
             return Err("Segment to short to contain valid IP Header");
         }
 
-        let protocol;
-        let ip_version = (data[layer3_offset] & 0xF0) >> 4;
-        match ip_version {
-            4 => {
-                protocol = get_ipv4_payload_type(&data, layer3_offset)
-                    .expect("Malformed IPv4 Header in UdpSegment");
+        if let Some(layer3_offset) = layer3_offset {
+            let protocol;
+            let ip_version = (data[layer3_offset] & 0xF0) >> 4;
+            match ip_version {
+                4 => {
+                    protocol = get_ipv4_payload_type(&data, layer3_offset)
+                        .expect("Malformed IPv4 Header in UdpSegment");
+                }
+                6 => {
+                    protocol = get_ipv6_payload_type(&data, layer3_offset)
+                        .expect("Malformed IPv6 Header in UdpSegment");
+                }
+                _ => {
+                    return Err("IP Header has invalid version number");
+                }
             }
-            6 => {
-                protocol = get_ipv6_payload_type(&data, layer3_offset)
-                    .expect("Malformed IPv6 Header in UdpSegment");
+            // See the other note about how we are not Ipv6 compatible yet :(
+            if protocol != IpProtocol::UDP {
+                return Err("Protocol is incorrect, since it isn't UDP");
             }
-            _ => {
-                return Err("IP Header has invalid version number");
-            }
-        }
-
-        // See the other note about how we are not Ipv6 compatible yet :(
-        if protocol != IpProtocol::UDP {
-            return Err("Protocol is incorrect, since it isn't UDP");
         }
 
         let length = u16::from_be_bytes(
@@ -117,7 +118,7 @@ impl TryFrom<Ipv4Packet> for UdpSegment {
         UdpSegment::new(
             packet.data,
             packet.layer2_offset,
-            packet.layer3_offset,
+            Some(packet.layer3_offset),
             packet.payload_offset,
         )
     }
@@ -130,7 +131,7 @@ impl TryFrom<Ipv6Packet> for UdpSegment {
         UdpSegment::new(
             packet.data,
             packet.layer2_offset,
-            packet.layer3_offset,
+            Some(packet.layer3_offset),
             packet.payload_offset,
         )
     }
