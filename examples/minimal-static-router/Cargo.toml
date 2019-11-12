@@ -12,3 +12,4 @@ route-rs-packets = { path = "../../route-rs-packets" }
 tokio = "0.1.22"
 futures = "0.1.29"
 crossbeam = "0.7.2"
+treebitmap = "0.4.0"
