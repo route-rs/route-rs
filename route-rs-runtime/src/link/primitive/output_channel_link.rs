@@ -35,7 +35,7 @@ impl<Packet: Send + 'static> LinkBuilder<Packet, ()> for OutputChannelLink<Packe
         assert_eq!(
             in_streams.len(),
             1,
-            "ProcessLink may only take 1 input stream"
+            "OutputChannelLink may only take 1 input stream"
         );
 
         OutputChannelLink {
