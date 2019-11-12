@@ -1,7 +1,8 @@
 use crossbeam::crossbeam_channel;
+use futures::lazy;
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
-    primitive::{ClassifyLink, JoinLink, ProcessLink},
+    primitive::{ClassifyLink, InputChannelLink, JoinLink, OutputChannelLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 
@@ -12,7 +13,7 @@ use route_rs_runtime::link::{
 mod processors;
 
 fn main() {
-    let (input_packet_sender, _input_receiver) = crossbeam_channel::unbounded();
+    let (input_packet_sender, input_receiver) = crossbeam_channel::unbounded();
     let input_packets: Vec<EthernetFrame> = vec![]; //Put packets here.
 
     for p in input_packets {
@@ -22,9 +23,49 @@ fn main() {
         }
     }
 
-    // Then we call our runner on our router
+    //--Declare whole router, as well as input and output links--//
+    let mut all_runnables = vec![];
+    let (mut input_runnables, input_egressors) =
+        InputChannelLink::new().channel(input_receiver).build_link();
+    all_runnables.append(&mut input_runnables);
 
-    // Then we collect the outputs and see if it works
+    // Create our router
+    let (mut router_runnables, mut router_egressors) =
+        Router::new().ingressors(input_egressors).build_link();
+    all_runnables.append(&mut router_runnables);
+
+    // Create output channels to collect packets sent to each interface
+    let (output0_sender, _output0) = crossbeam_channel::unbounded();
+    let (output1_sender, _output1) = crossbeam_channel::unbounded();
+    let (output2_sender, _output2) = crossbeam_channel::unbounded();
+
+    let (mut interface0_runnables, _) = OutputChannelLink::new()
+        .ingressor(router_egressors.remove(0))
+        .channel(output0_sender)
+        .build_link();
+    all_runnables.append(&mut interface0_runnables);
+
+    let (mut interface0_runnables, _) = OutputChannelLink::new()
+        .ingressor(router_egressors.remove(0))
+        .channel(output1_sender)
+        .build_link();
+    all_runnables.append(&mut interface0_runnables);
+
+    let (mut interface0_runnables, _) = OutputChannelLink::new()
+        .ingressor(router_egressors.remove(0))
+        .channel(output2_sender)
+        .build_link();
+    all_runnables.append(&mut interface0_runnables);
+
+    tokio::run(lazy(move || {
+        for r in all_runnables {
+            tokio::spawn(r);
+        }
+        Ok(())
+    }));
+
+    //TODO: Examine output of each interface for correctness
+    println!("It finished!");
 }
 
 // Note that Router is not Generic! This router only takes in EthernetFrames
