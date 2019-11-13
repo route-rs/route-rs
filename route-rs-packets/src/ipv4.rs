@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 use std::net::Ipv4Addr;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ipv4Packet {
     pub data: PacketData,
     pub layer2_offset: Option<usize>,
