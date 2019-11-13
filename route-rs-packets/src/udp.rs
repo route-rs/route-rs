@@ -12,7 +12,7 @@ pub struct UdpSegment {
 }
 
 impl<'packet> UdpSegment {
-    fn new(
+    pub fn new(
         data: PacketData,
         layer2_offset: Option<usize>, // Prep to switch to optional
         layer3_offset: Option<usize>, // Prep to switch to optional

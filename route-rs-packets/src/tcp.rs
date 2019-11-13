@@ -12,7 +12,7 @@ pub struct TcpSegment {
 }
 
 impl TcpSegment {
-    fn new(
+    pub fn new(
         data: PacketData,
         layer2_offset: Option<usize>,
         layer3_offset: Option<usize>,

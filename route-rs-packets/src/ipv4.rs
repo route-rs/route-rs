@@ -12,7 +12,7 @@ pub struct Ipv4Packet {
 }
 
 impl Ipv4Packet {
-    fn new(
+    pub fn new(
         data: PacketData,
         layer2_offset: Option<usize>,
         layer3_offset: usize,
