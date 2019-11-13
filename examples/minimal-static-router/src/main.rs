@@ -6,10 +6,7 @@ use route_rs_runtime::link::{
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 
-// I'd really like to use something like this.
-// use route_rs_runtime::utils::test::harness::run_link;
-// use route_rs_runtime::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
-
+mod classifiers;
 mod processors;
 
 fn main() {
@@ -109,17 +106,19 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
             //return an empty thing for now so it compiles.
             let mut all_runnables = vec![];
 
-            let ipv4_router = processors::Ipv4SubnetRouter::new(processors::Interface::Interface0);
-            let ipv6_router = processors::Ipv6SubnetRouter::new(processors::Interface::Interface0);
+            let ipv4_router =
+                classifiers::Ipv4SubnetRouter::new(classifiers::Interface::Interface0);
+            let ipv6_router =
+                classifiers::Ipv6SubnetRouter::new(classifiers::Interface::Interface0);
 
             let (mut classify_runables, mut classify_egressors) = ClassifyLink::new()
                 .ingressors(self.in_streams.unwrap())
                 .num_egressors(2)
-                .classifier(processors::ClassifyIP)
+                .classifier(classifiers::ClassifyIP)
                 .dispatcher(Box::new(|c| match c {
-                    processors::ClassifyIPType::IPv4 => 0,
-                    processors::ClassifyIPType::IPv6 => 1,
-                    processors::ClassifyIPType::None => 1, // we can't drop packets in a classify. Maybe we do need
+                    classifiers::ClassifyIPType::IPv4 => 0,
+                    classifiers::ClassifyIPType::IPv6 => 1,
+                    classifiers::ClassifyIPType::None => 1, // we can't drop packets in a classify. Maybe we do need
                 })) // the DropLink back?
                 .build_link();
             all_runnables.append(&mut classify_runables);
@@ -138,9 +137,9 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                     .num_egressors(3)
                     .classifier(ipv4_router)
                     .dispatcher(Box::new(|c| match c {
-                        processors::Interface::Interface0 => 0,
-                        processors::Interface::Interface1 => 1,
-                        processors::Interface::Interface2 => 2,
+                        classifiers::Interface::Interface0 => 0,
+                        classifiers::Interface::Interface1 => 1,
+                        classifiers::Interface::Interface2 => 2,
                     }))
                     .build_link();
             all_runnables.append(&mut ipv4_subnet_router_runnables);
@@ -173,9 +172,9 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                     .num_egressors(3)
                     .classifier(ipv6_router)
                     .dispatcher(Box::new(|c| match c {
-                        processors::Interface::Interface0 => 0,
-                        processors::Interface::Interface1 => 1,
-                        processors::Interface::Interface2 => 2,
+                        classifiers::Interface::Interface0 => 0,
+                        classifiers::Interface::Interface1 => 1,
+                        classifiers::Interface::Interface2 => 2,
                     }))
                     .build_link();
             all_runnables.append(&mut ipv6_subnet_router_runnables);
