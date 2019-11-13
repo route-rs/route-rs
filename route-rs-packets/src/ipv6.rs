@@ -13,7 +13,7 @@ pub struct Ipv6Packet {
 }
 
 impl Ipv6Packet {
-    fn new(
+    pub fn new(
         data: PacketData,
         layer2_offset: Option<usize>,
         layer3_offset: usize,
