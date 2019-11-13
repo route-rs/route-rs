@@ -2,7 +2,7 @@ use crate::*;
 use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EthernetFrame {
     pub data: PacketData,
     pub layer2_offset: usize,

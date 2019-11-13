@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::net::Ipv6Addr;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ipv6Packet {
     pub data: PacketData,
     pub layer2_offset: Option<usize>,
