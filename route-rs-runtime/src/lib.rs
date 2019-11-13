@@ -27,4 +27,4 @@ pub mod link;
 pub mod pipeline;
 
 /// Utility module
-mod utils;
+pub mod utils;
