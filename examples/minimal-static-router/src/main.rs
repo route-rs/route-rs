@@ -128,7 +128,7 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
             // Reminder that process links don't have any runnables, so we can ignore that half of the tuple
             let (_, ipv4_dencap_egressors) = ProcessLink::new()
                 .ingressor(classify_egressors.remove(0))
-                .processor(processors::Ipv4Dencap)
+                .processor(processors::Ipv4Decap)
                 .build_link();
 
             let (mut ipv4_subnet_router_runnables, mut ipv4_subnet_router_egressors) =
@@ -163,7 +163,7 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
 
             let (_, ipv6_dencap_egressors) = ProcessLink::new()
                 .ingressor(classify_egressors.remove(0))
-                .processor(processors::Ipv6Dencap)
+                .processor(processors::Ipv6Decap)
                 .build_link();
 
             let (mut ipv6_subnet_router_runnables, mut ipv6_subnet_router_egressors) =
