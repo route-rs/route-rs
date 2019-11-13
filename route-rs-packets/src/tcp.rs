@@ -181,6 +181,17 @@ impl TcpSegment {
     //TODO: Create functions to calculate and set checksum.
 }
 
+/// TcpSegments are considered the same if they have the same data from the layer 4
+/// header and onward. This function does not consider the data before the start of
+/// the TCP header.
+impl PartialEq for TcpSegment {
+    fn eq(&self, other: &Self) -> bool {
+        self.data[self.layer4_offset..] == other.data[other.layer4_offset..]
+    }
+}
+
+impl Eq for TcpSegment {}
+
 impl TryFrom<Ipv4Packet> for TcpSegment {
     type Error = &'static str;
 

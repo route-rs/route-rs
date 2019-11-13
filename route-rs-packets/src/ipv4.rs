@@ -218,6 +218,17 @@ impl Ipv4Packet {
     }
 }
 
+/// Ipv4Packets are considered the same if they have the same data from the layer 4
+/// header and onward. This function does not consider the data before the start of
+/// the IPv4 header.
+impl PartialEq for Ipv4Packet {
+    fn eq(&self, other: &Self) -> bool {
+        self.data[self.layer3_offset..] == other.data[other.layer3_offset..]
+    }
+}
+
+impl Eq for Ipv4Packet {}
+
 /// Returns Ipv4 payload type, reads the header information to get the type
 /// of IpProtocol payload is included. Upon error, returns IpProtocol::Reserved.
 pub fn get_ipv4_payload_type(
