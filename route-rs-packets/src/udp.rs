@@ -111,6 +111,17 @@ impl<'packet> UdpSegment {
     }
 }
 
+/// UdpSegments are considered the same if they have the same data from the layer 4
+/// header and onward. This function does not consider the data before the start of
+/// the UDP header.
+impl PartialEq for UdpSegment {
+    fn eq(&self, other: &Self) -> bool {
+        self.data[self.layer4_offset..] == other.data[other.layer4_offset..]
+    }
+}
+
+impl Eq for UdpSegment {}
+
 impl TryFrom<Ipv4Packet> for UdpSegment {
     type Error = &'static str;
 

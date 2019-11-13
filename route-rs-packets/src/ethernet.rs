@@ -62,6 +62,17 @@ impl EthernetFrame {
     }
 }
 
+/// EthernetFrames are considered the same if they have the same data from the layer 2
+/// header and onward. This function does not consider the data before the start of the
+/// Ethernet header
+impl PartialEq for EthernetFrame {
+    fn eq(&self, other: &Self) -> bool {
+        self.data[self.layer2_offset..] == other.data[other.layer2_offset..]
+    }
+}
+
+impl Eq for EthernetFrame {}
+
 impl TryFrom<TcpSegment> for EthernetFrame {
     type Error = &'static str;
 
