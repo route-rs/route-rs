@@ -2,9 +2,9 @@ use route_rs_packets::{EthernetFrame, Ipv4Packet, Ipv6Packet};
 use route_rs_runtime::processor::Processor;
 use std::convert::TryFrom;
 
-pub struct Ipv6Dencap;
+pub struct Ipv6Decap;
 
-impl Processor for Ipv6Dencap {
+impl Processor for Ipv6Decap {
     type Input = EthernetFrame;
     type Output = Ipv6Packet;
 
@@ -30,9 +30,9 @@ impl Processor for Ipv6Encap {
     }
 }
 
-pub struct Ipv4Dencap;
+pub struct Ipv4Decap;
 
-impl Processor for Ipv4Dencap {
+impl Processor for Ipv4Decap {
     type Input = EthernetFrame;
     type Output = Ipv4Packet;
 
