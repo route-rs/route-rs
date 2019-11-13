@@ -61,7 +61,7 @@ impl Processor for Ipv4Encap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use route_rs_packets::EthernetFrame;
+    use route_rs_packets::{EthernetFrame, Ipv4Packet};
     use route_rs_runtime::link::primitive::ProcessLink;
     use route_rs_runtime::link::{LinkBuilder, ProcessLinkBuilder};
     use route_rs_runtime::utils::test::harness::run_link;
@@ -83,7 +83,7 @@ mod tests {
 
         let results = run_link(link);
 
-        // I should implement Eq for all the packets, basically just check if they have the same underlying data.
-        assert_eq!(results[0].len(), 1);
+        let test_packet = Ipv4Packet::new(data, Some(0), 14).unwrap();
+        assert_eq!(results[0][0], test_packet);
     }
 }
