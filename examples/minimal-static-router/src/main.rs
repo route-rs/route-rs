@@ -1,68 +1,38 @@
-use crossbeam::crossbeam_channel;
-use futures::lazy;
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
-    primitive::{ClassifyLink, InputChannelLink, JoinLink, OutputChannelLink, ProcessLink},
+    primitive::{ClassifyLink, JoinLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
+use route_rs_runtime::utils::test::{harness::run_link, packet_generators::immediate_stream};
 
 mod classifiers;
 mod processors;
 
 fn main() {
-    let (input_packet_sender, input_receiver) = crossbeam_channel::unbounded();
-    let input_packets: Vec<EthernetFrame> = vec![]; //Put packets here.
-
-    for p in input_packets {
-        match input_packet_sender.send(p) {
-            Ok(_) => {}
-            Err(err) => panic!("Input channel error {}", err),
-        }
-    }
-
-    //--Declare whole router, as well as input and output links--//
-    let mut all_runnables = vec![];
-    let (mut input_runnables, input_egressors) =
-        InputChannelLink::new().channel(input_receiver).build_link();
-    all_runnables.append(&mut input_runnables);
-
+    let data_v4: Vec<u8> = vec![
+        0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 8, 00, 0x45, 0, 0, 20, 0, 0, 0, 0,
+        64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+    ];
+    let data_v6: Vec<u8> = vec![
+        0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4, 17,
+        64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
+        0xbe, 0xef, 0x20, 0x01, 0x0d, 0xb8, 0xbe, 0xef, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xa, 0xb,
+        0xc, 0xd,
+    ];
+    let frame1 = EthernetFrame::new(data_v4, 0).unwrap();
+    let frame2 = EthernetFrame::new(data_v6, 0).unwrap();
+    let packets = vec![frame1.clone(), frame2.clone()];
     // Create our router
-    let (mut router_runnables, mut router_egressors) =
-        Router::new().ingressors(input_egressors).build_link();
-    all_runnables.append(&mut router_runnables);
-
-    // Create output channels to collect packets sent to each interface
-    let (output0_sender, _output0) = crossbeam_channel::unbounded();
-    let (output1_sender, _output1) = crossbeam_channel::unbounded();
-    let (output2_sender, _output2) = crossbeam_channel::unbounded();
-
-    let (mut interface0_runnables, _) = OutputChannelLink::new()
-        .ingressor(router_egressors.remove(0))
-        .channel(output0_sender)
+    let router = Router::new()
+        .ingressors(vec![immediate_stream(packets)])
         .build_link();
-    all_runnables.append(&mut interface0_runnables);
 
-    let (mut interface0_runnables, _) = OutputChannelLink::new()
-        .ingressor(router_egressors.remove(0))
-        .channel(output1_sender)
-        .build_link();
-    all_runnables.append(&mut interface0_runnables);
-
-    let (mut interface0_runnables, _) = OutputChannelLink::new()
-        .ingressor(router_egressors.remove(0))
-        .channel(output2_sender)
-        .build_link();
-    all_runnables.append(&mut interface0_runnables);
-
-    tokio::run(lazy(move || {
-        for r in all_runnables {
-            tokio::spawn(r);
-        }
-        Ok(())
-    }));
-
-    //TODO: Examine output of each interface for correctness
+    let results = run_link(router);
     println!("It finished!");
+
+    assert_eq!(results[1][0], frame1);
+    assert_eq!(results[2][0], frame2);
+    println!("Got all packets on the expected interface!");
 }
 
 // Note that Router is not Generic! This router only takes in EthernetFrames
