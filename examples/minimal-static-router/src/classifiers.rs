@@ -93,10 +93,10 @@ pub enum ClassifyIPType {
     None,
 }
 
-/// Processor that determines whether an IP packet is IPv6 or Ipv4.
+/// Processor that determines whether an IP packet is IPv6 or Ipv4 via the EtherType field in the
+/// EthernetFrame
 pub struct ClassifyIP;
 
-// In this case, Processors take Ownership, Classifiers take references, in a way that makes sense.
 impl Classifier for ClassifyIP {
     type Packet = EthernetFrame;
     type Class = ClassifyIPType;
@@ -112,5 +112,53 @@ impl Classifier for ClassifyIP {
         } else {
             ClassifyIPType::None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use route_rs_packets::EthernetFrame;
+    use route_rs_runtime::link::primitive::ClassifyLink;
+    use route_rs_runtime::link::LinkBuilder;
+    use route_rs_runtime::utils::test::harness::run_link;
+    use route_rs_runtime::utils::test::packet_generators::immediate_stream;
+
+    #[test]
+    fn classify_ip() {
+        let data_v4: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
+            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+        ];
+        let data_v6: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4,
+            17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
+            0xd,
+        ];
+        let data_unknown: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0xff, 0xff,
+        ];
+        let frame1 = EthernetFrame::new(data_v4, 0).unwrap();
+        let frame2 = EthernetFrame::new(data_v6, 0).unwrap();
+        let frame3 = EthernetFrame::new(data_unknown, 0).unwrap();
+        let packets = vec![frame1.clone(), frame2.clone(), frame3.clone()];
+
+        let link = ClassifyLink::new()
+            .ingressor(immediate_stream(packets))
+            .classifier(ClassifyIP)
+            .dispatcher(Box::new(|c| match c {
+                ClassifyIPType::IPv4 => 0,
+                ClassifyIPType::IPv6 => 1,
+                ClassifyIPType::None => 2,
+            }))
+            .num_egressors(3)
+            .build_link();
+
+        let results = run_link(link);
+
+        assert_eq!(results[0][0], frame1);
+        assert_eq!(results[1][0], frame2);
+        assert_eq!(results[2][0], frame3);
     }
 }

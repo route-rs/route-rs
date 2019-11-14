@@ -70,12 +70,16 @@ mod tests {
     #[test]
     fn decap_ipv4() {
         let data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, //MAC layer
-            0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0,
-            1, //IP Layer
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
+            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+        ];
+        let data2: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x65, 0, 0, 20, 0, 0, 0,
+            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let frame = EthernetFrame::new(data.clone(), 0).unwrap();
-        let packets = vec![frame];
+        let frame_invalid_ip = EthernetFrame::new(data2, 0).unwrap();
+        let packets = vec![frame, frame_invalid_ip];
 
         let link = ProcessLink::new()
             .ingressor(immediate_stream(packets))
@@ -86,14 +90,14 @@ mod tests {
 
         let test_packet = Ipv4Packet::new(data, Some(0), 14).unwrap();
         assert_eq!(results[0][0], test_packet);
+        assert_eq!(results[0].len(), 1, "Error didn't drop second packet");
     }
 
     #[test]
     fn encap_ipv4() {
         let data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, //MAC layer
-            0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0,
-            1, //IP Layer
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
+            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let packet = Ipv4Packet::new(data.clone(), Some(0), 14).unwrap();
         let packets = vec![packet];
@@ -112,13 +116,20 @@ mod tests {
     #[test]
     fn decap_ipv6() {
         let data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, //MAC layer
-            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-            0xde,0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-            14, 15, 0xa, 0xb, 0xc, 0xd,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4,
+            17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
+            0xd,
+        ];
+        let data2: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x70, 0, 0, 0, 0, 4,
+            17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
+            0xd,
         ];
         let frame = EthernetFrame::new(data.clone(), 0).unwrap();
-        let packets = vec![frame];
+        let frame_invalid_ip = EthernetFrame::new(data2, 0).unwrap();
+        let packets = vec![frame, frame_invalid_ip];
 
         let link = ProcessLink::new()
             .ingressor(immediate_stream(packets))
@@ -129,15 +140,20 @@ mod tests {
 
         let test_packet = Ipv6Packet::new(data, Some(0), 14).unwrap();
         assert_eq!(results[0][0], test_packet);
+        assert_eq!(
+            results[0].len(),
+            1,
+            "Second packet is invalid and should have been dropped"
+        );
     }
 
     #[test]
     fn encap_ipv6() {
         let data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, //MAC layer
-            0x60, 0, 0, 0, 0, 4, 17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-            0xde,0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-            14, 15, 0xa, 0xb, 0xc, 0xd,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4,
+            17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
+            0xd,
         ];
         let packet = Ipv6Packet::new(data.clone(), Some(0), 14).unwrap();
         let packets = vec![packet];
