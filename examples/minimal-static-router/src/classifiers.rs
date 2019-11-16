@@ -127,8 +127,8 @@ mod tests {
     #[test]
     fn classify_ip() {
         let data_v4: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
-            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x45, 0, 0, 20, 0, 0,
+            0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let data_v6: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4,
@@ -165,8 +165,8 @@ mod tests {
     #[test]
     fn route_ipv4() {
         let data_v4: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
-            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x45, 0, 0, 20, 0, 0,
+            0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
         let mut packet_interface0 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();

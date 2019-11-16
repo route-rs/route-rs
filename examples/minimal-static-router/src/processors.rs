@@ -70,12 +70,12 @@ mod tests {
     #[test]
     fn decap_ipv4() {
         let data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
-            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x45, 0, 0, 20, 0, 0,
+            0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let data2: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x65, 0, 0, 20, 0, 0, 0,
-            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x65, 0, 0, 20, 0, 0,
+            0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let frame = EthernetFrame::new(data.clone(), 0).unwrap();
         let frame_invalid_ip = EthernetFrame::new(data2, 0).unwrap();
@@ -96,8 +96,8 @@ mod tests {
     #[test]
     fn encap_ipv4() {
         let data: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
-            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x45, 0, 0, 20, 0, 0,
+            0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
         let packet = Ipv4Packet::new(data.clone(), Some(0), 14).unwrap();
         let packets = vec![packet];
