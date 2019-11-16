@@ -161,4 +161,92 @@ mod tests {
         assert_eq!(results[1][0], frame2);
         assert_eq!(results[2][0], frame3);
     }
+
+    #[test]
+    fn route_ipv4() {
+        let data_v4: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 08, 00, 0x45, 0, 0, 20, 0, 0, 0,
+            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+        ];
+
+        let mut packet_interface0 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();
+        let mut packet_interface1 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();
+        let mut packet_interface2 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();
+        let mut packet_default = Ipv4Packet::new(data_v4, Some(0), 14).unwrap();
+        packet_interface0.set_dest_addr(Ipv4Addr::new(0, 0, 0, 0));
+        packet_interface1.set_dest_addr(Ipv4Addr::new(10, 0, 0, 14));
+        packet_interface2.set_dest_addr(Ipv4Addr::new(192, 168, 10, 5));
+        packet_default.set_dest_addr(Ipv4Addr::new(192, 167, 0, 0));
+
+        let packets = vec![
+            packet_interface0.clone(),
+            packet_interface1.clone(),
+            packet_interface2.clone(),
+            packet_default.clone(),
+        ];
+
+        let ipv4_router = Ipv4SubnetRouter::new(Interface0);
+        let link = ClassifyLink::new()
+            .ingressor(immediate_stream(packets))
+            .num_egressors(3)
+            .classifier(ipv4_router)
+            .dispatcher(Box::new(|c| match c {
+                Interface0 => 0,
+                Interface1 => 1,
+                Interface2 => 2,
+            }))
+            .build_link();
+
+        let results = run_link(link);
+
+        assert_eq!(results[0][0], packet_interface0);
+        assert_eq!(results[0][1], packet_default);
+        assert_eq!(results[1][0], packet_interface1);
+        assert_eq!(results[2][0], packet_interface2);
+    }
+
+    #[test]
+    fn route_ipv6() {
+        let data_v6: Vec<u8> = vec![
+            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4,
+            17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
+            0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
+            0xd,
+        ];
+
+        let mut packet_interface0 = Ipv6Packet::new(data_v6.clone(), Some(0), 14).unwrap();
+        let mut packet_interface1 = Ipv6Packet::new(data_v6.clone(), Some(0), 14).unwrap();
+        let mut packet_interface2 = Ipv6Packet::new(data_v6.clone(), Some(0), 14).unwrap();
+        let mut packet_default = Ipv6Packet::new(data_v6, Some(0), 14).unwrap();
+        packet_interface0.set_dest_addr(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0));
+        packet_interface1.set_dest_addr(Ipv6Addr::new(0x2001, 0xdb8, 0xdead, 1, 2, 3, 4, 5));
+        packet_interface2.set_dest_addr(Ipv6Addr::new(0x2001, 0xdb8, 0xbeef, 6, 7, 8, 9, 10));
+        packet_default.set_dest_addr(Ipv6Addr::new(0x2001, 0xdb8, 0xdeaf, 0xbeef, 0, 1, 2, 3));
+
+        let packets = vec![
+            packet_interface0.clone(),
+            packet_interface1.clone(),
+            packet_interface2.clone(),
+            packet_default.clone(),
+        ];
+
+        let ipv6_router = Ipv6SubnetRouter::new(Interface0);
+        let link = ClassifyLink::new()
+            .ingressor(immediate_stream(packets))
+            .num_egressors(3)
+            .classifier(ipv6_router)
+            .dispatcher(Box::new(|c| match c {
+                Interface0 => 0,
+                Interface1 => 1,
+                Interface2 => 2,
+            }))
+            .build_link();
+
+        let results = run_link(link);
+
+        assert_eq!(results[0][0], packet_interface0);
+        assert_eq!(results[0][1], packet_default);
+        assert_eq!(results[1][0], packet_interface1);
+        assert_eq!(results[2][0], packet_interface2);
+    }
 }
