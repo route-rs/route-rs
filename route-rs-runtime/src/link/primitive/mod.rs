@@ -35,3 +35,8 @@ pub use self::input_channel_link::*;
 /// Takes a stream and converts it to a channel for output.
 mod output_channel_link;
 pub use self::output_channel_link::*;
+
+#[cfg(not(target_os = "windows"))]
+mod pcap;
+#[cfg(not(target_os = "windows"))]
+pub use self::pcap::{FromPcap, ToPcap};
