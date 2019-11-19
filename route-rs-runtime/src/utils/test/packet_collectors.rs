@@ -3,6 +3,8 @@ use crossbeam::crossbeam_channel::Sender;
 use futures::{Async, Future, Poll};
 use std::fmt::Debug;
 
+/// A structure that may be handed an input stream that it will exhaustively drain from until it
+/// recieves a None. Useful for testing purposes.
 pub struct ExhaustiveDrain<T: Debug> {
     id: usize,
     stream: PacketStream<T>,

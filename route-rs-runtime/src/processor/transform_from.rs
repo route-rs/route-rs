@@ -3,10 +3,9 @@ use std::convert::From;
 use std::marker::PhantomData;
 use std::marker::Send;
 
-/*
-  TransformProcessor
-  This is an processor that takes type A and passes the equivalent type B using From
-*/
+/// Transform Processor
+///
+/// A generic processor that tranforms A -> B by calling B::from(A)
 #[derive(Default)]
 pub struct TransformFrom<A: Send + Clone, B: Send + Clone> {
     phantom_in: PhantomData<A>,

@@ -3,8 +3,8 @@ use futures::{stream, Async, Poll, Stream};
 use std::time::Duration;
 use tokio::timer::Interval;
 
-// Immediately yields a collection of packets to be poll'd.
-// Thin wrapper around iter_ok.
+/// Immediately yields a collection of packets to be poll'd.
+/// Thin wrapper around iter_ok.
 pub fn immediate_stream<I>(collection: I) -> PacketStream<I::Item>
 where
     I: IntoIterator,

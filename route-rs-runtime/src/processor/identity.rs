@@ -1,9 +1,7 @@
 use crate::processor::Processor;
 use std::marker::PhantomData;
 
-/* IdentityProcessor
-  This is an processor that passes what it has received
-*/
+/// Processor that passes what it receives.
 #[derive(Default)]
 pub struct Identity<A: Send + Clone> {
     phantom: PhantomData<A>,
