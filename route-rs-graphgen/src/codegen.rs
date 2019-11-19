@@ -465,117 +465,204 @@ pub fn let_simple(
     }
 }
 
-pub fn let_new<S, T, U>(identifier: S, struct_name: T, args: Vec<U>) -> String
-where
-    S: Into<String>,
-    T: Into<String>,
-    U: Into<String>,
-{
-    let args_string = args
-        .into_iter()
-        .map(|a| a.into())
-        .collect::<Vec<String>>()
-        .join(", ");
-    format!(
-        "let {} = {}::new({});",
-        identifier.into(),
-        struct_name.into(),
-        args_string
-    )
+pub fn expr_path_ident(id: &str) -> syn::Expr {
+    syn::Expr::Path(syn::ExprPath {
+        attrs: vec![],
+        qself: None,
+        path: simple_path(vec![ident(id)], false),
+    })
 }
 
-#[cfg(test)]
-mod let_new {
-    use super::*;
+pub fn builder(base: syn::Ident, setters: Vec<(syn::Ident, Vec<syn::Expr>)>) -> syn::Expr {
+    let mut expr_accum = syn::Expr::Call(syn::ExprCall {
+        attrs: vec![],
+        func: Box::new(syn::Expr::Path(syn::ExprPath {
+            attrs: vec![],
+            qself: None,
+            path: simple_path(vec![base, ident("new")], false),
+        })),
+        paren_token: syn::token::Paren {
+            span: proc_macro2::Span::call_site(),
+        },
+        args: Default::default(),
+    });
 
-    #[test]
-    fn no_args() {
-        let empty_args: Vec<&str> = vec![];
-        assert_eq!(let_new("foo", "Asdf", empty_args), "let foo = Asdf::new();")
+    for (method, args) in setters {
+        expr_accum = syn::Expr::MethodCall(syn::ExprMethodCall {
+            attrs: vec![],
+            receiver: Box::new(expr_accum),
+            dot_token: syn::token::Dot {
+                spans: [proc_macro2::Span::call_site()],
+            },
+            method,
+            turbofish: None,
+            paren_token: syn::token::Paren {
+                span: proc_macro2::Span::call_site(),
+            },
+            args: syn::punctuated::Punctuated::from_iter(args.into_iter()),
+        })
     }
 
-    #[test]
-    fn single_arg() {
-        assert_eq!(
-            let_new("foo", "Asdf", vec!["12345"]),
-            "let foo = Asdf::new(12345);"
-        )
-    }
+    expr_accum = syn::Expr::MethodCall(syn::ExprMethodCall {
+        attrs: vec![],
+        receiver: Box::new(expr_accum),
+        dot_token: syn::token::Dot {
+            spans: [proc_macro2::Span::call_site()],
+        },
+        method: ident("build_link"),
+        turbofish: None,
+        paren_token: syn::token::Paren {
+            span: proc_macro2::Span::call_site(),
+        },
+        args: syn::punctuated::Punctuated::from_iter(Vec::<syn::Expr>::new().into_iter()),
+    });
 
-    #[test]
-    fn multiple_args() {
-        assert_eq!(
-            let_new("foo", "Asdf", vec!["12345", "true"]),
-            "let foo = Asdf::new(12345, true);"
-        )
-    }
+    expr_accum
 }
 
-pub fn match_expr<S, T, U>(symbol: S, branches: Vec<(T, U)>) -> String
-where
-    S: Into<String>,
-    T: Into<String>,
-    U: Into<String>,
-{
-    let branch_expr = branches
-        .into_iter()
-        .map(|(pattern, result)| format!("{} => {{ {} }},", pattern.into(), result.into()))
-        .collect::<Vec<String>>();
-    let branch_expr_str = if !branch_expr.is_empty() {
-        [
-            String::from("\n"),
-            indent("    ", branch_expr.join("\n")),
-            String::from("\n"),
-        ]
-        .join("")
-    } else {
-        String::from("")
-    };
-    format!("match {} {{{}}}", symbol.into(), branch_expr_str)
+pub fn build_link(
+    index: usize,
+    link_type: &str,
+    setters: Vec<(syn::Ident, Vec<syn::Expr>)>,
+    num_egressors: usize,
+) -> Vec<syn::Stmt> {
+    let mut stmts = vec![];
+
+    stmts.push(syn::Stmt::Local(syn::Local {
+        attrs: vec![],
+        let_token: syn::token::Let {
+            span: proc_macro2::Span::call_site(),
+        },
+        pat: syn::Pat::Tuple(syn::PatTuple {
+            attrs: vec![],
+            paren_token: syn::token::Paren {
+                span: proc_macro2::Span::call_site(),
+            },
+            elems: syn::punctuated::Punctuated::from_iter(
+                vec![
+                    syn::Pat::Ident(syn::PatIdent {
+                        attrs: vec![],
+                        by_ref: None,
+                        mutability: Some(syn::token::Mut {
+                            span: proc_macro2::Span::call_site(),
+                        }),
+                        ident: ident(format!("runnables_{}", &index).as_str()),
+                        subpat: None,
+                    }),
+                    syn::Pat::Ident(syn::PatIdent {
+                        attrs: vec![],
+                        by_ref: None,
+                        mutability: Some(syn::token::Mut {
+                            span: proc_macro2::Span::call_site(),
+                        }),
+                        ident: if num_egressors > 0 {
+                            ident(format!("egressors_{}", &index).as_str())
+                        } else {
+                            ident(format!("_egressors_{}", &index).as_str())
+                        },
+                        subpat: None,
+                    }),
+                ]
+                .into_iter(),
+            ),
+        }),
+        init: Some((
+            syn::token::Eq {
+                spans: [proc_macro2::Span::call_site()],
+            },
+            Box::new(builder(ident(link_type), setters)),
+        )),
+        semi_token: syn::token::Semi {
+            spans: [proc_macro2::Span::call_site()],
+        },
+    }));
+
+    stmts.push(syn::Stmt::Semi(
+        syn::Expr::MethodCall(syn::ExprMethodCall {
+            attrs: vec![],
+            receiver: Box::new(syn::Expr::Path(syn::ExprPath {
+                attrs: vec![],
+                qself: None,
+                path: simple_path(vec![ident("all_runnables")], false),
+            })),
+            dot_token: syn::token::Dot {
+                spans: [proc_macro2::Span::call_site()],
+            },
+            method: ident("append"),
+            turbofish: None,
+            paren_token: syn::token::Paren {
+                span: proc_macro2::Span::call_site(),
+            },
+            args: syn::punctuated::Punctuated::from_iter(vec![syn::Expr::Reference(
+                syn::ExprReference {
+                    attrs: vec![],
+                    and_token: syn::token::And {
+                        spans: [proc_macro2::Span::call_site()],
+                    },
+                    raw: Default::default(),
+                    mutability: Some(syn::token::Mut {
+                        span: proc_macro2::Span::call_site(),
+                    }),
+                    expr: Box::new(syn::Expr::Path(syn::ExprPath {
+                        attrs: vec![],
+                        qself: None,
+                        path: simple_path(
+                            vec![ident(format!("runnables_{}", &index).as_str())],
+                            false,
+                        ),
+                    })),
+                },
+            )]),
+        }),
+        syn::token::Semi {
+            spans: [proc_macro2::Span::call_site()],
+        },
+    ));
+
+    for n in 0..num_egressors {
+        stmts.push(syn::Stmt::Local(let_simple(
+            ident(format!("link_{}_egress_{}", &index, n).as_str()),
+            None,
+            syn::Expr::MethodCall(syn::ExprMethodCall {
+                attrs: vec![],
+                receiver: Box::new(syn::Expr::Path(syn::ExprPath {
+                    attrs: vec![],
+                    qself: None,
+                    path: simple_path(vec![ident(format!("egressors_{}", &index).as_str())], false),
+                })),
+                dot_token: syn::token::Dot {
+                    spans: [proc_macro2::Span::call_site()],
+                },
+                method: ident("remove"),
+                turbofish: None,
+                paren_token: syn::token::Paren {
+                    span: proc_macro2::Span::call_site(),
+                },
+                args: syn::punctuated::Punctuated::from_iter(vec![syn::Expr::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: syn::Lit::Int(syn::LitInt::new("0", proc_macro2::Span::call_site())),
+                })]),
+            }),
+            false,
+        )))
+    }
+
+    stmts
 }
 
-#[cfg(test)]
-mod match_expr {
-    use super::*;
-
-    #[test]
-    fn empty_branches() {
-        let empty_branches: Vec<(&str, &str)> = vec![];
-        assert_eq!(match_expr("foo", empty_branches), "match foo {}");
-    }
-
-    #[test]
-    fn one_branch() {
-        let branches = vec![("_", "true")];
-        assert_eq!(
-            match_expr("foo", branches),
-            "match foo {\n    _ => { true },\n}"
-        );
-    }
-
-    #[test]
-    fn two_branches() {
-        let branches = vec![("true", "\"red\""), ("false", "\"blue\"")];
-        assert_eq!(
-            match_expr("foo", branches),
-            "match foo {\n    true => { \"red\" },\n    false => { \"blue\" },\n}"
-        );
-    }
-}
-
-pub fn box_expr<S>(expr: S) -> String
-where
-    S: Into<String>,
-{
-    format!("Box::new({})", expr.into())
-}
-
-#[cfg(test)]
-mod box_expr {
-    use super::*;
-
-    #[test]
-    fn thing() {
-        assert_eq!(box_expr("thing"), "Box::new(thing)");
-    }
+pub fn vec(exprs: Vec<syn::Expr>) -> syn::Expr {
+    syn::Expr::Macro(syn::ExprMacro {
+        attrs: vec![],
+        mac: syn::Macro {
+            path: simple_path(vec![ident("vec")], false),
+            bang_token: syn::token::Bang {
+                spans: [proc_macro2::Span::call_site()],
+            },
+            delimiter: syn::MacroDelimiter::Bracket(syn::token::Bracket {
+                span: proc_macro2::Span::call_site(),
+            }),
+            tokens: syn::punctuated::Punctuated::<syn::Expr, syn::token::Comma>::from_iter(exprs)
+                .to_token_stream(),
+        },
+    })
 }
