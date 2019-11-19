@@ -9,5 +9,5 @@ license = "MIT"
 tokio = "0.1.22"
 futures = "0.1.29"
 crossbeam = "0.7.2"
-smoltcp = "0.5.0"
 rand = "0.7.2"
+route-rs-packets = { path = "../route-rs-packets" }

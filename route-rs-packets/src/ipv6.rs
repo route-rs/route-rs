@@ -87,6 +87,10 @@ impl Ipv6Packet {
         self.data[self.layer3_offset + 7]
     }
 
+    pub fn set_hop_limit(&mut self, hop_limit: u8) {
+        self.data[self.layer3_offset + 7] = hop_limit;
+    }
+
     // Is there a bug here if there is no payload? wonder if
     // self.payload_offset would overrun the array, and cause a panic
     pub fn payload(&self) -> Cow<[u8]> {
