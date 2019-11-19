@@ -165,110 +165,133 @@ fn gen_link_decls(
             decl_idx += 1;
             match el {
                 Link::Input => {
-                    link_decls_map.insert((id.to_owned(), None), symbol.clone());
-                    codegen::let_new(
-                        symbol,
+                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx-1, 0));
+                    codegen::build_link(
+                        decl_idx-1,
                         "InputChannelLink",
-                        vec!["input_channel".to_string()],
-                    )
+                        vec![
+                            (codegen::ident("channel"), vec![codegen::expr_path_ident("input_channel")]),
+                        ],
+                        1
+                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Output(feeder) => {
-                    link_decls_map.insert((id.to_owned(), None), symbol.clone());
                     drivers.push(symbol.clone());
-                    codegen::let_new(
-                        symbol,
+                    codegen::build_link(
+                        decl_idx-1,
                         "OutputChannelLink",
                         vec![
-                            codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
-                            "output_channel".to_string(),
+                            (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
+                            (codegen::ident("channel"), vec![codegen::expr_path_ident("output_channel")]),
                         ],
-                    )
+                        0
+                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Sync(feeder, processor) => {
-                    link_decls_map.insert((id.to_owned(), None), symbol.clone());
-                    codegen::let_new(
-                        symbol,
+                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx-1, 0));
+                    codegen::build_link(
+                        decl_idx-1,
                         "ProcessLink",
                         vec![
-                            codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
-                            processor_decls.get(processor.as_str()).unwrap().to_owned(),
+                            (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
+                            (codegen::ident("processor"), vec![codegen::expr_path_ident(processor_decls.get(processor.as_str()).unwrap())])
                         ],
-                    )
+                        1
+                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Classify(feeder, processor, branches) => {
                     let mut match_branches = vec![];
-                    let mut egressors = vec![];
                     for branch_index in 0..(branches.len()) {
                         match_branches.push((
                             branches.get(branch_index).unwrap(),
                             branch_index.to_string(),
                         ));
-                        let egressor_symbol =
-                            unspool_channels(&symbol, &mut egressors, branch_index, "egressor");
                         link_decls_map.insert(
                             (
                                 id.to_owned(),
                                 Some(branches.get(branch_index).unwrap().to_owned()),
                             ),
-                            egressor_symbol.clone(),
+                            format!("link_{}_egress_{}", decl_idx-1, branch_index),
                         );
                     }
                     drivers.push(format!("{}_ingressor", &symbol));
-                    let mut classify_decls = vec![
-                        codegen::let_new(
-                            symbol.clone(),
-                            "ClassifyLink",
-                            vec![
-                                codegen::box_expr(map_get_with_panic(&link_decls_map, &feeder)),
-                                processor_decls.get(processor.as_str()).unwrap().to_owned(),
-                                codegen::box_expr(format!(
-                                    "|c| {}",
-                                    codegen::match_expr("c", match_branches)
-                                )),
-                                String::from("10"),
-                                branches.len().to_string(),
-                            ],
-                        ),
-                        format!("let {}_ingressor = {}.ingressor;", &symbol, &symbol,),
-                        format!(
-                            "let mut {}_egressors = {}.egressors.into_iter();",
-                            &symbol, &symbol,
-                        ),
-                    ];
-                    classify_decls.append(&mut egressors);
-                    classify_decls.join("\n")
+                    codegen::build_link(
+                        decl_idx-1,
+                        "ClassifyLink",
+                        vec![
+                            (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
+                            (codegen::ident("classifier"), vec![codegen::expr_path_ident(processor_decls.get(processor.as_str()).unwrap())]),
+                            (codegen::ident("dispatcher"), vec![syn::Expr::Call(syn::ExprCall {
+                                attrs: vec![],
+                                func: Box::new(syn::Expr::Path(syn::ExprPath {
+                                    attrs: vec![],
+                                    qself: None,
+                                    path: codegen::simple_path(
+                                        vec![codegen::ident("Box"), codegen::ident("new")],
+                                        false,
+                                    ),
+                                })),
+                                paren_token: syn::token::Paren {
+                                    span: proc_macro2::Span::call_site(),
+                                },
+                                args: syn::punctuated::Punctuated::from_iter(vec![syn::Expr::Closure(syn::ExprClosure {
+                                    attrs: vec![],
+                                    asyncness: None,
+                                    movability: None,
+                                    capture: None,
+                                    or1_token: syn::token::Or { spans: [proc_macro2::Span::call_site()] },
+                                    inputs: syn::punctuated::Punctuated::from_iter(vec![syn::Pat::Ident(syn::PatIdent {
+                                        attrs: vec![],
+                                        by_ref: None,
+                                        mutability: None,
+                                        ident: codegen::ident("c"),
+                                        subpat: None
+                                    })].into_iter()),
+                                    or2_token: syn::token::Or { spans: [proc_macro2::Span::call_site()] },
+                                    output: syn::ReturnType::Default,
+                                    body: Box::new(syn::Expr::Match(syn::ExprMatch {
+                                        attrs: vec![],
+                                        match_token: syn::token::Match { span: proc_macro2::Span::call_site() },
+                                        expr: Box::new(codegen::expr_path_ident("c")),
+                                        brace_token: syn::token::Brace { span: proc_macro2::Span::call_site() },
+                                        arms: match_branches.into_iter().map(|(p, b)| syn::Arm {
+                                            attrs: vec![],
+                                            pat: syn::parse_str::<syn::Pat>(p).unwrap(),
+                                            guard: None,
+                                            fat_arrow_token: syn::token::FatArrow { spans: [proc_macro2::Span::call_site(), proc_macro2::Span::call_site()] },
+                                            body: Box::new(syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(b.as_str(), proc_macro2::Span::call_site())) })),
+                                            comma: Some(syn::token::Comma { spans: [proc_macro2::Span::call_site()] })
+                                        }).collect::<Vec<syn::Arm>>()
+                                    }))
+                                })].into_iter()),
+                            })]),
+                            (codegen::ident("num_egressors"), vec![syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(branches.len().to_string().as_str(), proc_macro2::Span::call_site())) })]),
+                        ],
+                        branches.len()
+                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Join(feeders) => {
-                    let egressor_symbol = format!("{}_egressor", &symbol);
+                    let egressor_symbol = format!("link_{}_egress_{}", decl_idx-1, 0);
                     link_decls_map.insert((id.to_owned(), None), egressor_symbol);
                     let mut feeders_decls = vec![];
                     let mut ingressors = vec![];
                     for feeder_index in 0..(feeders.len()) {
-                        feeders_decls.push(codegen::box_expr(map_get_with_panic(
+                        feeders_decls.push(map_get_with_panic(
                             &link_decls_map,
                             &feeders.get(feeder_index).unwrap(),
-                        )));
+                        ));
                         let ingressor_symbol =
                             unspool_channels(&symbol, &mut ingressors, feeder_index, "ingressor");
                         drivers.push(ingressor_symbol.clone());
                     }
-                    let mut join_decls = vec![
-                        codegen::let_new(
-                            symbol.clone(),
-                            "JoinLink",
-                            vec![
-                                format!("vec![{}]", feeders_decls.join(", ")),
-                                String::from("10"),
-                            ],
-                        ),
-                        format!("let {}_egressor = {}.egressor;", &symbol, &symbol,),
-                        format!(
-                            "let mut {}_ingressors = {}.ingressors.into_iter();",
-                            &symbol, &symbol,
-                        ),
-                    ];
-                    join_decls.append(&mut ingressors);
-                    join_decls.join("\n")
+                    codegen::build_link(
+                        decl_idx-1,
+                        "JoinLink",
+                        vec![
+                            (codegen::ident("ingressors"), vec![codegen::vec(feeders_decls.into_iter().map(|d| codegen::expr_path_ident(d)).collect::<Vec<syn::Expr>>())])
+                        ],
+                        1
+                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
             }
         })
