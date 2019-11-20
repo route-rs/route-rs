@@ -12,7 +12,7 @@ pub struct UdpSegment {
 }
 
 impl<'packet> UdpSegment {
-    pub fn new(
+    pub fn from_buffer(
         data: PacketData,
         layer2_offset: Option<usize>, // Prep to switch to optional
         layer3_offset: Option<usize>, // Prep to switch to optional
@@ -126,7 +126,7 @@ impl TryFrom<Ipv4Packet> for UdpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
-        UdpSegment::new(
+        UdpSegment::from_buffer(
             packet.data,
             packet.layer2_offset,
             Some(packet.layer3_offset),
@@ -139,7 +139,7 @@ impl TryFrom<Ipv6Packet> for UdpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
-        UdpSegment::new(
+        UdpSegment::from_buffer(
             packet.data,
             packet.layer2_offset,
             Some(packet.layer3_offset),
