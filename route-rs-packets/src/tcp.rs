@@ -12,7 +12,7 @@ pub struct TcpSegment {
 }
 
 impl TcpSegment {
-    pub fn new(
+    pub fn from_buffer(
         data: PacketData,
         layer2_offset: Option<usize>,
         layer3_offset: Option<usize>,
@@ -196,7 +196,7 @@ impl TryFrom<Ipv4Packet> for TcpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
-        TcpSegment::new(
+        TcpSegment::from_buffer(
             packet.data,
             packet.layer2_offset,
             Some(packet.layer3_offset),
@@ -209,7 +209,7 @@ impl TryFrom<Ipv6Packet> for TcpSegment {
     type Error = &'static str;
 
     fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
-        TcpSegment::new(
+        TcpSegment::from_buffer(
             packet.data,
             packet.layer2_offset,
             Some(packet.layer3_offset),
