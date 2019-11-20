@@ -138,7 +138,7 @@ mod tests {
 
         let results = run_link(link);
 
-        let test_packet = Ipv6Packet::new(data, Some(0), 14).unwrap();
+        let test_packet = Ipv6Packet::from_buffer(data, Some(0), 14).unwrap();
         assert_eq!(results[0][0], test_packet);
         assert_eq!(
             results[0].len(),
@@ -155,7 +155,7 @@ mod tests {
             0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
             0xd,
         ];
-        let packet = Ipv6Packet::new(data.clone(), Some(0), 14).unwrap();
+        let packet = Ipv6Packet::from_buffer(data.clone(), Some(0), 14).unwrap();
         let packets = vec![packet];
 
         let link = ProcessLink::new()

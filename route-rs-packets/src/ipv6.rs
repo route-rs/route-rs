@@ -13,7 +13,7 @@ pub struct Ipv6Packet {
 }
 
 impl Ipv6Packet {
-    pub fn new(
+    pub fn from_buffer(
         data: PacketData,
         layer2_offset: Option<usize>,
         layer3_offset: usize,
@@ -249,7 +249,7 @@ impl TryFrom<EthernetFrame> for Ipv6Packet {
     type Error = &'static str;
 
     fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
-        Ipv6Packet::new(frame.data, Some(frame.layer2_offset), frame.payload_offset)
+        Ipv6Packet::from_buffer(frame.data, Some(frame.layer2_offset), frame.payload_offset)
     }
 }
 
@@ -258,7 +258,7 @@ impl TryFrom<TcpSegment> for Ipv6Packet {
 
     fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
         if let Some(layer3_offset) = segment.layer3_offset {
-            Ipv6Packet::new(segment.data, segment.layer2_offset, layer3_offset)
+            Ipv6Packet::from_buffer(segment.data, segment.layer2_offset, layer3_offset)
         } else {
             Err("TCP segment does not contain IP Header")
         }
@@ -270,7 +270,7 @@ impl TryFrom<UdpSegment> for Ipv6Packet {
 
     fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
         if let Some(layer3_offset) = segment.layer3_offset {
-            Ipv6Packet::new(segment.data, segment.layer2_offset, layer3_offset)
+            Ipv6Packet::from_buffer(segment.data, segment.layer2_offset, layer3_offset)
         } else {
             Err("UDP segment does not contain IP Header")
         }
@@ -329,7 +329,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         );
 
-        let mut packet = Ipv6Packet::new(data, Some(0), 14).unwrap();
+        let mut packet = Ipv6Packet::from_buffer(data, Some(0), 14).unwrap();
 
         assert_eq!(packet.src_addr(), src_addr);
         packet.set_src_addr(new_src_addr);
@@ -352,7 +352,7 @@ mod tests {
             0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef, 0xdead, 0xbeef,
         );
 
-        let mut packet = Ipv6Packet::new(data, Some(0), 14).unwrap();
+        let mut packet = Ipv6Packet::from_buffer(data, Some(0), 14).unwrap();
 
         assert_eq!(packet.dest_addr(), dest_addr);
         packet.set_dest_addr(new_dest_addr);
@@ -367,7 +367,7 @@ mod tests {
             0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let mut packet = Ipv6Packet::new(data, Some(0), 14).unwrap();
+        let mut packet = Ipv6Packet::from_buffer(data, Some(0), 14).unwrap();
 
         assert_eq!(packet.data[packet.payload_offset], 0xa);
 

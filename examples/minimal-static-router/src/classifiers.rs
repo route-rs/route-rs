@@ -214,10 +214,10 @@ mod tests {
             0xd,
         ];
 
-        let mut packet_interface0 = Ipv6Packet::new(data_v6.clone(), Some(0), 14).unwrap();
-        let mut packet_interface1 = Ipv6Packet::new(data_v6.clone(), Some(0), 14).unwrap();
-        let mut packet_interface2 = Ipv6Packet::new(data_v6.clone(), Some(0), 14).unwrap();
-        let mut packet_default = Ipv6Packet::new(data_v6, Some(0), 14).unwrap();
+        let mut packet_interface0 = Ipv6Packet::from_buffer(data_v6.clone(), Some(0), 14).unwrap();
+        let mut packet_interface1 = Ipv6Packet::from_buffer(data_v6.clone(), Some(0), 14).unwrap();
+        let mut packet_interface2 = Ipv6Packet::from_buffer(data_v6.clone(), Some(0), 14).unwrap();
+        let mut packet_default = Ipv6Packet::from_buffer(data_v6, Some(0), 14).unwrap();
         packet_interface0.set_dest_addr(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0));
         packet_interface1.set_dest_addr(Ipv6Addr::new(0x2001, 0xdb8, 0xdead, 1, 2, 3, 4, 5));
         packet_interface2.set_dest_addr(Ipv6Addr::new(0x2001, 0xdb8, 0xbeef, 6, 7, 8, 9, 10));
