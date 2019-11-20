@@ -287,7 +287,7 @@ mod tests {
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let packet = Ipv4Packet::try_from(frame).unwrap();
@@ -315,7 +315,7 @@ mod tests {
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&invalid_checksum_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());
@@ -337,7 +337,7 @@ mod tests {
             0x45, 0x00, 0x00, 0x14, 0x00, 0x00, 0x40, 0x00, 0x40, 0x11, 0xb8, 0x61, 0xc0, 0xa8,
             0x00, 0x01, 0xc0, 0xa8, 0x00, 0xc7,
         ];
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         assert!(!packet.validate_checksum());

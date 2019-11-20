@@ -10,7 +10,7 @@ pub struct EthernetFrame {
 }
 
 impl EthernetFrame {
-    pub fn new(frame: PacketData, layer2_offset: usize) -> Result<EthernetFrame, &'static str> {
+    pub fn from_buffer(frame: PacketData, layer2_offset: usize) -> Result<EthernetFrame, &'static str> {
         // Ethernet II frames must be at least the header, which is 14bytes
         // 0                    6                    12                      14
         // |---6 byte Dest_MAC--|---6 byte Src_MAC---|--2 Byte EtherType---|
@@ -78,7 +78,7 @@ impl TryFrom<TcpSegment> for EthernetFrame {
 
     fn try_from(segment: TcpSegment) -> Result<Self, Self::Error> {
         if let Some(layer2_offset) = segment.layer2_offset {
-            EthernetFrame::new(segment.data, layer2_offset)
+            EthernetFrame::from_buffer(segment.data, layer2_offset)
         } else {
             Err("TCP Segment does not contain an Ethernet Frame")
         }
@@ -90,7 +90,7 @@ impl TryFrom<UdpSegment> for EthernetFrame {
 
     fn try_from(segment: UdpSegment) -> Result<Self, Self::Error> {
         if let Some(layer2_offset) = segment.layer2_offset {
-            EthernetFrame::new(segment.data, layer2_offset)
+            EthernetFrame::from_buffer(segment.data, layer2_offset)
         } else {
             Err("UDP Segment does not contain an Ethernet Frame")
         }
@@ -102,7 +102,7 @@ impl TryFrom<Ipv4Packet> for EthernetFrame {
 
     fn try_from(packet: Ipv4Packet) -> Result<Self, Self::Error> {
         if let Some(layer2_offset) = packet.layer2_offset {
-            EthernetFrame::new(packet.data, layer2_offset)
+            EthernetFrame::from_buffer(packet.data, layer2_offset)
         } else {
             Err("IPv4 Packet does not contain an Ethernet Frame")
         }
@@ -114,7 +114,7 @@ impl TryFrom<Ipv6Packet> for EthernetFrame {
 
     fn try_from(packet: Ipv6Packet) -> Result<Self, Self::Error> {
         if let Some(layer2_offset) = packet.layer2_offset {
-            EthernetFrame::new(packet.data, layer2_offset)
+            EthernetFrame::from_buffer(packet.data, layer2_offset)
         } else {
             Err("Ipv6 Packet does not contain an Ethernet Frame")
         }
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn ethernet_frame() {
         let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let frame = EthernetFrame::new(data, 0).unwrap();
+        let frame = EthernetFrame::from_buffer(data, 0).unwrap();
         assert_eq!(
             frame.dest_mac(),
             MacAddr::new([0xde, 0xad, 0xbe, 0xef, 0xff, 0xff])
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn set_payload() {
         let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let mut frame = EthernetFrame::new(data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(data, 0).unwrap();
         assert_eq!(frame.ether_type(), 0);
         assert_eq!(frame.payload().len(), 0);
 
@@ -156,13 +156,13 @@ mod tests {
     #[should_panic(expected = "Frame is less than the minimum of 14 bytes")]
     fn invalid_data_length() {
         let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6];
-        let _frame = EthernetFrame::new(data, 0).unwrap();
+        let _frame = EthernetFrame::from_buffer(data, 0).unwrap();
     }
 
     #[test]
     fn set_dest_mac() {
         let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let mut frame = EthernetFrame::new(data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(data, 0).unwrap();
         let new_dest = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
         frame.set_dest_mac(new_dest);
         assert_eq!(frame.dest_mac(), new_dest);
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn set_src_mac() {
         let data: Vec<u8> = vec![0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0, 0];
-        let mut frame = EthernetFrame::new(data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(data, 0).unwrap();
         let new_src = MacAddr::new([0x98, 0x88, 0x18, 0x12, 0xb4, 0xdf]);
         frame.set_src_mac(new_src);
         assert_eq!(frame.src_mac(), new_src);
@@ -182,7 +182,7 @@ mod tests {
         let data: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0xff, 0xff,
         ];
-        let frame = EthernetFrame::new(data, 0).unwrap();
+        let frame = EthernetFrame::from_buffer(data, 0).unwrap();
         assert_eq!(frame.ether_type(), 0xffff);
     }
 }

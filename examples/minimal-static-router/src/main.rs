@@ -19,8 +19,8 @@ fn main() {
         0xbe, 0xef, 0x20, 0x01, 0x0d, 0xb8, 0xbe, 0xef, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xa, 0xb,
         0xc, 0xd,
     ];
-    let frame1 = EthernetFrame::new(data_v4, 0).unwrap();
-    let frame2 = EthernetFrame::new(data_v6, 0).unwrap();
+    let frame1 = EthernetFrame::from_buffer(data_v4, 0).unwrap();
+    let frame2 = EthernetFrame::from_buffer(data_v6, 0).unwrap();
     let packets = vec![frame1.clone(), frame2.clone()];
     // Create our router
     let router = Router::new()

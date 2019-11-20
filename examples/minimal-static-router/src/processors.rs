@@ -77,8 +77,8 @@ mod tests {
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x65, 0, 0, 20, 0, 0,
             0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
-        let frame = EthernetFrame::new(data.clone(), 0).unwrap();
-        let frame_invalid_ip = EthernetFrame::new(data2, 0).unwrap();
+        let frame = EthernetFrame::from_buffer(data.clone(), 0).unwrap();
+        let frame_invalid_ip = EthernetFrame::from_buffer(data2, 0).unwrap();
         let packets = vec![frame, frame_invalid_ip];
 
         let link = ProcessLink::new()
@@ -109,7 +109,7 @@ mod tests {
 
         let results = run_link(link);
 
-        let test_frame = EthernetFrame::new(data, 0).unwrap();
+        let test_frame = EthernetFrame::from_buffer(data, 0).unwrap();
         assert_eq!(results[0][0], test_frame);
     }
 
@@ -127,8 +127,8 @@ mod tests {
             0xad, 0xbe, 0xef, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0xa, 0xb, 0xc,
             0xd,
         ];
-        let frame = EthernetFrame::new(data.clone(), 0).unwrap();
-        let frame_invalid_ip = EthernetFrame::new(data2, 0).unwrap();
+        let frame = EthernetFrame::from_buffer(data.clone(), 0).unwrap();
+        let frame_invalid_ip = EthernetFrame::from_buffer(data2, 0).unwrap();
         let packets = vec![frame, frame_invalid_ip];
 
         let link = ProcessLink::new()
@@ -165,7 +165,7 @@ mod tests {
 
         let results = run_link(link);
 
-        let test_frame = EthernetFrame::new(data, 0).unwrap();
+        let test_frame = EthernetFrame::from_buffer(data, 0).unwrap();
         assert_eq!(results[0][0], test_frame);
     }
 }

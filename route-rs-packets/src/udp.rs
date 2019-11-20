@@ -163,7 +163,7 @@ mod tests {
             0, 99, 0, 88, 0, 19, 0xDE, 0xAD, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ipv4_data);
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
         packet.set_payload(&udp_data);
