@@ -139,9 +139,9 @@ mod tests {
         let data_unknown: Vec<u8> = vec![
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0xff, 0xff,
         ];
-        let frame1 = EthernetFrame::new(data_v4, 0).unwrap();
-        let frame2 = EthernetFrame::new(data_v6, 0).unwrap();
-        let frame3 = EthernetFrame::new(data_unknown, 0).unwrap();
+        let frame1 = EthernetFrame::from_buffer(data_v4, 0).unwrap();
+        let frame2 = EthernetFrame::from_buffer(data_v6, 0).unwrap();
+        let frame3 = EthernetFrame::from_buffer(data_unknown, 0).unwrap();
         let packets = vec![frame1.clone(), frame2.clone(), frame3.clone()];
 
         let link = ClassifyLink::new()

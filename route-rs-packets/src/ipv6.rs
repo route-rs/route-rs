@@ -298,7 +298,7 @@ mod tests {
             0x0001, 0x0203, 0x0405, 0x0607, 0x0809, 0x0A0B, 0x0C0D, 0x0E0F,
         );
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let packet = Ipv6Packet::try_from(frame).unwrap();
