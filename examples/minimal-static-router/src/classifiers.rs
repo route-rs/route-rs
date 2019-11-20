@@ -169,10 +169,10 @@ mod tests {
             0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut packet_interface0 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();
-        let mut packet_interface1 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();
-        let mut packet_interface2 = Ipv4Packet::new(data_v4.clone(), Some(0), 14).unwrap();
-        let mut packet_default = Ipv4Packet::new(data_v4, Some(0), 14).unwrap();
+        let mut packet_interface0 = Ipv4Packet::from_buffer(data_v4.clone(), Some(0), 14).unwrap();
+        let mut packet_interface1 = Ipv4Packet::from_buffer(data_v4.clone(), Some(0), 14).unwrap();
+        let mut packet_interface2 = Ipv4Packet::from_buffer(data_v4.clone(), Some(0), 14).unwrap();
+        let mut packet_default = Ipv4Packet::from_buffer(data_v4, Some(0), 14).unwrap();
         packet_interface0.set_dest_addr(Ipv4Addr::new(0, 0, 0, 0));
         packet_interface1.set_dest_addr(Ipv4Addr::new(10, 0, 0, 14));
         packet_interface2.set_dest_addr(Ipv4Addr::new(192, 168, 10, 5));

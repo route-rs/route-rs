@@ -88,7 +88,7 @@ mod tests {
 
         let results = run_link(link);
 
-        let test_packet = Ipv4Packet::new(data, Some(0), 14).unwrap();
+        let test_packet = Ipv4Packet::from_buffer(data, Some(0), 14).unwrap();
         assert_eq!(results[0][0], test_packet);
         assert_eq!(results[0].len(), 1, "Error didn't drop second packet");
     }
@@ -99,7 +99,7 @@ mod tests {
             0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x08, 00, 0x45, 0, 0, 20, 0, 0,
             0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
-        let packet = Ipv4Packet::new(data.clone(), Some(0), 14).unwrap();
+        let packet = Ipv4Packet::from_buffer(data.clone(), Some(0), 14).unwrap();
         let packets = vec![packet];
 
         let link = ProcessLink::new()
