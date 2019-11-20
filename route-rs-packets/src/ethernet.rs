@@ -10,7 +10,10 @@ pub struct EthernetFrame {
 }
 
 impl EthernetFrame {
-    pub fn from_buffer(frame: PacketData, layer2_offset: usize) -> Result<EthernetFrame, &'static str> {
+    pub fn from_buffer(
+        frame: PacketData,
+        layer2_offset: usize,
+    ) -> Result<EthernetFrame, &'static str> {
         // Ethernet II frames must be at least the header, which is 14bytes
         // 0                    6                    12                      14
         // |---6 byte Dest_MAC--|---6 byte Src_MAC---|--2 Byte EtherType---|
@@ -25,6 +28,14 @@ impl EthernetFrame {
             layer2_offset,
             payload_offset: 14 + layer2_offset, // To support 802.1Q VLAN Tagging, this number may be different.
         })
+    }
+
+    /// Returns an empty EthernetFrame where all values all populated to zero. This function allocates a
+    /// new array to hold the header.
+    pub fn empty() -> EthernetFrame {
+        let mut data = vec![];
+        data.resize(14, 0);
+        EthernetFrame::from_buffer(data, 0).unwrap()
     }
 
     pub fn dest_mac(&self) -> MacAddr {
@@ -47,6 +58,10 @@ impl EthernetFrame {
 
     pub fn ether_type(&self) -> u16 {
         u16::from_be_bytes(self.data[12..=13].try_into().unwrap())
+    }
+
+    pub fn set_ether_type(&mut self, ether_type: u16) {
+        self.data[12..=13].copy_from_slice(&ether_type.to_be_bytes());
     }
 
     // This gives you a cow of a slice of the payload.
@@ -184,5 +199,12 @@ mod tests {
         ];
         let frame = EthernetFrame::from_buffer(data, 0).unwrap();
         assert_eq!(frame.ether_type(), 0xffff);
+    }
+
+    #[test]
+    fn empty() {
+        let empty_frame = EthernetFrame::empty();
+        assert_eq!(empty_frame.layer2_offset, 0);
+        assert_eq!(empty_frame.payload_offset, 14);
     }
 }
