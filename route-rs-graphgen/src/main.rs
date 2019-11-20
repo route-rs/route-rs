@@ -142,32 +142,18 @@ where
     }
 }
 
-fn unspool_channels(symbol: &str, channels: &mut Vec<String>, index: usize, kind: &str) -> String {
-    let instance_symbol = format!("{}_{}_{}", &symbol, kind, index);
-    channels.push(format!(
-        "let {} = {}_{}s.next().unwrap();",
-        &instance_symbol, &symbol, kind,
-    ));
-    instance_symbol
-}
-
-fn gen_link_decls(
-    links: &[(XmlNodeId, Link)],
-    processor_decls: HashMap<String, String>,
-) -> (String, Vec<String>) {
-    let mut decl_idx: usize = 1;
+fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, String>) -> String {
+    let mut decl_idx: usize = 0;
     let mut link_decls_map = HashMap::new();
-    let mut drivers: Vec<String> = vec![];
     let decls: Vec<String> = links
         .iter()
         .map(|(id, el)| {
-            let symbol = format!("link_{}", decl_idx);
             decl_idx += 1;
             match el {
                 Link::Input => {
-                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx-1, 0));
+                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx, 0));
                     codegen::build_link(
-                        decl_idx-1,
+                        decl_idx,
                         "InputChannelLink",
                         vec![
                             (codegen::ident("channel"), vec![codegen::expr_path_ident("input_channel")]),
@@ -176,9 +162,8 @@ fn gen_link_decls(
                     ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Output(feeder) => {
-                    drivers.push(symbol.clone());
                     codegen::build_link(
-                        decl_idx-1,
+                        decl_idx,
                         "OutputChannelLink",
                         vec![
                             (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
@@ -188,9 +173,9 @@ fn gen_link_decls(
                     ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Sync(feeder, processor) => {
-                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx-1, 0));
+                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx, 0));
                     codegen::build_link(
-                        decl_idx-1,
+                        decl_idx,
                         "ProcessLink",
                         vec![
                             (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
@@ -211,12 +196,11 @@ fn gen_link_decls(
                                 id.to_owned(),
                                 Some(branches.get(branch_index).unwrap().to_owned()),
                             ),
-                            format!("link_{}_egress_{}", decl_idx-1, branch_index),
+                            format!("link_{}_egress_{}", decl_idx, branch_index),
                         );
                     }
-                    drivers.push(format!("{}_ingressor", &symbol));
                     codegen::build_link(
-                        decl_idx-1,
+                        decl_idx,
                         "ClassifyLink",
                         vec![
                             (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
@@ -271,21 +255,17 @@ fn gen_link_decls(
                     ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
                 }
                 Link::Join(feeders) => {
-                    let egressor_symbol = format!("link_{}_egress_{}", decl_idx-1, 0);
+                    let egressor_symbol = format!("link_{}_egress_{}", decl_idx, 0);
                     link_decls_map.insert((id.to_owned(), None), egressor_symbol);
                     let mut feeders_decls = vec![];
-                    let mut ingressors = vec![];
                     for feeder_index in 0..(feeders.len()) {
                         feeders_decls.push(map_get_with_panic(
                             &link_decls_map,
                             &feeders.get(feeder_index).unwrap(),
                         ));
-                        let ingressor_symbol =
-                            unspool_channels(&symbol, &mut ingressors, feeder_index, "ingressor");
-                        drivers.push(ingressor_symbol.clone());
                     }
                     codegen::build_link(
-                        decl_idx-1,
+                        decl_idx,
                         "JoinLink",
                         vec![
                             (codegen::ident("ingressors"), vec![codegen::vec(feeders_decls.into_iter().map(|d| codegen::expr_path_ident(d)).collect::<Vec<syn::Expr>>())])
@@ -296,21 +276,167 @@ fn gen_link_decls(
             }
         })
         .collect();
-    (decls.join("\n\n"), drivers)
+    decls.join("\n\n")
 }
 
-fn gen_tokio_run(drivers: Vec<String>) -> String {
-    let spawns: Vec<String> = drivers
-        .iter()
-        .map(|d| format!("tokio::spawn({});", d))
-        .collect();
-    [
-        String::from("tokio::run(lazy (move || {"),
-        codegen::indent("    ", spawns.join("\n")),
-        codegen::indent("    ", "Ok(())"),
-        String::from("}));"),
-    ]
-    .join("\n")
+fn gen_tokio_run() -> String {
+    syn::Stmt::Semi(
+        syn::Expr::Call(syn::ExprCall {
+            attrs: vec![],
+            func: Box::new(syn::Expr::Path(syn::ExprPath {
+                attrs: vec![],
+                qself: None,
+                path: codegen::simple_path(
+                    vec![codegen::ident("tokio"), codegen::ident("run")],
+                    false,
+                ),
+            })),
+            paren_token: syn::token::Paren {
+                span: proc_macro2::Span::call_site(),
+            },
+            args: syn::punctuated::Punctuated::from_iter(
+                vec![syn::Expr::Call(syn::ExprCall {
+                    attrs: vec![],
+                    func: Box::new(syn::Expr::Path(syn::ExprPath {
+                        attrs: vec![],
+                        qself: None,
+                        path: codegen::simple_path(vec![codegen::ident("lazy")], false),
+                    })),
+                    paren_token: syn::token::Paren {
+                        span: proc_macro2::Span::call_site(),
+                    },
+                    args: syn::punctuated::Punctuated::from_iter(
+                        vec![syn::Expr::Closure(syn::ExprClosure {
+                            attrs: vec![],
+                            asyncness: None,
+                            movability: None,
+                            capture: Some(syn::token::Move {
+                                span: proc_macro2::Span::call_site(),
+                            }),
+                            or1_token: syn::token::Or {
+                                spans: [proc_macro2::Span::call_site()],
+                            },
+                            inputs: Default::default(),
+                            or2_token: syn::token::Or {
+                                spans: [proc_macro2::Span::call_site()],
+                            },
+                            output: syn::ReturnType::Default,
+                            body: Box::new(syn::Expr::Block(syn::ExprBlock {
+                                attrs: vec![],
+                                label: None,
+                                block: syn::Block {
+                                    brace_token: syn::token::Brace {
+                                        span: proc_macro2::Span::call_site(),
+                                    },
+                                    stmts: vec![
+                                        syn::Stmt::Expr(syn::Expr::ForLoop(syn::ExprForLoop {
+                                            attrs: vec![],
+                                            label: None,
+                                            for_token: syn::token::For {
+                                                span: proc_macro2::Span::call_site(),
+                                            },
+                                            pat: syn::Pat::Ident(syn::PatIdent {
+                                                attrs: vec![],
+                                                by_ref: None,
+                                                mutability: None,
+                                                ident: codegen::ident("r"),
+                                                subpat: None,
+                                            }),
+                                            in_token: syn::token::In {
+                                                span: proc_macro2::Span::call_site(),
+                                            },
+                                            expr: Box::new(syn::Expr::Path(syn::ExprPath {
+                                                attrs: vec![],
+                                                qself: None,
+                                                path: codegen::simple_path(
+                                                    vec![codegen::ident("all_runnables")],
+                                                    false,
+                                                ),
+                                            })),
+                                            body: syn::Block {
+                                                brace_token: syn::token::Brace {
+                                                    span: proc_macro2::Span::call_site(),
+                                                },
+                                                stmts: vec![syn::Stmt::Semi(
+                                                    syn::Expr::Call(syn::ExprCall {
+                                                        attrs: vec![],
+                                                        func: Box::new(syn::Expr::Path(
+                                                            syn::ExprPath {
+                                                                attrs: vec![],
+                                                                qself: None,
+                                                                path: codegen::simple_path(
+                                                                    vec![
+                                                                        codegen::ident("tokio"),
+                                                                        codegen::ident("spawn"),
+                                                                    ],
+                                                                    false,
+                                                                ),
+                                                            },
+                                                        )),
+                                                        paren_token: syn::token::Paren {
+                                                            span: proc_macro2::Span::call_site(),
+                                                        },
+                                                        args:
+                                                            syn::punctuated::Punctuated::from_iter(
+                                                                vec![syn::Expr::Path(
+                                                                    syn::ExprPath {
+                                                                        attrs: vec![],
+                                                                        qself: None,
+                                                                        path: codegen::simple_path(
+                                                                            vec![codegen::ident(
+                                                                                "r",
+                                                                            )],
+                                                                            false,
+                                                                        ),
+                                                                    },
+                                                                )],
+                                                            ),
+                                                    }),
+                                                    syn::token::Semi {
+                                                        spans: [proc_macro2::Span::call_site()],
+                                                    },
+                                                )],
+                                            },
+                                        })),
+                                        syn::Stmt::Expr(syn::Expr::Call(syn::ExprCall {
+                                            attrs: vec![],
+                                            func: Box::new(syn::Expr::Path(syn::ExprPath {
+                                                attrs: vec![],
+                                                qself: None,
+                                                path: codegen::simple_path(
+                                                    vec![codegen::ident("Ok")],
+                                                    false,
+                                                ),
+                                            })),
+                                            paren_token: syn::token::Paren {
+                                                span: proc_macro2::Span::call_site(),
+                                            },
+                                            args: syn::punctuated::Punctuated::from_iter(vec![
+                                                syn::Expr::Tuple(syn::ExprTuple {
+                                                    attrs: vec![],
+                                                    paren_token: syn::token::Paren {
+                                                        span: proc_macro2::Span::call_site(),
+                                                    },
+                                                    elems: syn::punctuated::Punctuated::new(),
+                                                }),
+                                            ]),
+                                        })),
+                                    ],
+                                },
+                            })),
+                        })]
+                        .into_iter(),
+                    ),
+                })]
+                .into_iter(),
+            ),
+        }),
+        syn::token::Semi {
+            spans: [proc_macro2::Span::call_site()],
+        },
+    )
+    .to_token_stream()
+    .to_string()
 }
 
 fn expand_join_link<'a>(
@@ -433,12 +559,12 @@ fn gen_run_body(
     .to_token_stream()
     .to_string();
     let (processor_decls_str, processor_decls_map) = gen_processor_decls(&processors);
-    let (link_decls_str, drivers) = gen_link_decls(&links, processor_decls_map);
+    let link_decls_str = gen_link_decls(&links, processor_decls_map);
     [
         all_runnables_str,
         processor_decls_str,
         link_decls_str,
-        gen_tokio_run(drivers),
+        gen_tokio_run(),
     ]
     .join("\n\n")
 }
