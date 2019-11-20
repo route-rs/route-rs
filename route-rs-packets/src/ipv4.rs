@@ -51,6 +51,15 @@ impl Ipv4Packet {
         })
     }
 
+    /// Create an empty Ipv4Packet with no layer 2 header. All possible values are set to 0
+    pub fn empty() -> Ipv4Packet {
+        let mut data = vec![0x45];
+        data.resize(20, 0);
+        let total_len: u16 = 20;
+        data[2..=3].copy_from_slice(&total_len.to_be_bytes());
+        Ipv4Packet::from_buffer(data, None, 0).unwrap()
+    }
+
     pub fn src_addr(&self) -> Ipv4Addr {
         let data: [u8; 4] = self.data[self.layer3_offset + 12..self.layer3_offset + 16]
             .try_into()
@@ -77,8 +86,10 @@ impl Ipv4Packet {
         self.data[self.layer3_offset] & 0x0F
     }
 
-    pub fn set_ihl(&mut self, header_length: usize) {
-        self.data[self.layer3_offset] &= 0xF0; // Clear least sig 4 bits
+    // Leave private, it refers to the length of the header, which is really the length of the
+    // options field. Users wishing to set this should just use `set_options`
+    fn set_ihl(&mut self, header_length: usize) {
+        self.data[self.layer3_offset] &= 0xF0;
         self.data[self.layer3_offset] |= 0x0F & ((header_length / 4) as u8);
         self.payload_offset = header_length;
     }
@@ -125,6 +136,10 @@ impl Ipv4Packet {
         IpProtocol::from(self.data[self.layer3_offset + 9])
     }
 
+    pub fn set_protocol(&mut self, protocol: u8) {
+        self.data[self.layer3_offset + 9] = protocol;
+    }
+
     pub fn total_len(&self) -> u16 {
         u16::from_be_bytes(
             self.data[self.layer3_offset + 2..=self.layer3_offset + 3]
@@ -153,8 +168,20 @@ impl Ipv4Packet {
         self.data[self.layer3_offset + 1] >> 2
     }
 
+    /// Lower 6 bits define the dcsp
+    pub fn set_dscp(&mut self, dcsp: u8) {
+        self.data[self.layer3_offset + 1] &= 0x03;
+        self.data[self.layer3_offset + 1] |= dcsp << 2;
+    }
+
     pub fn ecn(&self) -> u8 {
         self.data[self.layer3_offset + 1] & 0x03
+    }
+
+    /// Lower 2 bits define the ecn
+    pub fn set_ecn(&mut self, ecn: u8) {
+        self.data[self.layer3_offset + 1] &= 0xFC;
+        self.data[self.layer3_offset + 1] |= ecn & 0x03;
     }
 
     pub fn indentification(&self) -> u16 {
@@ -165,11 +192,23 @@ impl Ipv4Packet {
         )
     }
 
-    pub fn fragment_offet(&self) -> u16 {
+    pub fn set_identification(&mut self, indentification: u16) {
+        self.data[self.layer3_offset + 4..=self.layer3_offset + 5]
+            .copy_from_slice(&indentification.to_be_bytes());
+    }
+
+    pub fn fragment_offset(&self) -> u16 {
         u16::from_be_bytes([
             self.data[self.layer3_offset + 6] & 0x1F,
             self.data[self.layer3_offset + 7],
         ])
+    }
+
+    /// Bottom 13bits are fragment offset
+    pub fn set_fragment_offset(&mut self, fragment_offset: u16) {
+        self.data[self.layer3_offset + 6] &= 0xE0;
+        self.data[self.layer3_offset + 6] |= (fragment_offset >> 8) as u8 & 0x1F;
+        self.data[self.layer3_offset + 7] = (fragment_offset & 0x00FF) as u8;
     }
 
     /// Returns tuple of (Don't Fragment, More Fragments)
@@ -177,6 +216,18 @@ impl Ipv4Packet {
         let df = (self.data[self.layer3_offset + 6] & 0x40) != 0;
         let mf = (self.data[self.layer3_offset + 6] & 0x20) != 0;
         (df, mf)
+    }
+
+    pub fn set_flags(&mut self, df: bool, mf: bool) {
+        let bits: u8;
+        match (df, mf) {
+            (false, false) => bits = 0,
+            (false, true) => bits = 1,
+            (true, false) => bits = 2,
+            (true, true) => bits = 3,
+        }
+        self.data[self.layer3_offset + 6] &= 0xE0;
+        self.data[self.layer3_offset + 6] |= bits << 5;
     }
 
     /// Verifies the IP header checksum, returns the value and also sets
@@ -304,7 +355,7 @@ mod tests {
         assert_eq!(packet.dscp(), 0);
         assert_eq!(packet.ecn(), 0);
         assert_eq!(packet.indentification(), 0);
-        assert_eq!(packet.fragment_offet(), 0);
+        assert_eq!(packet.fragment_offset(), 0);
         assert_eq!(packet.flags(), (false, false));
     }
 
@@ -356,5 +407,13 @@ mod tests {
         assert_eq!(packet.ihl(), 5);
         packet.set_ihl(24);
         assert_eq!(packet.ihl(), 6);
+    }
+
+    #[test]
+    fn empty() {
+        let empty_packet = Ipv4Packet::empty();
+        assert_eq!(empty_packet.layer2_offset, None);
+        assert_eq!(empty_packet.layer3_offset, 0);
+        assert_eq!(empty_packet.payload_offset, 20);
     }
 }
