@@ -1,3 +1,14 @@
+//! # What is it for?
+//!
+//! Task Park is a cache for task handles. Tasks can store their task handles there before sleeping, and can alert other tasks
+//! in the cache that need to be awoken. For example, the ingressor and egressor side of
+//! an `queue_link` both may attempt to sleep when they are unable to work because they are waiting on
+//! an action from the other side of the link. Generally, this occurs when the channel joining the `ingressor`
+//! and `egressor` encounter either a full or empty channel, respectively. They can place their task handle in the `task_park`
+//! and expect that when the blocker has been cleared, the other side of the link will awaken them by calling `task.notify()`.
+//! `task_park` also contains logic to prevent one side from sleeping when the other side will be unable to awaken them,
+//! in order to prevent deadlocks.
+
 use crossbeam::atomic::AtomicCell;
 use futures::task;
 use std::sync::Arc;

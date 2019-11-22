@@ -1,4 +1,3 @@
-/// Implement a pipeline in the run method, and then call in the main function of the router
 pub trait Runner {
     type Input: Sized;
     type Output: Sized;

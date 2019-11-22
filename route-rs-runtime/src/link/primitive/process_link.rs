@@ -2,10 +2,9 @@ use crate::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
 use crate::processor::Processor;
 use futures::{Async, Poll, Stream};
 
-/// `ProcessLink` is a simple links used to process packets through the user-defined processor
-/// It does not have the ability to store packets internally, and is pull-based. So it only does
-/// work when it is called, and must either immediatly return recieved packets, or drop them.  This
-/// link is used for transformation logic.
+/// `ProcessLink` processes packets through a user-defined processor.
+/// It can not buffer packets, so it only does work when it is called. It must immediately drop
+/// or return a transformed packet.
 #[derive(Default)]
 pub struct ProcessLink<P: Processor> {
     in_stream: Option<PacketStream<P::Input>>,
@@ -30,8 +29,7 @@ impl<P: Processor> ProcessLink<P> {
 
 /// Although `Link` allows an arbitrary number of ingressors and egressors, `ProcessLink`
 /// may only have one ingress and egress stream since it lacks some kind of queue
-/// storage. In the future we might decide to restrict the interface for this link
-/// for clearer intent.
+/// storage.
 impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for ProcessLink<P> {
     fn ingressors(self, mut in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert_eq!(
