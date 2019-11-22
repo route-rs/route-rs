@@ -1,5 +1,5 @@
 //! In brief: The runtime is what takes the basket of computation required by the user, links it together into the desired
-//! graph, and preps it to be handed to the desired runtime for running.
+//! graph, and preps it to be handed to the Tokio for running.
 #[macro_use]
 extern crate futures;
 extern crate crossbeam;
@@ -14,7 +14,7 @@ pub mod classifier;
 /// Wrappers around Processors and Classfiers, and implement all the movement of Packets through the Router.
 pub mod link;
 
-/// Structure that defines a complete router, with input and output interfaces that may be hooked into the host system.
+/// Structure meant to encapsulate a router as and input and output channel. Used by graphgen.
 pub mod pipeline;
 
 /// Utilities for the Runtime. Mostly testing constructs.

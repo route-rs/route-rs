@@ -2,7 +2,7 @@
 //!
 //! Classifiers are very similar to processors, but are used to differentiate a stream of packets. As such, they take each packet by reference,
 //! and are not able to modify it. They are only used in the ClassifyLink. Classifiers are able to return any type, but generally return an Enum
-//! that will enform the Dispatch section of the ClassifyLink which group each packet belongs to. The Dispatch then moves each packet to a port
+//! that will inform the Dispatch section of the ClassifyLink which group each packet belongs to. The Dispatch then moves each packet to a port
 //! based on its classification.
 mod even;
 pub use self::even::*;

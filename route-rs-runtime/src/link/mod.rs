@@ -1,15 +1,16 @@
 //! # What are they for?
 //!
-//! Links are an abstraction used by the runtime to link processors and classifiers together, and manage the flow of packets through the router.
+//! Links are an abstraction used by the runtime to link processors and classifiers together, to manage the flow of packets through the router.
 //! Processors and Classifiers, which implement all the non-flow business logic of the router, are loaded into links to create specfic behavior.
-//! Links are joined together via their interfaces, and the links are then dumped into a runtime to begin pulling packets through the router.
+//! Links are composed together via the `Link` trait. The `TokioRunnable` portions are handed to Tokio (some Links, such as `QueueLink`, are async
+//! and rely on Tokio to pull packets from the upstream.)
 //! When the library user uses Graphgen, Links are declared, connected, and placed into a runtime via generated code. The user does this by laying
 //! out their desired graph of Processors and Classifiers in a graph file, and Graphgen does all the work from there! Additionally, since all links
 //! must implement the LinkBuilder trait, Links are transparently composable at no cost during runtime! The most basic links that implement Poll,
 //! Stream and Future are Primitives. Links that are made by wrapping a collection of Links are called Composites. Link composition is a great way
 //! to reduce the complexity of your router, and make its design more inspectable. Users of the library are encouraged to create their own Composite
-//! Links, but should refrain from defining new Primitive Links. This prevents the user from having to worry about the complexities of generically
-//! chaining asynchronous computation together around Channels, and you can instead focus on your packets.
+//! Links by composing `Primitives` and other `CompositeLinks` together. This prevents the user from having to worry about the complexities of generically
+//! chaining asynchronous computation together around Channels; freeing you to focus on the business logic you would like your router to implement.
 
 use crate::processor::Processor;
 use futures::{Future, Stream};
@@ -18,13 +19,13 @@ use futures::{Future, Stream};
 /// library are encourged to make their own to encourage code reuse.
 pub mod composite;
 
-/// Primitive links are links that individually implement all the flow based logic that can be combined to create more compilcated
+/// Primitive links individually implement all the flow based logic that can be combined to create more compilcated
 /// composite links. Users of the library should not have to implement their own primitive links, but should rather combine them into
 /// their own custom composite links.
 pub mod primitive;
 
 /// Commmon utilities used by links, for instance the `task_park` utility used in primitive links to facilite sleeping and waking.
-mod utils;
+pub mod utils;
 
 /// All Links communicate through streams of packets. This allows them to be composable.
 pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
@@ -55,7 +56,7 @@ pub trait LinkBuilder<Input, Output> {
     fn build_link(self) -> Link<Output>;
 }
 
-/// `ProcessLink` and `QueueLink` should impl `ProcessorLink`, since they are required to have their
+/// `ProcessLink` and `QueueLink` impl `ProcessLinkBuilder`, since they are required to have their
 /// Inputs and Outputs match that of their `Processor`.
 pub trait ProcessLinkBuilder<P: Processor>: LinkBuilder<P::Input, P::Output> {
     fn processor(self, processor: P) -> Self;
