@@ -65,6 +65,14 @@ impl<'packet> UdpSegment {
         })
     }
 
+    /// Make an empty UDPSegment, with no layer 3 header nor payload.
+    pub fn empty() -> UdpSegment {
+        let mut data = vec![];
+        data.resize(8, 0);
+        data[5] = 8; //Set length field.
+        UdpSegment::from_buffer(data, None, None, 0).unwrap()
+    }
+
     pub fn src_port(&self) -> u16 {
         u16::from_be_bytes(
             self.data[self.layer4_offset..=self.layer4_offset + 1]
@@ -106,8 +114,24 @@ impl<'packet> UdpSegment {
         )
     }
 
+    /// Manually set the checksum of UDP packet, this should be improved later to
+    /// be calculated automatically.
+    pub fn set_checksum(&mut self, checksum: u16) {
+        self.data[self.layer4_offset + 6..=self.layer4_offset + 7]
+            .copy_from_slice(&checksum.to_be_bytes())
+    }
+
     pub fn payload(&self) -> Cow<[u8]> {
         Cow::from(&self.data[self.layer4_offset + 8..])
+    }
+
+    /// Set payload of UDP packet, does not change checksum.
+    /// Don't forget to update the length field of the IP packet that contains this.
+    pub fn set_payload(&mut self, payload: &[u8]) {
+        let payload_len = payload.len();
+        self.data.truncate(self.payload_offset);
+        self.data.reserve_exact(payload_len);
+        self.data.extend(payload);
     }
 }
 
@@ -175,5 +199,14 @@ mod tests {
         assert_eq!(segment.checksum(), 0xDEAD);
         assert_eq!(segment.payload().len(), 11);
         assert_eq!(segment.payload()[0], 0);
+    }
+
+    #[test]
+    fn empty() {
+        let empty_segment = UdpSegment::empty();
+        assert_eq!(empty_segment.layer2_offset, None);
+        assert_eq!(empty_segment.layer3_offset, None);
+        assert_eq!(empty_segment.layer4_offset, 0);
+        assert_eq!(empty_segment.payload_offset, 8);
     }
 }
