@@ -53,11 +53,25 @@ impl Ipv6Packet {
         })
     }
 
+    pub fn empty() -> Ipv6Packet {
+        let mut data = vec![0x60];
+        data.resize(40, 0);
+        Ipv6Packet::from_buffer(data, None, 0).unwrap()
+    }
+
     pub fn traffic_class(&self) -> u8 {
         ((self.data[self.layer3_offset] & 0x0F) << 4)
             + (self.data[self.layer3_offset + 1] & 0xF0 >> 4)
     }
 
+    pub fn set_traffic_class(&mut self, traffic_class: u8) {
+        self.data[self.layer3_offset] &= 0xF0;
+        self.data[self.layer3_offset + 1] &= 0x0F;
+        self.data[self.layer3_offset] |= traffic_class >> 4;
+        self.data[self.layer3_offset + 1] |= traffic_class << 4;
+    }
+
+    /// Returns flow label as least significant 20 bits.
     pub fn flow_label(&self) -> u32 {
         u32::from_be_bytes([
             0,
@@ -65,6 +79,14 @@ impl Ipv6Packet {
             self.data[self.layer3_offset + 2],
             self.data[self.layer3_offset + 3],
         ])
+    }
+
+    /// Sets flow label based on least significant 20 bits of flow_label parameter
+    pub fn set_flow_label(&mut self, flow_label: u32) {
+        self.data[self.layer3_offset + 1] &= 0xF0;
+        self.data[self.layer3_offset + 1] |= ((flow_label & 0x000F_FFFF) >> 16) as u8;
+        self.data[self.layer3_offset + 2..=self.layer3_offset + 3]
+            .copy_from_slice(&(flow_label as u16).to_be_bytes())
     }
 
     pub fn payload_length(&self) -> u16 {
@@ -377,5 +399,13 @@ mod tests {
 
         assert_eq!(packet.payload()[3], 4);
         assert_eq!(packet.payload().len(), 10);
+    }
+
+    #[test]
+    fn empty() {
+        let empty_packet = Ipv6Packet::empty();
+        assert_eq!(empty_packet.layer2_offset, None);
+        assert_eq!(empty_packet.layer3_offset, 0);
+        assert_eq!(empty_packet.payload_offset, 40);
     }
 }
