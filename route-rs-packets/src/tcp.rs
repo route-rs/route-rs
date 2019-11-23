@@ -56,6 +56,13 @@ impl TcpSegment {
         })
     }
 
+    pub fn empty() -> TcpSegment {
+        let mut data = vec![];
+        data.resize(20, 0);
+        data[12] = 0x50; //Set data offset to minimum
+        TcpSegment::from_buffer(data, None, None, 0).unwrap()
+    }
+
     pub fn src_port(&self) -> u16 {
         u16::from_be_bytes(
             self.data[self.layer4_offset..=self.layer4_offset + 1]
@@ -89,12 +96,22 @@ impl TcpSegment {
         )
     }
 
+    pub fn set_sequence_number(&mut self, sequence_number: u32) {
+        self.data[self.layer4_offset + 4..=self.layer4_offset + 7]
+            .copy_from_slice(&sequence_number.to_be_bytes());
+    }
+
     pub fn acknowledgment_number(&self) -> u32 {
         u32::from_be_bytes(
             self.data[self.layer4_offset + 8..=self.layer4_offset + 11]
                 .try_into()
                 .unwrap(),
         )
+    }
+
+    pub fn set_acknowledgment_number(&mut self, acknowledgment_number: u32) {
+        self.data[self.layer4_offset + 4..=self.layer4_offset + 7]
+            .copy_from_slice(&acknowledgment_number.to_be_bytes());
     }
 
     pub fn data_offset(&self) -> u8 {
@@ -118,12 +135,24 @@ impl TcpSegment {
         ) & 0x01FF
     }
 
+    /// Set control bits based on 9 least significant bits of control_bits parameter
+    pub fn set_control_bits(&mut self, control_bits: u16) {
+        self.data[self.layer4_offset + 12] &= 0xFE;
+        self.data[self.layer4_offset + 12] |= ((control_bits >> 8) & 0x01) as u8;
+        self.data[self.layer4_offset + 13] = (control_bits & 0x00FF) as u8;
+    }
+
     pub fn window_size(&self) -> u16 {
         u16::from_be_bytes(
             self.data[self.layer4_offset + 14..=self.layer4_offset + 15]
                 .try_into()
                 .unwrap(),
         )
+    }
+
+    pub fn set_window_size(&mut self, window_size: u16) {
+        self.data[self.layer4_offset + 14..=self.layer4_offset + 15]
+            .copy_from_slice(&window_size.to_be_bytes());
     }
 
     pub fn checksum(&self) -> u16 {
@@ -134,12 +163,23 @@ impl TcpSegment {
         )
     }
 
+    /// Manually set checksum with a provided 16 value
+    pub fn set_checksum(&mut self, checksum: u16) {
+        self.data[self.layer4_offset + 16..=self.layer4_offset + 17]
+            .copy_from_slice(&checksum.to_be_bytes());
+    }
+
     pub fn urgent_pointer(&self) -> u16 {
         u16::from_be_bytes(
             self.data[self.layer4_offset + 18..=self.layer4_offset + 19]
                 .try_into()
                 .unwrap(),
         )
+    }
+
+    pub fn set_urgent_pointer(&mut self, urgent_pointer: u16) {
+        self.data[self.layer4_offset + 18..=self.layer4_offset + 19]
+            .copy_from_slice(&urgent_pointer.to_be_bytes());
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
@@ -252,5 +292,14 @@ mod tests {
         assert_eq!(segment.options(), None);
         assert_eq!(segment.payload().len(), 11);
         assert_eq!(segment.payload()[0], 0);
+    }
+
+    #[test]
+    fn empty() {
+        let empty_segment = TcpSegment::empty();
+        assert_eq!(empty_segment.layer2_offset, None);
+        assert_eq!(empty_segment.layer3_offset, None);
+        assert_eq!(empty_segment.layer4_offset, 0);
+        assert_eq!(empty_segment.payload_offset, 20);
     }
 }
