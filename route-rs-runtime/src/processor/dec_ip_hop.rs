@@ -65,7 +65,7 @@ mod tests {
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
@@ -86,7 +86,7 @@ mod tests {
             0x45, 0, 0, 20, 0, 0, 0, 0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let mut packet = Ipv4Packet::try_from(frame).unwrap();
@@ -109,7 +109,7 @@ mod tests {
             14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let mut packet = Ipv6Packet::try_from(frame).unwrap();
@@ -132,7 +132,7 @@ mod tests {
             14, 15, 0xa, 0xb, 0xc, 0xd,
         ];
 
-        let mut frame = EthernetFrame::new(mac_data, 0).unwrap();
+        let mut frame = EthernetFrame::from_buffer(mac_data, 0).unwrap();
         frame.set_payload(&ip_data);
 
         let mut packet = Ipv6Packet::try_from(frame).unwrap();
