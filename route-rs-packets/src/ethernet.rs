@@ -75,6 +75,20 @@ impl EthernetFrame {
         self.data.reserve_exact(payload_len as usize);
         self.data.extend(payload);
     }
+
+    pub fn encap_ipv4(ipv4: Ipv4Packet) -> EthernetFrame {
+        let mut frame = EthernetFrame::empty();
+        frame.set_payload(&ipv4.data[ipv4.layer3_offset..]);
+        frame.set_ether_type(0x0800);
+        frame
+    }
+
+    pub fn encap_ipv6(ipv6: Ipv6Packet) -> EthernetFrame {
+        let mut frame = EthernetFrame::empty();
+        frame.set_payload(&ipv6.data[ipv6.layer3_offset..]);
+        frame.set_ether_type(0x86DD);
+        frame
+    }
 }
 
 /// EthernetFrames are considered the same if they have the same data from the layer 2
@@ -206,5 +220,39 @@ mod tests {
         let empty_frame = EthernetFrame::empty();
         assert_eq!(empty_frame.layer2_offset, 0);
         assert_eq!(empty_frame.payload_offset, 14);
+    }
+
+    #[test]
+    fn encap_ipv4() {
+        let frame = EthernetFrame::encap_ipv4(Ipv4Packet::empty());
+        assert_eq!(frame.layer2_offset, 0);
+        assert_eq!(frame.payload_offset, 14);
+        assert_eq!(frame.ether_type(), 0x0800);
+    }
+
+    #[test]
+    fn encap_ipv6() {
+        let frame = EthernetFrame::encap_ipv6(Ipv6Packet::empty());
+        assert_eq!(frame.layer2_offset, 0);
+        assert_eq!(frame.payload_offset, 14);
+        assert_eq!(frame.ether_type(), 0x86DD);
+    }
+
+    #[test]
+    fn full_encap_decap() {
+        let frame = EthernetFrame::encap_ipv4(Ipv4Packet::encap_udp(UdpSegment::empty()));
+        let _segment = UdpSegment::try_from(Ipv4Packet::try_from(frame).unwrap()).unwrap();
+
+        let tcp_segment = TcpSegment::try_from(
+            Ipv6Packet::try_from(EthernetFrame::encap_ipv6(Ipv6Packet::encap_tcp(
+                TcpSegment::empty(),
+            )))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(tcp_segment.layer2_offset, Some(0));
+        assert_eq!(tcp_segment.layer3_offset, Some(14));
+        assert_eq!(tcp_segment.layer4_offset, 54);
+        assert_eq!(tcp_segment.payload_offset, 74);
     }
 }
