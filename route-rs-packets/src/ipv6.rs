@@ -208,6 +208,24 @@ impl Ipv6Packet {
             self.set_next_header(first_header as u8);
         }
     }
+
+    /// Takes a UdpSegment, and returns an Ipv6Packet with the
+    /// segment as payload. Does not set checksums
+    pub fn encap_udp(udp: UdpSegment) -> Ipv6Packet {
+        let mut packet = Ipv6Packet::empty();
+        packet.set_payload(&udp.data[udp.layer4_offset..]);
+        packet.set_next_header(0x11); //UDP Header
+        packet
+    }
+
+    /// Takes a TcpSegment, and returns an Ipv6Packet with the
+    /// segment as payload. Does not set checksums
+    pub fn encap_tcp(tcp: TcpSegment) -> Ipv6Packet {
+        let mut packet = Ipv6Packet::empty();
+        packet.set_payload(&tcp.data[tcp.layer4_offset..]);
+        packet.set_next_header(0x06); //TCP Header
+        packet
+    }
 }
 
 /// Ipv6Packets are considered the same if they have the same data from the layer 4
@@ -407,5 +425,31 @@ mod tests {
         assert_eq!(empty_packet.layer2_offset, None);
         assert_eq!(empty_packet.layer3_offset, 0);
         assert_eq!(empty_packet.payload_offset, 40);
+    }
+
+    #[test]
+    fn encap_udp() {
+        let udp = UdpSegment::empty();
+        let packet = Ipv6Packet::encap_udp(udp);
+        assert_eq!(packet.layer3_offset, 0);
+        assert_eq!(packet.layer2_offset, None);
+        assert_eq!(packet.next_header(), IpProtocol::UDP);
+        let new_segment = UdpSegment::try_from(packet).unwrap();
+        assert_eq!(new_segment.layer2_offset, None);
+        assert_eq!(new_segment.layer3_offset, Some(0));
+        assert_eq!(new_segment.layer4_offset, 40);
+    }
+
+    #[test]
+    fn encap_tcp() {
+        let tcp = TcpSegment::empty();
+        let packet = Ipv6Packet::encap_tcp(tcp);
+        assert_eq!(packet.layer3_offset, 0);
+        assert_eq!(packet.layer2_offset, None);
+        assert_eq!(packet.next_header(), IpProtocol::TCP);
+        let new_segment = TcpSegment::try_from(packet).unwrap();
+        assert_eq!(new_segment.layer2_offset, None);
+        assert_eq!(new_segment.layer3_offset, Some(0));
+        assert_eq!(new_segment.layer4_offset, 40);
     }
 }
