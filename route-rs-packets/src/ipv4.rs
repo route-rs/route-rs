@@ -168,7 +168,7 @@ impl Ipv4Packet {
         self.data[self.layer3_offset + 1] >> 2
     }
 
-    /// Lower 6 bits define the dcsp
+    /// Lower 6 bits define the dscp
     pub fn set_dscp(&mut self, dcsp: u8) {
         self.data[self.layer3_offset + 1] &= 0x03;
         self.data[self.layer3_offset + 1] |= dcsp << 2;
