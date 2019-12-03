@@ -25,14 +25,10 @@ impl<P: Processor + Send> MtransformNLink<P> {
     }
 
     /// Changes join_queue_capcity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn join_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "join_queue_capacity: {} must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("join_queue_capacity: {} must be > 0", queue_capacity)
         );
 
         MtransformNLink {
@@ -45,14 +41,10 @@ impl<P: Processor + Send> MtransformNLink<P> {
     }
 
     /// Changes tee_queue_capcity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn fork_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "fork_queue_capacity: {} must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("fork_queue_capacity: {} must be > 0", queue_capacity)
         );
 
         MtransformNLink {
@@ -65,11 +57,7 @@ impl<P: Processor + Send> MtransformNLink<P> {
     }
 
     pub fn num_egressors(self, num_egressors: usize) -> Self {
-        assert!(
-            num_egressors <= 1000,
-            format!("compsite num_egressors: {} > 1000", num_egressors)
-        );
-        assert_ne!(num_egressors, 0, "num_egressors must be non-zero");
+        assert_ne!(num_egressors, 0, "num_egressors must be > 0");
 
         MtransformNLink {
             in_streams: self.in_streams,
@@ -84,7 +72,7 @@ impl<P: Processor + Send> MtransformNLink<P> {
 impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for MtransformNLink<P> {
     fn ingressors(self, in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert!(
-            in_streams.len() > 0,
+            !in_streams.is_empty(),
             format!("Input streams: {} should be > 0", in_streams.len())
         );
 

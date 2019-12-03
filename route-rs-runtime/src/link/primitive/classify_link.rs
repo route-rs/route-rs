@@ -52,11 +52,8 @@ impl<C: Classifier> ClassifyLink<C> {
 
     pub fn queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "Queue capacity: {}, must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("Queue capacity: {}, must be > 0", queue_capacity)
         );
         ClassifyLink {
             in_stream: self.in_stream,
@@ -69,11 +66,8 @@ impl<C: Classifier> ClassifyLink<C> {
 
     pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            (1..=1000).contains(&num_egressors),
-            format!(
-                "num_egressors: {}, must be in range 1..=1000",
-                num_egressors
-            )
+            num_egressors > 0,
+            format!("num_egressors: {}, must be > 0", num_egressors)
         );
         ClassifyLink {
             in_stream: self.in_stream,
@@ -189,7 +183,6 @@ impl<'a, C: Classifier> ClassifyIngressor<'a, C> {
 
 impl<'a, C: Classifier> Drop for ClassifyIngressor<'a, C> {
     fn drop(&mut self) {
-        //TODO: do this with a closure or something, this could be a one-liner
         for to_egressor in self.to_egressors.iter() {
             to_egressor
                 .try_send(None)

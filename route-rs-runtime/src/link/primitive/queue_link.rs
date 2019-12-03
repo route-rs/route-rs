@@ -24,11 +24,10 @@ impl<P: Processor> QueueLink<P> {
     }
 
     /// Changes queue_capacity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            queue_capacity <= 1000,
-            format!("QueueLink capacity: {} > 1000", queue_capacity)
+            queue_capacity > 0,
+            format!("QueueLink queue capacity: {} must be > 0", queue_capacity)
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
@@ -344,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "queue capacity must be non-zero")]
+    #[should_panic]
     fn empty_channel() {
         let packets: Vec<i32> = vec![];
 

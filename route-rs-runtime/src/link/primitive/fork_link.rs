@@ -23,14 +23,10 @@ impl<Packet: Clone + Send> ForkLink<Packet> {
     }
 
     /// Changes queue_capacity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "queue_capacity: {}, must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("queue_capacity: {}, must be > 0", queue_capacity)
         );
 
         ForkLink {
@@ -42,11 +38,8 @@ impl<Packet: Clone + Send> ForkLink<Packet> {
 
     pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            (1..=1000).contains(&num_egressors),
-            format!(
-                "num_egressors: {}, must be in range 1..=1000",
-                num_egressors
-            )
+            num_egressors > 0,
+            format!("num_egressors: {}, must be > 0", num_egressors)
         );
 
         ForkLink {
