@@ -22,14 +22,10 @@ impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
     }
 
     /// Changes join_queue_capcity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn join_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "queue_capacity: {}, must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("join_queue_capacity: {}, must be > 0", queue_capacity)
         );
 
         MtoNLink {
@@ -41,14 +37,10 @@ impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
     }
 
     /// Changes tee_queue_capcity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn tee_queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "queue_capacity: {}, must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("tee_queue_capacity: {}, must be > 0", queue_capacity)
         );
 
         MtoNLink {
@@ -61,11 +53,8 @@ impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
 
     pub fn num_egressors(self, num_egressors: usize) -> Self {
         assert!(
-            (1..=1000).contains(&num_egressors),
-            format!(
-                "num_egressors: {}, must be in range 1..=1000",
-                num_egressors
-            )
+            num_egressors > 0,
+            format!("num_egressors: {}, must be > 0", num_egressors)
         );
 
         MtoNLink {
@@ -80,7 +69,7 @@ impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
 impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNLink<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
-            in_streams.len() > 0,
+            !in_streams.is_empty(),
             format!("Input streams: {} must be > 0", in_streams.len())
         );
 

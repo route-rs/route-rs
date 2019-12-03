@@ -21,14 +21,10 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
     }
 
     /// Changes queue_capacity, default value is 10.
-    /// Valid range is 1..=1000
     pub fn queue_capacity(self, queue_capacity: usize) -> Self {
         assert!(
-            (1..=1000).contains(&queue_capacity),
-            format!(
-                "Queue capacity: {}, must be in range 1..=1000",
-                queue_capacity
-            )
+            queue_capacity > 0,
+            format!("Queue capacity: {}, must be > 0", queue_capacity)
         );
 
         JoinLink {
@@ -41,7 +37,7 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
 impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
-            in_streams.len() > 0,
+            !in_streams.is_empty(),
             format!(
                 "number of in_streams: {}, must be greater than 0",
                 in_streams.len()
@@ -414,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Queue capacity: 0, must be in range 1..=1000")]
+    #[should_panic]
     fn empty_channel() {
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(immediate_stream(vec![]));
