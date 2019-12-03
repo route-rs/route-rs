@@ -80,17 +80,39 @@ impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
 impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNLink<Packet> {
     fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
-            (1..=1000).contains(&in_streams.len()),
-            format!(
-                "Input streams: {} must be in range 1..=1000",
-                in_streams.len()
-            )
+            in_streams.len() > 0,
+            format!("Input streams: {} must be > 0", in_streams.len())
         );
+
+        if self.in_streams.is_some() {
+            panic!("MtoNLink already has input streams")
+        }
+
         MtoNLink {
             in_streams: Some(in_streams),
             join_queue_capacity: self.join_queue_capacity,
             fork_queue_capacity: self.fork_queue_capacity,
             num_egressors: self.num_egressors,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+        match self.in_streams {
+            None => MtoNLink {
+                in_streams: Some(vec![in_stream]),
+                join_queue_capacity: self.join_queue_capacity,
+                fork_queue_capacity: self.fork_queue_capacity,
+                num_egressors: self.num_egressors,
+            },
+            Some(mut existing_streams) => {
+                existing_streams.push(in_stream);
+                MtoNLink {
+                    in_streams: Some(existing_streams),
+                    join_queue_capacity: self.join_queue_capacity,
+                    fork_queue_capacity: self.fork_queue_capacity,
+                    num_egressors: self.num_egressors,
+                }
+            }
         }
     }
 

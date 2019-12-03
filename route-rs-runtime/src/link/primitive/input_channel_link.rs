@@ -26,6 +26,10 @@ impl<Packet: Send + 'static> LinkBuilder<(), Packet> for InputChannelLink<Packet
         panic!("InputChannelLink does not take stream ingressors")
     }
 
+    fn ingressor(self, _in_stream: PacketStream<()>) -> Self {
+        panic!("InputChannelLink does not take any stream ingressors")
+    }
+
     fn build_link(self) -> Link<Packet> {
         if self.channel_receiver.is_none() {
             panic!("Cannot build link! Missing channel");

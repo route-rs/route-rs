@@ -21,13 +21,6 @@ impl<Packet> OutputChannelLink<Packet> {
             channel_sender: Some(channel_sender),
         }
     }
-
-    pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
-        OutputChannelLink {
-            in_stream: Some(in_stream),
-            channel_sender: self.channel_sender,
-        }
-    }
 }
 
 impl<Packet: Send + 'static> LinkBuilder<Packet, ()> for OutputChannelLink<Packet> {
@@ -38,8 +31,22 @@ impl<Packet: Send + 'static> LinkBuilder<Packet, ()> for OutputChannelLink<Packe
             "OutputChannelLink may only take 1 input stream"
         );
 
+        if self.in_stream.is_some() {
+            panic!("OutputChannelLink may only take 1 input stream");
+        }
+
         OutputChannelLink {
             in_stream: Some(in_streams.remove(0)),
+            channel_sender: self.channel_sender,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+        if self.in_stream.is_some() {
+            panic!("OutputChannelLink may only take 1 input stream");
+        }
+        OutputChannelLink {
+            in_stream: Some(in_stream),
             channel_sender: self.channel_sender,
         }
     }

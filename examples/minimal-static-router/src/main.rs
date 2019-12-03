@@ -55,8 +55,23 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
             in_streams.len() == 1,
             "Support only one input interface for now"
         );
+
+        if self.in_streams.is_some() {
+            panic!("Only support one input interface")
+        }
+
         Router {
             in_streams: Some(in_streams),
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<EthernetFrame>) -> Self {
+        if self.in_streams.is_some() {
+            panic!("Only support one input interface")
+        }
+
+        Router {
+            in_streams: Some(vec![in_stream]),
         }
     }
 

@@ -83,16 +83,6 @@ impl<C: Classifier> ClassifyLink<C> {
             num_egressors: Some(num_egressors),
         }
     }
-
-    pub fn ingressor(self, in_stream: PacketStream<C::Packet>) -> Self {
-        ClassifyLink {
-            in_stream: Some(in_stream),
-            classifier: self.classifier,
-            dispatcher: self.dispatcher,
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
-    }
 }
 
 impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for ClassifyLink<C> {
@@ -103,8 +93,26 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
             "ClassifyLink may only take 1 input stream"
         );
 
+        if self.in_stream.is_some() {
+            panic!("ClassifyLink may only take 1 input stream")
+        }
+
         ClassifyLink {
             in_stream: Some(in_streams.remove(0)),
+            classifier: self.classifier,
+            dispatcher: self.dispatcher,
+            queue_capacity: self.queue_capacity,
+            num_egressors: self.num_egressors,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<C::Packet>) -> Self {
+        if self.in_stream.is_some() {
+            panic!("ClassifyLink may only take 1 input stream")
+        }
+
+        ClassifyLink {
+            in_stream: Some(in_stream),
             classifier: self.classifier,
             dispatcher: self.dispatcher,
             queue_capacity: self.queue_capacity,

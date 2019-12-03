@@ -15,13 +15,6 @@ impl<P: Processor> ProcessLink<P> {
             processor: None,
         }
     }
-
-    pub fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
-        ProcessLink {
-            in_stream: Some(in_stream),
-            processor: self.processor,
-        }
-    }
 }
 
 /// Although `Link` allows an arbitrary number of ingressors and egressors, `ProcessLink`
@@ -36,8 +29,23 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for Process
             "ProcessLink may only take 1 input stream"
         );
 
+        if self.in_stream.is_some() {
+            panic!("ProcessLink may only take 1 input stream")
+        }
+
         ProcessLink {
             in_stream: Some(in_streams.remove(0)),
+            processor: self.processor,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
+        if self.in_stream.is_some() {
+            panic!("ProcessLink may only take 1 input stream")
+        }
+
+        ProcessLink {
+            in_stream: Some(in_stream),
             processor: self.processor,
         }
     }

@@ -23,14 +23,6 @@ impl<P: Processor> QueueLink<P> {
         }
     }
 
-    pub fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
-        QueueLink {
-            in_stream: Some(in_stream),
-            processor: self.processor,
-            queue_capacity: self.queue_capacity,
-        }
-    }
-
     /// Changes queue_capacity, default value is 10.
     /// Valid range is 1..=1000
     pub fn queue_capacity(self, queue_capacity: usize) -> Self {
@@ -56,8 +48,24 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for QueueLi
             "QueueLink may only take 1 input stream"
         );
 
+        if self.in_stream.is_some() {
+            panic!("QueueLink may only take 1 input stream")
+        }
+
         QueueLink {
             in_stream: Some(in_streams.remove(0)),
+            processor: self.processor,
+            queue_capacity: self.queue_capacity,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
+        if self.in_stream.is_some() {
+            panic!("QueueLink may only take 1 input stream")
+        }
+
+        QueueLink {
+            in_stream: Some(in_stream),
             processor: self.processor,
             queue_capacity: self.queue_capacity,
         }
