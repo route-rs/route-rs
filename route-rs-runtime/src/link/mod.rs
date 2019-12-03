@@ -26,7 +26,13 @@ pub type Link<Output> = (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
 pub trait LinkBuilder<Input, Output> {
     /// Links need a way to receive input from upstream.
     /// Some Links such as `ProcessLink` will only need at most 1, but others can accept many.
+    /// Links that can not support the number of ingressors provided will panic. Links that already have
+    /// ingressors will panic on calling this function, since we expect this is a user configuration error.
     fn ingressors(self, in_streams: Vec<PacketStream<Input>>) -> Self;
+
+    /// Append ingressor to list of ingressors, works like push() for a Vector
+    /// If the link can not support the addition of another ingressor, it will panic.
+    fn ingressor(self, in_stream: PacketStream<Input>) -> Self;
 
     /// Provides any tokio-driven Futures needed to drive the Link, as well as handles for downstream
     /// `Link`s to use. This method consumes the `Link` since we want to move ownership of a `Link`'s

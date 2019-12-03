@@ -36,9 +36,30 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
             queue_capacity,
         }
     }
+}
+
+impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
+    fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
+        assert!(
+            in_streams.len() > 0,
+            format!(
+                "number of in_streams: {}, must be greater than 0",
+                in_streams.len()
+            )
+        );
+
+        if self.in_streams.is_some() {
+            panic!("Join link already has input streams")
+        }
+
+        JoinLink {
+            in_streams: Some(in_streams),
+            queue_capacity: self.queue_capacity,
+        }
+    }
 
     /// Appends the ingressor to the ingressors of the link.
-    pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
         match self.in_streams {
             None => {
                 let in_streams = Some(vec![in_stream]);
@@ -54,22 +75,6 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
                     queue_capacity: self.queue_capacity,
                 }
             }
-        }
-    }
-}
-
-impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
-    fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
-        assert!(
-            (1..=1000).contains(&in_streams.len()),
-            format!(
-                "number of in_streams: {}, must be in range 1..=1000",
-                in_streams.len()
-            )
-        );
-        JoinLink {
-            in_streams: Some(in_streams),
-            queue_capacity: self.queue_capacity,
         }
     }
 

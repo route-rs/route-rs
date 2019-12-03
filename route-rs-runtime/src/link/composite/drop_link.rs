@@ -21,14 +21,6 @@ impl<I> DropLink<I> {
         }
     }
 
-    pub fn ingressor(self, in_stream: PacketStream<I>) -> Self {
-        DropLink {
-            in_stream: Some(in_stream),
-            drop_chance: self.drop_chance,
-            seed: self.seed,
-        }
-    }
-
     pub fn drop_chance(self, chance: f64) -> Self {
         DropLink {
             in_stream: self.in_stream,
@@ -53,8 +45,25 @@ impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
             1,
             "DropLink can only take 1 ingress stream"
         );
+
+        if self.in_stream.is_some() {
+            panic!("DropLink can only take 1 input stream")
+        }
+
         DropLink {
             in_stream: Some(ingress_streams.remove(0)),
+            drop_chance: self.drop_chance,
+            seed: self.seed,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<I>) -> Self {
+        if self.in_stream.is_some() {
+            panic!("DropLink can only take 1 input stream")
+        }
+
+        DropLink {
+            in_stream: Some(in_stream),
             drop_chance: self.drop_chance,
             seed: self.seed,
         }

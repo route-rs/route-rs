@@ -55,14 +55,6 @@ impl<Packet: Clone + Send> ForkLink<Packet> {
             num_egressors: Some(num_egressors),
         }
     }
-
-    pub fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
-        ForkLink {
-            in_stream: Some(in_stream),
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
-    }
 }
 
 impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for ForkLink<Packet> {
@@ -72,8 +64,25 @@ impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for ForkLink<Pa
             1,
             "ForkLinks may only take one input stream!"
         );
+
+        if self.in_stream.is_some() {
+            panic!("ForkLink may only take 1 input stream")
+        }
+
         ForkLink {
             in_stream: Some(in_streams.remove(0)),
+            queue_capacity: self.queue_capacity,
+            num_egressors: self.num_egressors,
+        }
+    }
+
+    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+        if self.in_stream.is_some() {
+            panic!("ForkLink may only take 1 input stream")
+        }
+
+        ForkLink {
+            in_stream: Some(in_stream),
             queue_capacity: self.queue_capacity,
             num_egressors: self.num_egressors,
         }
