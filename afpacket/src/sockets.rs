@@ -4,10 +4,14 @@ use crate::linux;
 use libc;
 use std::{
     ffi::CStr,
-    io,
+    io::{self, Read, Write},
     mem::{self, MaybeUninit},
+    os::unix::io::RawFd,
     ptr,
 };
+
+#[cfg(feature = "tokio-support")]
+use mio::{event::Evented, unix::EventedFd, Poll, PollOpt, Ready, Token};
 
 /// Represents a link-local address.
 /// At this time, it's not particularly useful.
@@ -19,13 +23,13 @@ pub struct Addr {
 /// Represents an unbound `AF_PACKET` socket.  At this phase of a socket's lifecycle, it can be
 /// configured.
 pub struct Socket {
-    fd: libc::c_int,
+    fd: RawFd,
 }
 
 /// Represents a bound `AF_PACKET` socket. At this phase of a socket's lifecycle, it can be read
 /// to/written from.
 pub struct BoundSocket {
-    fd: libc::c_int,
+    fd: RawFd,
     iface: linux::ifreq,
     send_addr: libc::sockaddr_ll,
 }
@@ -235,6 +239,52 @@ impl BoundSocket {
                 ))
             }
         }
+    }
+}
+
+impl Read for BoundSocket {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self.recv(buf) {
+            Ok((sz, _)) => Ok(sz),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Write for BoundSocket {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.send(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "tokio-support")]
+impl Evented for BoundSocket {
+    fn register(
+        &self,
+        poll: &Poll,
+        token: Token,
+        interest: Ready,
+        opts: PollOpt,
+    ) -> io::Result<()> {
+        EventedFd(&self.fd).register(poll, token, interest, opts)
+    }
+
+    fn reregister(
+        &self,
+        poll: &Poll,
+        token: Token,
+        interest: Ready,
+        opts: PollOpt,
+    ) -> io::Result<()> {
+        EventedFd(&self.fd).reregister(poll, token, interest, opts)
+    }
+
+    fn deregister(&self, poll: &Poll) -> io::Result<()> {
+        EventedFd(&self.fd).deregister(poll)
     }
 }
 
