@@ -2,4 +2,9 @@
 mod linux;
 mod sockets;
 
-pub use sockets::Socket;
+#[cfg(feature = "tokio-support")]
+mod tokio_sockets;
+
+pub use sockets::{BoundSocket, Socket};
+#[cfg(feature = "tokio-support")]
+pub use tokio_sockets::AsyncBoundSocket;

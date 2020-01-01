@@ -9,7 +9,16 @@ license = "MIT"
 
 [dependencies]
 libc = "0.2.62"
+futures = "0.3"
+tokio = { version = "0.2", optional = true, features = ["io-driver", "io-util"] }
+mio = { version = "0.6", optional = true }
 
 [dev-dependencies]
 route-rs-packets = { path = "../route-rs-packets" }
+tokio = { version = "0.2", features = ["io-driver", "rt-core", "sync", "time"] }
 rand = "0.7.0"
+
+[features]
+default = []
+
+tokio-support = ["tokio", "mio"]
