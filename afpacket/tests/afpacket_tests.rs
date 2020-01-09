@@ -2,8 +2,8 @@
 
 use afpacket;
 use rand::{self, Rng};
-use smoltcp::{phy::ChecksumCapabilities, wire};
-use std::{ffi::CString, sync::mpsc, thread, time::Duration};
+use route_rs_packets as packets;
+use std::{ffi::CString, net, sync::mpsc, thread, time::Duration};
 
 #[test]
 #[ignore]
@@ -43,46 +43,24 @@ fn layer2_loopback() {
         rng.fill(&mut body[..]);
         body
     };
-    let udp_hdr = wire::UdpRepr {
-        src_port: 3001,
-        dst_port: 3002,
-        payload: &body,
-    };
-    let src_addr = wire::Ipv4Address::new(10, 0, 0, 1);
-    let dst_addr = wire::Ipv4Address::new(10, 0, 0, 2);
-    let ipv4_hdr = wire::Ipv4Repr {
-        src_addr,
-        dst_addr,
-        protocol: wire::IpProtocol::Udp,
-        payload_len: udp_hdr.buffer_len(),
-        hop_limit: 2,
-    };
-    let eth_hdr = wire::EthernetRepr {
-        src_addr: wire::EthernetAddress::BROADCAST,
-        dst_addr: wire::EthernetAddress::BROADCAST,
-        ethertype: wire::EthernetProtocol::Ipv4,
-    };
-    let buf_size =
-        wire::EthernetFrame::<&[u8]>::buffer_len(ipv4_hdr.buffer_len() + udp_hdr.buffer_len());
-    let mut out_buffer = vec![0; buf_size];
-    let mut eth_pkt = wire::EthernetFrame::new_checked(&mut out_buffer).unwrap();
-    eth_hdr.emit(&mut eth_pkt);
-    let mut ipv4_pkt = wire::Ipv4Packet::new_checked(eth_pkt.payload_mut()).unwrap();
-    ipv4_hdr.emit(&mut ipv4_pkt, &ChecksumCapabilities::default());
-    let mut udp_pkt = wire::UdpPacket::new_unchecked(ipv4_pkt.payload_mut());
-    udp_hdr.emit(
-        &mut udp_pkt,
-        &wire::IpAddress::Ipv4(src_addr),
-        &wire::IpAddress::Ipv4(dst_addr),
-        &ChecksumCapabilities::default(),
-    );
+    let mut udp_pkt = packets::UdpSegment::empty();
+    udp_pkt.set_src_port(3001);
+    udp_pkt.set_dest_port(3002);
+    udp_pkt.set_payload(&body);
+    let mut ipv4_pkt = packets::Ipv4Packet::encap_udp(udp_pkt);
+    ipv4_pkt.set_src_addr(net::Ipv4Addr::new(10, 0, 0, 1));
+    ipv4_pkt.set_dest_addr(net::Ipv4Addr::new(10, 0, 0, 2));
+    ipv4_pkt.set_ttl(2);
+    let mut eth_pkt = packets::EthernetFrame::encap_ipv4(ipv4_pkt);
+    eth_pkt.set_src_mac(packets::MacAddr::new([0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
+    eth_pkt.set_dest_mac(packets::MacAddr::new([0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
 
     println!("a: sending packet");
-    side_a.send(&out_buffer).unwrap();
+    side_a.send(&eth_pkt.data).unwrap();
     println!("a: sent packet");
 
     let in_buffer = rx.recv_timeout(timeout).unwrap();
-    assert_eq!(in_buffer, out_buffer);
+    assert_eq!(in_buffer, eth_pkt.data);
 
     thread_b.join().unwrap();
 }
