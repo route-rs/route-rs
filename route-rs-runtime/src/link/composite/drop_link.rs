@@ -95,7 +95,7 @@ impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
 mod tests {
     use super::*;
     use crate::classifier::even_link;
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{execute_link, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -119,6 +119,11 @@ mod tests {
 
     #[test]
     fn finishes_with_wait() {
+        run_finishes_with_wait();
+    }
+
+    #[tokio::main]
+    async fn run_finishes_with_wait() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator =
             PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
@@ -127,7 +132,7 @@ mod tests {
             .ingressor(Box::new(packet_generator))
             .build_link();
 
-        let results = run_link(link);
+        let results = execute_link(link).await;
         assert_eq!(results[0], vec![]);
     }
 

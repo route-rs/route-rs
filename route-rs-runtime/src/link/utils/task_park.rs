@@ -47,8 +47,8 @@ route-rs processors. These utilities should not be exposed via the Processors AP
 pub enum TaskParkState {
     Dead,
     Empty,
-    Parked(task::Task),
-    IndirectParked(Arc<AtomicCell<Option<task::Task>>>),
+    Parked(task::Waker),
+    IndirectParked(Arc<AtomicCell<Option<task::Waker>>>),
 }
 
 /// Swaps in the provided TaskParkState. Notifys any task that it finds currently in the `task_park`
@@ -61,12 +61,12 @@ fn swap_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>, swap: TaskParkSta
         }
         TaskParkState::Empty => true,
         TaskParkState::Parked(task) => {
-            task.notify();
+            task.wake();
             true
         }
         TaskParkState::IndirectParked(task) => {
             if let Some(task) = task.swap(None) {
-                task.notify();
+                task.wake();
             }
             true
         }
@@ -82,10 +82,9 @@ pub fn unpark_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
 /// Notifies a task if it resides in the `task_park`, and
 /// then parks the callee task in the `task_park`.
 /// Use when you wish to sleep the current task
-pub fn park_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
-    let task = task::current();
-    if !swap_and_notify(task_park, TaskParkState::Parked(task)) {
-        task::current().notify();
+pub fn park_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>, task: task::Waker) {
+    if !swap_and_notify(task_park, TaskParkState::Parked(task.clone())) {
+        task.wake();
     }
 }
 
@@ -95,7 +94,7 @@ pub fn park_and_notify(task_park: &Arc<AtomicCell<TaskParkState>>) {
 /// This is used primarily by the egressor of the JoinLink.
 pub fn indirect_park_and_notify(
     task_park: &Arc<AtomicCell<TaskParkState>>,
-    task: Arc<AtomicCell<Option<task::Task>>>,
+    task: Arc<AtomicCell<Option<task::Waker>>>,
 ) -> bool {
     swap_and_notify(task_park, TaskParkState::IndirectParked(task))
 }

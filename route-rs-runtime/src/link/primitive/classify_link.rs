@@ -4,8 +4,11 @@ use crate::link::{primitive::QueueEgressor, Link, LinkBuilder, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
-use futures::{Async, Future, Poll, Stream};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 use std::sync::Arc;
+use tokio::stream::Stream;
 
 #[derive(Default)]
 pub struct ClassifyLink<C: Classifier> {
@@ -163,6 +166,8 @@ pub struct ClassifyIngressor<'a, C: Classifier> {
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
 }
 
+impl<'a, C: Classifier> Unpin for ClassifyIngressor<'a, C> {}
+
 impl<'a, C: Classifier> ClassifyIngressor<'a, C> {
     fn new(
         input_stream: PacketStream<C::Packet>,
@@ -195,38 +200,41 @@ impl<'a, C: Classifier> Drop for ClassifyIngressor<'a, C> {
 }
 
 impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     /// Same logic as QueueEgressor, except if any of the channels are full we
     /// await that channel to clear before processing a new packet. This is somewhat
     /// inefficient, but seems acceptable for now since we want to yield compute to
     /// that egressor, as there is a backup in its queue.
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let ingressor = Pin::into_inner(self);
         loop {
-            for (port, to_egressor) in self.to_egressors.iter().enumerate() {
+            for (port, to_egressor) in ingressor.to_egressors.iter().enumerate() {
                 if to_egressor.is_full() {
-                    park_and_notify(&self.task_parks[port]);
-                    return Ok(Async::NotReady);
+                    park_and_notify(&ingressor.task_parks[port], cx.waker().clone()); //TODO, switch to new task park
+                    return Poll::Pending;
                 }
             }
-            let packet_option: Option<C::Packet> = try_ready!(self.input_stream.poll());
+
+            //TODO: Standardize in_stream, input_stream, and stream to one name
+            let packet_option: Option<C::Packet> =
+                ready!(Pin::new(&mut ingressor.input_stream).poll_next(cx));
 
             match packet_option {
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
                 Some(packet) => {
-                    let class = self.classifier.classify(&packet);
-                    let port = (self.dispatcher)(class);
-                    if port >= self.to_egressors.len() {
+                    let class = ingressor.classifier.classify(&packet);
+                    let port = (ingressor.dispatcher)(class);
+                    if port >= ingressor.to_egressors.len() {
                         panic!("Tried to access invalid port: {}", port);
                     }
-                    if let Err(err) = self.to_egressors[port].try_send(Some(packet)) {
+                    if let Err(err) = ingressor.to_egressors[port].try_send(Some(packet)) {
                         panic!(
                             "Error in to_egressors[{}] sender, have nowhere to put packet: {:?}",
                             port, err
                         );
                     }
-                    unpark_and_notify(&self.task_parks[port]);
+                    unpark_and_notify(&ingressor.task_parks[port]);
                 }
             }
         }
@@ -237,7 +245,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
 mod tests {
     use super::*;
     use crate::classifier::{even_link, fizz_buzz_link, Even};
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{execute_link, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -300,11 +308,16 @@ mod tests {
 
     #[test]
     fn even_odd_wait_between_packets() {
+        run_even_odd_wait_between_packets();
+    }
+
+    #[tokio::main]
+    async fn run_even_odd_wait_between_packets() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator =
             PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
-        let results = run_link(even_link(Box::new(packet_generator)));
+        let results = execute_link(even_link(Box::new(packet_generator))).await;
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
     }

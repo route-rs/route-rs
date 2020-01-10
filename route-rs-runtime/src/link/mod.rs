@@ -13,7 +13,6 @@
 //! chaining asynchronous computation together around Channels; freeing you to focus on the business logic you would like your router to implement.
 
 use crate::processor::Processor;
-use futures::{Future, Stream};
 
 /// Composites are groups of links pre-assmebled to provide higher level functionality. They are highly customizable and users of the
 /// library are encourged to make their own to encourage code reuse.
@@ -28,9 +27,9 @@ pub mod primitive;
 pub mod utils;
 
 /// All Links communicate through streams of packets. This allows them to be composable.
-pub type PacketStream<Input> = Box<dyn Stream<Item = Input, Error = ()> + Send>;
+pub type PacketStream<Input> = Box<dyn futures::Stream<Item = Input> + Send + Unpin>;
 /// Some Links may need to be driven by Tokio. This represents a handle to something Tokio can run.
-pub type TokioRunnable = Box<dyn Future<Item = (), Error = ()> + Send + 'static>;
+pub type TokioRunnable = Box<dyn futures::Future<Output = ()> + Send + Unpin>;
 /// LinkBuilders build this.
 pub type Link<Output> = (Vec<TokioRunnable>, Vec<PacketStream<Output>>);
 

@@ -3,9 +3,9 @@
 
 use crate::packets::*;
 use crate::processors::*;
-use futures::lazy;
 use route_rs_runtime::link::primitive::*;
 use route_rs_runtime::link::*;
+use tokio::runtime;
 
 pub struct Pipeline {}
 
@@ -67,11 +67,16 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
             .build_link();
         all_runnables.append(&mut runnables_6);
 
-        tokio::run(lazy(move || {
-            for r in all_runnables {
-                tokio::spawn(r);
+        let mut rt = runtime::Builder::new().enable_all().build().unwrap();
+
+        rt.block_on(async move {
+            let mut handles = vec![];
+            for runnable in all_runnables {
+                handles.push(tokio::spawn(runnable));
             }
-            Ok(())
-        }));
+            for handle in handles {
+                handle.await.unwrap();
+            }
+        });
     }
 }

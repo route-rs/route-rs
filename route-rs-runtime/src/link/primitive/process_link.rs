@@ -1,6 +1,8 @@
 use crate::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
 use crate::processor::Processor;
-use futures::{Async, Poll, Stream};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 
 /// `ProcessLink` processes packets through a user-defined processor.
 /// It can not buffer packets, so it only does work when it is called. It must immediately drop
@@ -88,38 +90,37 @@ impl<P: Processor> ProcessRunner<P> {
     }
 }
 
+impl<P: Processor> Unpin for ProcessRunner<P> {}
+
 impl<P: Processor> Stream for ProcessRunner<P> {
     type Item = P::Output;
-    type Error = ();
 
     /// Intro to `Stream`s:
-    /// 4 cases: `Async::Ready(Some)`, `Async::Ready(None)`, `Async::NotReady`, `Err`
+    /// 3 cases: `Poll::Ready(Some)`, `Poll::Ready(None)`, `Poll::Pending`
     ///
-    /// `Async::Ready(Some)`: We have a packet ready to process from the upstream processor.
+    /// `Poll::Ready(Some)`: We have a packet ready to process from the upstream processor.
     /// It's passed to our core's process function for... processing
     ///
-    /// `Async::Ready(None)`: The input_stream doesn't have anymore input. Semantically,
-    /// it's like an iterator has exhausted it's input. We should return `Ok(Async::Ready(None))`
+    /// `Poll::Ready(None)`: The input_stream doesn't have anymore input. Semantically,
+    /// it's like an iterator has exhausted it's input. We should return `Poll::Ready(None)`
     /// to signify to our downstream components that there's no more input to process.
-    /// Our Processors should rarely return `Async::Ready(None)` since it will effectively
+    /// Our Processors should rarely return `Poll::Ready(None)` since it will effectively
     /// kill the Stream chain.
     ///
-    /// `Async::NotReady`: There is more input for us to process, but we can't make any more
+    /// `Poll::Pending`: There is more input for us to process, but we can't make any more
     /// progress right now. The contract for Streams asks us to register with a Reactor so we
     /// will be woken up again by an Executor, but we will be relying on Tokio to do that for us.
     /// This case is handled by the `try_ready!` macro, which will automatically return
     /// `Ok(Async::NotReady)` if the input stream gives us NotReady.
     ///
-    /// `Err`: is also handled by the `try_ready!` macro.
-    ///
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
-            match try_ready!(self.in_stream.poll()) {
-                None => return Ok(Async::Ready(None)),
+            match ready!(Pin::new(&mut self.in_stream).poll_next(cx)) {
+                None => return Poll::Ready(None),
                 Some(input_packet) => {
                     // if `processor.process` returns None, do nothing, loop around and try polling again.
                     if let Some(output_packet) = self.processor.process(input_packet) {
-                        return Ok(Async::Ready(Some(output_packet)));
+                        return Poll::Ready(Some(output_packet));
                     }
                 }
             }
@@ -131,7 +132,7 @@ impl<P: Processor> Stream for ProcessRunner<P> {
 mod tests {
     use super::*;
     use crate::processor::{Drop, Identity, TransformFrom};
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{execute_link, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -183,6 +184,11 @@ mod tests {
 
     #[test]
     fn wait_between_packets() {
+        run_wait_between_packets();
+    }
+
+    #[tokio::main]
+    async fn run_wait_between_packets() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
@@ -194,7 +200,7 @@ mod tests {
             .processor(Identity::new())
             .build_link();
 
-        let results = run_link(link);
+        let results = execute_link(link).await;
         assert_eq!(results[0], packets);
     }
 
