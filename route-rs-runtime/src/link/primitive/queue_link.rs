@@ -4,7 +4,9 @@ use crate::processor::Processor;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender, TryRecvError};
-use futures::{Async, Future, Poll, Stream};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 use std::sync::Arc;
 
 /// A link used to create queues, buffers, or Task boundries. Packets may be
@@ -135,6 +137,8 @@ impl<P: Processor> QueueIngressor<P> {
     }
 }
 
+impl<P: Processor> Unpin for QueueIngressor<P> {}
+
 /// Special Drop for QueueIngressor
 ///
 /// When we are dropping the Ingressor, we want to send a message to the
@@ -154,8 +158,7 @@ impl<P: Processor> Drop for QueueIngressor<P> {
 }
 
 impl<P: Processor> Future for QueueIngressor<P> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     /// Implement Poll for Future for QueueIngressor
     ///
@@ -181,16 +184,17 @@ impl<P: Processor> Future for QueueIngressor<P> {
     /// #5 `processor`s may also choose to "drop" packets by returning `None`, so we do nothing
     /// and poll our upstream `PacketStream` again.
     ///
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             if self.to_egressor.is_full() {
-                park_and_notify(&self.task_park);
-                return Ok(Async::NotReady);
+                park_and_notify(&self.task_park, cx.waker().clone());
+                return Poll::Pending;
             }
-            let input_packet_option: Option<P::Input> = try_ready!(self.input_stream.poll());
+            let input_packet_option: Option<P::Input> =
+                ready!(Pin::new(&mut self.input_stream).poll_next(cx));
 
             match input_packet_option {
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
                 Some(input_packet) => {
                     if let Some(output_packet) = self.processor.process(input_packet) {
                         self.to_egressor
@@ -237,9 +241,10 @@ impl<Packet: Sized> Drop for QueueEgressor<Packet> {
     }
 }
 
+impl<Packet: Sized> Unpin for QueueEgressor<Packet> {}
+
 impl<Packet: Sized> Stream for QueueEgressor<Packet> {
     type Item = Packet;
-    type Error = ();
 
     /// Implement Poll for Stream for QueueEgressor
     ///
@@ -259,18 +264,18 @@ impl<Packet: Sized> Stream for QueueEgressor<Packet> {
     /// from_ingressor channel; we will no longer receive packets. Return Async::Ready(None) to forward
     /// propagate teardown.
     /// ###
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.from_ingressor.try_recv() {
             Ok(Some(packet)) => {
                 unpark_and_notify(&self.task_park);
-                Ok(Async::Ready(Some(packet)))
+                Poll::Ready(Some(packet))
             }
-            Ok(None) => Ok(Async::Ready(None)),
+            Ok(None) => Poll::Ready(None),
             Err(TryRecvError::Empty) => {
-                park_and_notify(&self.task_park);
-                Ok(Async::NotReady)
+                park_and_notify(&self.task_park, cx.waker().clone());
+                Poll::Pending
             }
-            Err(TryRecvError::Disconnected) => Ok(Async::Ready(None)),
+            Err(TryRecvError::Disconnected) => Poll::Ready(None),
         }
     }
 }
@@ -281,7 +286,7 @@ mod tests {
     use crate::link::primitive::ProcessLink;
     use crate::link::{LinkBuilder, ProcessLinkBuilder};
     use crate::processor::{Drop, Identity, TransformFrom};
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{execute_link, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
     use rand::{thread_rng, Rng};
@@ -441,6 +446,11 @@ mod tests {
 
     #[test]
     fn wait_between_packets() {
+        run_wait_between_packets();
+    }
+
+    #[tokio::main]
+    async fn run_wait_between_packets() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
@@ -452,7 +462,7 @@ mod tests {
             .processor(Identity::new())
             .build_link();
 
-        let results = run_link(link);
+        let results = execute_link(link).await;
         assert_eq!(results[0], packets);
     }
 

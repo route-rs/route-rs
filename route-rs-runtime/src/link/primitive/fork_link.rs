@@ -3,7 +3,9 @@ use crate::link::{primitive::QueueEgressor, Link, LinkBuilder, PacketStream};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
-use futures::{Async, Future, Poll, Stream};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -149,22 +151,21 @@ impl<P> Drop for ForkIngressor<P> {
 }
 
 impl<P: Send + Clone> Future for ForkIngressor<P> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     /// If any of the channels are full, we await that channel to clear before processing a new packet.
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             for (port, to_egressor) in self.to_egressors.iter().enumerate() {
                 if to_egressor.is_full() {
-                    park_and_notify(&self.task_parks[port]);
-                    return Ok(Async::NotReady);
+                    park_and_notify(&self.task_parks[port], cx.waker().clone()); //TODO: Switch to references, since that is all we get. May have some issues with lifetimes. Could just box it up then.
+                    return Poll::Pending;
                 }
             }
-            let packet_option: Option<P> = try_ready!(self.input_stream.poll());
+            let packet_option: Option<P> = ready!(Pin::new(&mut self.input_stream).poll_next(cx));
 
             match packet_option {
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
                 Some(packet) => {
                     //TODO: should packet but put in an iterator? or only cloned? or last one reused?
                     assert!(self.to_egressors.len() == self.task_parks.len());

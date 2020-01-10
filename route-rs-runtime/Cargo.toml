@@ -6,8 +6,8 @@ edition = "2018"
 license = "MIT"
 
 [dependencies]
-tokio = "0.1.22"
-futures = "0.1.29"
+tokio = { version = "0.2", features = ["full"] }
+futures = "0.3"
 crossbeam = "0.7.2"
 rand = "0.7.2"
 route-rs-packets = { path = "../route-rs-packets" }

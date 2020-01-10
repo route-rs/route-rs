@@ -1,7 +1,9 @@
 use crate::link::PacketStream;
 use crossbeam::crossbeam_channel::Sender;
-use futures::{Async, Future, Poll};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
 use std::fmt::Debug;
+use std::pin::Pin;
 
 /// A structure that may be handed an input stream that it will exhaustively drain from until it
 /// recieves a None. Useful for testing purposes.
@@ -10,6 +12,8 @@ pub struct ExhaustiveDrain<T: Debug> {
     stream: PacketStream<T>,
 }
 
+impl<T: Debug> Unpin for ExhaustiveDrain<T> {}
+
 impl<T: Debug> ExhaustiveDrain<T> {
     pub fn new(id: usize, stream: PacketStream<T>) -> Self {
         ExhaustiveDrain { id, stream }
@@ -17,14 +21,14 @@ impl<T: Debug> ExhaustiveDrain<T> {
 }
 
 impl<T: Debug> Future for ExhaustiveDrain<T> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let drain = Pin::into_inner(self);
         loop {
-            match try_ready!(self.stream.poll()) {
+            match ready!(Pin::new(&mut drain.stream).poll_next(cx)) {
                 Some(_value) => {}
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
             }
         }
     }
@@ -39,6 +43,8 @@ pub struct ExhaustiveCollector<T: Debug> {
     packet_dump: Sender<T>,
 }
 
+impl<T: Debug> Unpin for ExhaustiveCollector<T> {}
+
 impl<T: Debug> ExhaustiveCollector<T> {
     pub fn new(id: usize, stream: PacketStream<T>, packet_dump: Sender<T>) -> Self {
         ExhaustiveCollector {
@@ -50,18 +56,19 @@ impl<T: Debug> ExhaustiveCollector<T> {
 }
 
 impl<T: Debug> Future for ExhaustiveCollector<T> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let collector = Pin::into_inner(self);
         loop {
-            match try_ready!(self.stream.poll()) {
+            match ready!(Pin::new(&mut collector.stream).poll_next(cx)) {
                 Some(value) => {
-                    self.packet_dump
+                    collector
+                        .packet_dump
                         .try_send(value)
                         .expect("Exhaustive Collector: Error sending to packet dump");
                 }
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
             }
         }
     }

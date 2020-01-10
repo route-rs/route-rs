@@ -1,7 +1,8 @@
 use crate::link::PacketStream;
-use futures::{stream, Async, Poll, Stream};
-use std::time::Duration;
-use tokio::timer::Interval;
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
+use tokio::time::{interval, Duration, Interval};
 
 /// Immediately yields a collection of packets to be poll'd.
 /// Thin wrapper around iter_ok.
@@ -10,7 +11,7 @@ where
     I: IntoIterator,
     I::IntoIter: Send + 'static,
 {
-    Box::new(stream::iter_ok::<_, ()>(collection))
+    Box::new(stream::iter(collection))
 }
 
 /*
@@ -30,7 +31,7 @@ pub struct LinearIntervalGenerator {
 impl LinearIntervalGenerator {
     pub fn new(duration: Duration, iterations: usize) -> Self {
         LinearIntervalGenerator {
-            interval: Interval::new_interval(duration),
+            interval: interval(duration),
             iterations,
             seq_num: 0,
         }
@@ -39,14 +40,13 @@ impl LinearIntervalGenerator {
 
 impl Stream for LinearIntervalGenerator {
     type Item = i32;
-    type Error = ();
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, ()> {
-        try_ready!(self.interval.poll().map_err(|_| ()));
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        ready!(Pin::new(&mut self.interval).poll_next(cx));
         if self.seq_num as usize > self.iterations {
-            Ok(Async::Ready(None))
+            Poll::Ready(None)
         } else {
-            let next_packet = Ok(Async::Ready(Some(self.seq_num)));
+            let next_packet = Poll::Ready(Some(self.seq_num));
             self.seq_num += 1;
             next_packet
         }
@@ -68,6 +68,13 @@ where
     packets: Iterable,
 }
 
+impl<Iterable, Packet> Unpin for PacketIntervalGenerator<Iterable, Packet>
+where
+    Iterable: Iterator<Item = Packet>,
+    Packet: Sized,
+{
+}
+
 impl<Iterable, Packet> PacketIntervalGenerator<Iterable, Packet>
 where
     Iterable: Iterator<Item = Packet>,
@@ -75,7 +82,7 @@ where
 {
     pub fn new(duration: Duration, packets: Iterable) -> Self {
         PacketIntervalGenerator {
-            interval: Interval::new_interval(duration),
+            interval: interval(duration),
             packets,
         }
     }
@@ -87,13 +94,13 @@ where
     Packet: Sized,
 {
     type Item = Packet;
-    type Error = ();
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, ()> {
-        try_ready!(self.interval.poll().map_err(|_| ()));
-        match self.packets.next() {
-            Some(packet) => Ok(Async::Ready(Some(packet))),
-            None => Ok(Async::Ready(None)),
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let interval_generator = Pin::into_inner(self);
+        ready!(Pin::new(&mut interval_generator.interval).poll_next(cx));
+        match interval_generator.packets.next() {
+            Some(packet) => Poll::Ready(Some(packet)),
+            None => Poll::Ready(None),
         }
     }
 }

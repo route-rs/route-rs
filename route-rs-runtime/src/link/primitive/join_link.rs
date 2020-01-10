@@ -3,7 +3,9 @@ use crate::link::{Link, LinkBuilder, PacketStream, TokioRunnable};
 use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
-use futures::{task, Async, Future, Poll, Stream};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -109,6 +111,8 @@ pub struct JoinIngressor<Packet: Sized> {
     task_park: Arc<AtomicCell<TaskParkState>>,
 }
 
+impl<Packet: Sized> Unpin for JoinIngressor<Packet> {}
+
 impl<Packet: Sized> JoinIngressor<Packet> {
     fn new(
         input_stream: PacketStream<Packet>,
@@ -133,8 +137,7 @@ impl<Packet: Sized> Drop for JoinIngressor<Packet> {
 }
 
 impl<Packet: Sized> Future for JoinIngressor<Packet> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
     /// Implement Poll for Future for JoinIngressor
     ///
@@ -153,21 +156,24 @@ impl<Packet: Sized> Future for JoinIngressor<Packet> {
     /// is no futher work to complete.
     /// ###
     /// By Sleep, we mean we return a NotReady to the runtime which will sleep the task.
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let ingressor = Pin::into_inner(self);
         loop {
-            if self.to_egressor.is_full() {
-                park_and_notify(&self.task_park);
-                return Ok(Async::NotReady);
+            if ingressor.to_egressor.is_full() {
+                park_and_notify(&ingressor.task_park, cx.waker().clone()); //TODO: Change task park to cx based
+                return Poll::Pending;
             }
-            let input_packet_option: Option<Packet> = try_ready!(self.input_stream.poll());
+            let input_packet_option: Option<Packet> =
+                ready!(Pin::new(&mut ingressor.input_stream).poll_next(cx));
 
             match input_packet_option {
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
                 Some(packet) => {
-                    self.to_egressor
+                    ingressor
+                        .to_egressor
                         .try_send(Some(packet))
                         .expect("JoinIngressor::Poll: try_send to_egressor shouldn't fail");
-                    unpark_and_notify(&self.task_park);
+                    unpark_and_notify(&ingressor.task_park);
                 }
             }
         }
@@ -198,6 +204,8 @@ impl<Packet: Sized> JoinEgressor<Packet> {
     }
 }
 
+impl<Packet: Sized> Unpin for JoinEgressor<Packet> {}
+
 impl<Packet: Sized> Drop for JoinEgressor<Packet> {
     fn drop(&mut self) {
         for task_park in self.task_parks.iter() {
@@ -208,35 +216,37 @@ impl<Packet: Sized> Drop for JoinEgressor<Packet> {
 
 impl<Packet: Sized> Stream for JoinEgressor<Packet> {
     type Item = Packet;
-    type Error = ();
 
     /// Iterate over all the channels, pull the first packet that is available.
     /// This starts at the next index after the last successful recv
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         //rotate_slice exists in 1.22 nightly experimental
-        let rotated_iter = self
+        let egressor = Pin::into_inner(self);
+        let rotated_iter = egressor
             .from_ingressors
             .iter()
             .enumerate()
             .cycle()
-            .skip(self.next_pull_ingressor)
-            .take(self.from_ingressors.len());
+            .skip(egressor.next_pull_ingressor)
+            .take(egressor.from_ingressors.len());
         for (port, from_ingressor) in rotated_iter {
             match from_ingressor.try_recv() {
                 Ok(Some(packet)) => {
-                    unpark_and_notify(&self.task_parks[port]);
-                    self.next_pull_ingressor = port + 1;
-                    return Ok(Async::Ready(Some(packet)));
+                    unpark_and_notify(&egressor.task_parks[port]);
+                    egressor.next_pull_ingressor = port + 1;
+                    return Poll::Ready(Some(packet));
                 }
                 Ok(None) => {
                     //Got a none from a consumer that has shutdown
-                    self.ingressors_alive -= 1;
-                    if self.ingressors_alive == 0 {
-                        return Ok(Async::Ready(None));
+                    egressor.ingressors_alive -= 1;
+                    if egressor.ingressors_alive == 0 {
+                        return Poll::Ready(None);
                     }
                 }
                 Err(_) => {
                     //On an error go to next channel.
+                    //TODO: Should we be setting the ingressors alive to -1?
+                    //  Does this error even ever happen? If so, what should we do? Safest thing to do may be panic.
                 }
             }
         }
@@ -245,17 +255,17 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
         // common location, and then hand out Arcs to all the ingressors to the common location. The first
         // one to access the egressor task will awaken us, so we can continue providing packets.
         let mut parked_egressor_task = false;
-        let egressor_task = Arc::new(AtomicCell::new(Some(task::current())));
-        for task_park in self.task_parks.iter() {
+        let egressor_task = Arc::new(AtomicCell::new(Some(cx.waker().clone()))); //TODO: Switch to CX based task parking.
+        for task_park in egressor.task_parks.iter() {
             if indirect_park_and_notify(&task_park, Arc::clone(&egressor_task)) {
                 parked_egressor_task = true;
             }
         }
         //we were unable to park task, so we must self notify, presumably all the ingressors are dead.
         if !parked_egressor_task {
-            task::current().notify();
+            cx.waker().clone().wake();
         }
-        Ok(Async::NotReady)
+        Poll::Pending
     }
 }
 
@@ -268,7 +278,7 @@ mod tests {
     use core::time;
     use rand::{thread_rng, Rng};
 
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{execute_link, run_link};
 
     #[test]
     #[should_panic]
@@ -348,8 +358,18 @@ mod tests {
         assert_eq!(results[0].len(), stream_len * num_streams);
     }
 
+    // This test calls out to a helper async function because async fn are not allowed in tests yet. This allows us to use
+    // the provided macro tokio::main, which starts up a runtime. The runtime needs to be created first before we can make a
+    // packet_generator, since the packet generator needs to create an Interval, which needs to hook into a pre-created timer
+    // thread running in Tokio. As such, we also have a different harness function, execute_link, which is async. Perhaps this
+    // would be a better
     #[test]
     fn wait_between_packets() {
+        run_wait_between_packets();
+    }
+
+    #[tokio::main]
+    async fn run_wait_between_packets() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
         let packet_generator0 = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
@@ -366,7 +386,7 @@ mod tests {
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = run_link(link);
+        let results = execute_link(link).await;
         assert_eq!(results[0].len(), packets.len() * 2);
     }
 

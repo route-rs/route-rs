@@ -1,6 +1,8 @@
 use crate::link::{Link, LinkBuilder, PacketStream};
 use crossbeam::crossbeam_channel;
-use futures::{Async, Poll, Stream};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 
 #[derive(Default)]
 pub struct InputChannelLink<Packet> {
@@ -48,15 +50,16 @@ struct StreamFromChannel<Packet> {
     channel_receiver: crossbeam::Receiver<Packet>,
 }
 
+impl<Packet> Unpin for StreamFromChannel<Packet> {}
+
 impl<Packet> Stream for StreamFromChannel<Packet> {
     type Item = Packet;
-    type Error = ();
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.channel_receiver.try_recv() {
-            Ok(packet) => Ok(Async::Ready(Some(packet))),
-            Err(crossbeam_channel::TryRecvError::Empty) => Ok(Async::NotReady),
-            Err(crossbeam_channel::TryRecvError::Disconnected) => Err(()),
+            Ok(packet) => Poll::Ready(Some(packet)),
+            Err(crossbeam_channel::TryRecvError::Empty) => Poll::Pending,
+            Err(crossbeam_channel::TryRecvError::Disconnected) => Poll::Ready(None),
         }
     }
 }

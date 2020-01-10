@@ -1,5 +1,7 @@
 use crate::link::{Link, LinkBuilder, PacketStream};
-use futures::{task, Async, Future, Poll};
+use futures::prelude::*;
+use futures::task::{Context, Poll};
+use std::pin::Pin;
 
 #[derive(Default)]
 pub struct OutputChannelLink<Packet> {
@@ -72,24 +74,23 @@ struct StreamToChannel<Packet> {
 }
 
 impl<Packet> Future for StreamToChannel<Packet> {
-    type Item = ();
-    type Error = ();
+    type Output = ();
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             if self.channel_sender.is_full() {
                 // Since we don't know anything about the other side of our channel, we have to
                 // self-notify and just hope that the other side empties it eventually.
-                task::current().notify();
-                return Ok(Async::NotReady);
+                cx.waker().clone().wake();
+                return Poll::Pending;
             }
 
-            match try_ready!(self.stream.poll()) {
+            match ready!(Pin::new(&mut self.stream).poll_next(cx)) {
                 Some(packet) => self
                     .channel_sender
                     .try_send(packet)
                     .expect("OutputChannelLink::poll: try_send shouldn't fail"),
-                None => return Ok(Async::Ready(())),
+                None => return Poll::Ready(()),
             }
         }
     }
