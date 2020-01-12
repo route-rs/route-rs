@@ -191,7 +191,7 @@ fn gen_link_decls(
                 }
                 Link::Join(feeders) => {
                     let egressor_symbol = format!("{}_egressor", &symbol);
-                    link_decls_map.insert((id.to_owned(), None), egressor_symbol.clone());
+                    link_decls_map.insert((id.to_owned(), None), egressor_symbol);
                     let mut feeders_decls = vec![];
                     let mut ingressors = vec![];
                     for feeder_index in 0..(feeders.len()) {
