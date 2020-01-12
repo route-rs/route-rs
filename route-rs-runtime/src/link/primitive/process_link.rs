@@ -164,7 +164,7 @@ mod tests {
 
         ProcessLink::new()
             .processor(Identity::new())
-            .ingressor(immediate_stream(packets.clone()))
+            .ingressor(immediate_stream(packets))
             .build_link();
     }
 
@@ -218,7 +218,7 @@ mod tests {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = ProcessLink::new()
-            .ingressor(immediate_stream(packets.clone()))
+            .ingressor(immediate_stream(packets))
             .processor(Drop::new())
             .build_link();
 

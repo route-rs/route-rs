@@ -296,7 +296,7 @@ mod tests {
 
         JoinLink::new()
             .queue_capacity(4)
-            .ingressors(vec![immediate_stream(packets.clone())])
+            .ingressors(vec![immediate_stream(packets)])
             .build_link();
     }
 

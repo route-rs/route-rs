@@ -255,7 +255,7 @@ mod tests {
     #[should_panic]
     fn panics_when_built_without_branches() {
         let packets: Vec<i32> = vec![];
-        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
+        let packet_generator: PacketStream<i32> = immediate_stream(packets);
 
         ClassifyLink::new()
             .ingressor(packet_generator)
@@ -268,7 +268,7 @@ mod tests {
     #[should_panic]
     fn panics_when_built_without_classifier() {
         let packets: Vec<i32> = vec![];
-        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
+        let packet_generator: PacketStream<i32> = immediate_stream(packets);
 
         ClassifyLink::<Even>::new()
             .ingressor(packet_generator)
@@ -281,7 +281,7 @@ mod tests {
     #[should_panic]
     fn panics_when_built_without_dispatcher() {
         let packets: Vec<i32> = vec![];
-        let packet_generator: PacketStream<i32> = immediate_stream(packets.clone());
+        let packet_generator: PacketStream<i32> = immediate_stream(packets);
 
         ClassifyLink::new()
             .ingressor(packet_generator)
@@ -301,10 +301,8 @@ mod tests {
     #[test]
     fn even_odd_wait_between_packets() {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(10),
-            packets.clone().into_iter(),
-        );
+        let packet_generator =
+            PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
         let results = run_link(even_link(Box::new(packet_generator)));
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
