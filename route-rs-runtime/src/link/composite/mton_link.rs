@@ -133,26 +133,29 @@ mod tests {
     use crate::link::LinkBuilder;
     use crate::utils::test::packet_generators::immediate_stream;
 
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{initialize_runtime, run_link};
 
     #[test]
     fn clone_m_streams_on_to_n_egress_streams() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(immediate_stream(packets.clone()));
-        input_streams.push(immediate_stream(packets.clone()));
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            input_streams.push(immediate_stream(packets.clone()));
+            input_streams.push(immediate_stream(packets.clone()));
 
-        let link = MtoNLink::new()
-            .num_egressors(5)
-            .ingressors(input_streams)
-            .build_link();
+            let link = MtoNLink::new()
+                .num_egressors(5)
+                .ingressors(input_streams)
+                .build_link();
 
-        let results = run_link(link);
-        assert_eq!(results[0].len(), packets.len() * 2);
-        assert_eq!(results[1].len(), packets.len() * 2);
-        assert_eq!(results[2].len(), packets.len() * 2);
-        assert_eq!(results[3].len(), packets.len() * 2);
-        assert_eq!(results[4].len(), packets.len() * 2);
+            let results = run_link(link).await;
+            assert_eq!(results[0].len(), packets.len() * 2);
+            assert_eq!(results[1].len(), packets.len() * 2);
+            assert_eq!(results[2].len(), packets.len() * 2);
+            assert_eq!(results[3].len(), packets.len() * 2);
+            assert_eq!(results[4].len(), packets.len() * 2);
+        });
     }
 }

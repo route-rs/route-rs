@@ -245,7 +245,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
 mod tests {
     use super::*;
     use crate::classifier::{even_link, fizz_buzz_link, Even};
-    use crate::utils::test::harness::{execute_link, run_link};
+    use crate::utils::test::harness::{initialize_runtime, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -299,52 +299,61 @@ mod tests {
 
     #[test]
     fn even_odd() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let results = run_link(even_link(packet_generator));
+            let results = run_link(even_link(packet_generator)).await;
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+        });
     }
 
     #[test]
     fn even_odd_wait_between_packets() {
-        run_even_odd_wait_between_packets();
-    }
-
-    #[tokio::main]
-    async fn run_even_odd_wait_between_packets() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator =
             PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
-        let results = execute_link(even_link(Box::new(packet_generator))).await;
+            let results = run_link(even_link(Box::new(packet_generator))).await;
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+        });
     }
 
     #[test]
     fn only_odd() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-        let results = run_link(even_link(packet_generator));
+            let results = run_link(even_link(packet_generator)).await;
         assert_eq!(results[0], []);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+        });
     }
 
     #[test]
     fn even_odd_long_stream() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packet_generator = immediate_stream(0..2000);
 
-        let results = run_link(even_link(packet_generator));
+            let results = run_link(even_link(packet_generator)).await;
         assert_eq!(results[0].len(), 1000);
         assert_eq!(results[1].len(), 1000);
+        });
     }
 
     #[test]
     fn fizz_buzz() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packet_generator = immediate_stream(0..=30);
 
-        let results = run_link(fizz_buzz_link(packet_generator));
+            let results = run_link(fizz_buzz_link(packet_generator)).await;
 
         let expected_fizz_buzz = vec![0, 15, 30];
         assert_eq!(results[0], expected_fizz_buzz);
@@ -357,10 +366,13 @@ mod tests {
 
         let expected_other = vec![1, 2, 4, 7, 8, 11, 13, 14, 16, 17, 19, 22, 23, 26, 28, 29];
         assert_eq!(results[3], expected_other);
+        });
     }
 
     #[test]
     fn fizz_buzz_to_even_odd() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packet_generator = immediate_stream(0..=30);
 
         let (mut fb_runnables, mut fb_egressors) = fizz_buzz_link(packet_generator);
@@ -370,8 +382,9 @@ mod tests {
         fb_runnables.append(&mut eo_runnables);
 
         let link = (fb_runnables, eo_egressors);
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], vec![2, 4, 8, 14, 16, 22, 26, 28]);
         assert_eq!(results[1], vec![1, 7, 11, 13, 17, 19, 23, 29]);
+        });
     }
 }

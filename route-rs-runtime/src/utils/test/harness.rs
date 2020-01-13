@@ -23,51 +23,6 @@ use tokio::runtime;
 /// let's just expose a function that takes a connected Link, runs it's runnables and collectors
 /// through Tokio, and extracts the output packets into vectors representing egress streams.
 
-// TODO: fn name improvement
-pub fn run_link<OutputPacket: Debug + Send + Clone + 'static>(
-    link: Link<OutputPacket>,
-) -> Vec<Vec<OutputPacket>> {
-    let (mut runnables, egressors) = link;
-
-    // generate consumers for each egressors
-    let (mut consumers, receivers): (
-        Vec<TokioRunnable>,
-        Vec<crossbeam_channel::Receiver<OutputPacket>>,
-    ) = egressors
-        .into_iter()
-        .map(|egressor| {
-            let (s, r) = crossbeam_channel::unbounded::<OutputPacket>();
-            // TODO: Do we care about consumer IDs? Are they helpful to debug test examples?
-            let consumer: TokioRunnable = Box::new(ExhaustiveCollector::new(0, egressor, s));
-            (consumer, r)
-        })
-        .unzip();
-
-    // gather link's runnables and tokio-driven consumers into one collection
-    runnables.append(&mut consumers);
-
-    let rt = initialize_runtime();
-    run_tokio(runnables, rt);
-
-    // collect packets from consumers via receiver channels
-    receivers
-        .into_iter()
-        .map(|receiver| receiver.iter().collect())
-        .collect()
-}
-
-fn run_tokio(runnables: Vec<TokioRunnable>, mut rt: runtime::Runtime) {
-    rt.block_on(async move {
-        let mut handles = vec![];
-        for runnable in runnables {
-            handles.push(tokio::spawn(runnable));
-        }
-        for handle in handles {
-            handle.await.unwrap();
-        }
-    });
-}
-
 pub fn initialize_runtime() -> runtime::Runtime {
     runtime::Builder::new()
         .threaded_scheduler()
@@ -76,8 +31,7 @@ pub fn initialize_runtime() -> runtime::Runtime {
         .unwrap()
 }
 
-// This is kind of ugly ish, right now
-pub async fn execute_link<OutputPacket: Debug + Send + Clone + 'static>(
+pub async fn run_link<OutputPacket: Debug + Send + Clone + 'static>(
     link: Link<OutputPacket>,
 ) -> Vec<Vec<OutputPacket>> {
     let (mut runnables, egressors) = link;
@@ -99,17 +53,25 @@ pub async fn execute_link<OutputPacket: Debug + Send + Clone + 'static>(
     // gather link's runnables and tokio-driven consumers into one collection
     runnables.append(&mut consumers);
 
-    let mut handles = vec![];
-    for runnable in runnables {
-        handles.push(tokio::spawn(runnable));
-    }
-    for handle in handles {
-        handle.await.unwrap();
-    }
+    spawn_runnables(runnables).await;
 
     // collect packets from consumers via receiver channels
     receivers
         .into_iter()
         .map(|receiver| receiver.iter().collect())
         .collect()
+}
+
+async fn spawn_runnables(runnables: Vec<TokioRunnable>) {
+    let mut handles = vec![];
+    for runnable in runnables {
+        handles.push(tokio::spawn(runnable));
+    }
+    await_handles(handles).await;
+}
+
+async fn await_handles(handles: Vec<tokio::task::JoinHandle<()>>) {
+    for handle in handles {
+        handle.await.unwrap();
+    }
 }

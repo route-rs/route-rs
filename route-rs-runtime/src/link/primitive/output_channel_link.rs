@@ -99,7 +99,7 @@ impl<Packet> Future for StreamToChannel<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{initialize_runtime, run_link};
     use crate::utils::test::packet_generators::immediate_stream;
     use crossbeam::crossbeam_channel;
     use std::thread;
@@ -137,42 +137,48 @@ mod tests {
 
     #[test]
     fn immediate_packets() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let (send, recv) = crossbeam_channel::unbounded::<i32>();
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let (send, recv) = crossbeam_channel::unbounded::<i32>();
 
-        let link = OutputChannelLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .channel(send)
-            .build_link();
+            let link = OutputChannelLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .channel(send)
+                .build_link();
 
-        let results = run_link(link);
-        assert!(results.is_empty());
+            let results = run_link(link).await;
+            assert!(results.is_empty());
 
-        assert_eq!(recv.iter().collect::<Vec<i32>>(), packets);
+            assert_eq!(recv.iter().collect::<Vec<i32>>(), packets);
+        });
     }
 
     #[test]
     fn small_queue() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let (send, recv) = crossbeam_channel::bounded::<i32>(2);
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let (send, recv) = crossbeam_channel::bounded::<i32>(2);
 
-        let recv_thread = thread::spawn(move || {
-            let mut outputs = vec![];
-            while let Ok(n) = recv.recv() {
-                outputs.push(n);
-            }
-            outputs
+            let recv_thread = thread::spawn(move || {
+                let mut outputs = vec![];
+                while let Ok(n) = recv.recv() {
+                    outputs.push(n);
+                }
+                outputs
+            });
+
+            let link = OutputChannelLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .channel(send)
+                .build_link();
+
+            let results = run_link(link).await;
+            assert!(results.is_empty());
+
+            let outputs = recv_thread.join().unwrap();
+            assert_eq!(outputs, packets);
         });
-
-        let link = OutputChannelLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .channel(send)
-            .build_link();
-
-        let results = run_link(link);
-        assert!(results.is_empty());
-
-        let outputs = recv_thread.join().unwrap();
-        assert_eq!(outputs, packets);
     }
 }
