@@ -171,25 +171,26 @@ mod tests {
 
     #[test]
     fn identity() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = ProcessLink::new()
                 .ingressor(immediate_stream(packets.clone()))
                 .processor(Identity::new())
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], packets);
+            run_link(link).await
         });
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn wait_between_packets() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let packet_generator = PacketIntervalGenerator::new(
                 time::Duration::from_millis(10),
                 packets.clone().into_iter(),
@@ -200,16 +201,17 @@ mod tests {
                 .processor(Identity::new())
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], packets);
+            run_link(link).await
         });
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn type_transform() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = "route-rs".chars();
+        let packets = "route-rs".chars();
+
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let packet_generator = immediate_stream(packets.clone());
 
             let link = ProcessLink::new()
@@ -217,25 +219,25 @@ mod tests {
                 .processor(TransformFrom::<char, u32>::new())
                 .build_link();
 
-            let results = run_link(link).await;
-            let expected_output: Vec<u32> = packets.map(|p| p.into()).collect();
-            assert_eq!(results[0], expected_output);
+            run_link(link).await
         });
+        let expected_output: Vec<u32> = packets.map(|p| p.into()).collect();
+        assert_eq!(results[0], expected_output);
     }
 
     #[test]
     fn drop() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = ProcessLink::new()
                 .ingressor(immediate_stream(packets))
                 .processor(Drop::new())
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], []);
+            run_link(link).await
         });
+        assert_eq!(results[0], []);
     }
 }

@@ -160,8 +160,8 @@ impl<P: Send + Clone> Future for ForkIngressor<P> {
                     for task_park in self.task_parks.iter() {
                         die_and_notify(&task_park);
                     }
-                    return Poll::Ready(()) 
-                },
+                    return Poll::Ready(());
+                }
                 Some(packet) => {
                     //TODO: should packet but put in an iterator? or only cloned? or last one reused?
                     assert!(self.to_egressors.len() == self.task_parks.len());
@@ -215,66 +215,66 @@ mod tests {
 
     #[test]
     fn no_input() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = ForkLink::<i32>::new()
                 .ingressor(immediate_stream(vec![]))
                 .num_egressors(1)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert!(results[0].is_empty());
+            run_link(link).await
         });
+        assert!(results[0].is_empty());
     }
 
     #[test]
     fn one_way() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = ForkLink::new()
                 .ingressor(immediate_stream(packets.clone()))
                 .num_egressors(1)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], packets);
+            run_link(link).await
         });
+        assert_eq!(results[0], packets);
     }
 
     #[test]
     fn two_way() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = ForkLink::new()
                 .ingressor(immediate_stream(packets.clone()))
                 .num_egressors(2)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], packets.clone());
-            assert_eq!(results[1], packets);
+            run_link(link).await
         });
+        assert_eq!(results[0], packets.clone());
+        assert_eq!(results[1], packets);
     }
 
     #[test]
     fn three_way() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = ForkLink::new()
                 .ingressor(immediate_stream(packets.clone()))
                 .num_egressors(3)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], packets.clone());
-            assert_eq!(results[1], packets.clone());
-            assert_eq!(results[2], packets);
+            run_link(link).await
         });
+        assert_eq!(results[0], packets.clone());
+        assert_eq!(results[1], packets.clone());
+        assert_eq!(results[2], packets);
     }
 }

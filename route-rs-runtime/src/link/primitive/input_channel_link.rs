@@ -86,9 +86,10 @@ mod tests {
 
     #[test]
     fn immediate_packets() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let (send, recv) = crossbeam_channel::unbounded();
 
             let link = InputChannelLink::new().channel(recv).build_link();
@@ -101,8 +102,8 @@ mod tests {
             }
             drop(send);
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], packets);
+            run_link(link).await
         });
+        assert_eq!(results[0], packets);
     }
 }
