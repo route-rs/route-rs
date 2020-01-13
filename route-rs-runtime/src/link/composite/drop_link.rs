@@ -107,24 +107,25 @@ mod tests {
 
     #[test]
     fn finishes() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link = DropLink::new()
                 .ingressor(immediate_stream(packets))
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], vec![]);
+            run_link(link).await
         });
+        assert_eq!(results[0], vec![]);
     }
 
     #[test]
     fn finishes_with_wait() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let packet_generator =
                 PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
@@ -132,15 +133,15 @@ mod tests {
                 .ingressor(Box::new(packet_generator))
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], vec![]);
+            run_link(link).await
         });
+        assert_eq!(results[0], vec![]);
     }
 
     #[test]
     fn drops_odd_packets() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
             let (mut even_runnables, mut even_egressors) = even_link(packet_generator);
@@ -155,25 +156,25 @@ mod tests {
                 even_runnables,
                 vec![even_egressors.pop().unwrap(), drop_egressors.remove(0)],
             );
-            let results = run_link(link).await;
-            assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+            run_link(link).await
         });
+        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
     }
 
     #[test]
     fn drops_randomly() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let link: Link<i32> = DropLink::new()
                 .ingressor(immediate_stream(packets))
                 .drop_chance(0.7)
                 .seed(0)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0], vec![1, 2, 1337, 7]);
+            run_link(link).await
         });
+        assert_eq!(results[0], vec![1, 2, 1337, 7]);
     }
 }

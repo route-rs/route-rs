@@ -166,10 +166,10 @@ mod tests {
 
     #[test]
     fn transform_m_streams_on_to_n_egress_streams() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0xDEAD_BEEF, 0xBEEF_DEAD, 0x0A00_0001, 0xFFFF_FFFF];
+        let packets = vec![0xDEAD_BEEF, 0xBEEF_DEAD, 0x0A00_0001, 0xFFFF_FFFF];
 
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let mut input_streams: Vec<PacketStream<u32>> = Vec::new();
             input_streams.push(immediate_stream(packets.clone()));
             input_streams.push(immediate_stream(packets.clone()));
@@ -180,12 +180,12 @@ mod tests {
                 .processor(TransformFrom::<u32, Ipv4Addr>::new())
                 .build_link();
 
-            let results = run_link(link).await;
-            assert_eq!(results[0].len(), packets.len() * 2);
-            assert_eq!(results[1].len(), packets.len() * 2);
-            assert_eq!(results[2].len(), packets.len() * 2);
-            assert_eq!(results[3].len(), packets.len() * 2);
-            assert_eq!(results[4].len(), packets.len() * 2);
+            run_link(link).await
         });
+        assert_eq!(results[0].len(), packets.len() * 2);
+        assert_eq!(results[1].len(), packets.len() * 2);
+        assert_eq!(results[2].len(), packets.len() * 2);
+        assert_eq!(results[3].len(), packets.len() * 2);
+        assert_eq!(results[4].len(), packets.len() * 2);
     }
 }

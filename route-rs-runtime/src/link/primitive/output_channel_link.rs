@@ -137,28 +137,29 @@ mod tests {
 
     #[test]
     fn immediate_packets() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-            let (send, recv) = crossbeam_channel::unbounded::<i32>();
+        let mut runtime = initialize_runtime();
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
+        let results = runtime.block_on(async {
+            let (send, recv) = crossbeam_channel::unbounded::<i32>();
             let link = OutputChannelLink::new()
                 .ingressor(immediate_stream(packets.clone()))
                 .channel(send)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert!(results.is_empty());
-
-            assert_eq!(recv.iter().collect::<Vec<i32>>(), packets);
+            let link_results = run_link(link).await;
+            (link_results, recv)
         });
+        assert!(results.0.is_empty());
+        assert_eq!(results.1.iter().collect::<Vec<i32>>(), packets);
     }
 
     #[test]
     fn small_queue() {
-        let runtime = initialize_runtime();
-        runtime.spawn(async {
-            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
             let (send, recv) = crossbeam_channel::bounded::<i32>(2);
 
             let recv_thread = thread::spawn(move || {
@@ -174,11 +175,11 @@ mod tests {
                 .channel(send)
                 .build_link();
 
-            let results = run_link(link).await;
-            assert!(results.is_empty());
-
-            let outputs = recv_thread.join().unwrap();
-            assert_eq!(outputs, packets);
+            let link_results = run_link(link).await;
+            let output_results = recv_thread.join().unwrap();
+            (link_results, output_results)
         });
+        assert!(results.0.is_empty());
+        assert_eq!(results.1, packets);
     }
 }
