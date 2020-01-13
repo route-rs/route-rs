@@ -186,19 +186,6 @@ impl<'a, C: Classifier> ClassifyIngressor<'a, C> {
     }
 }
 
-impl<'a, C: Classifier> Drop for ClassifyIngressor<'a, C> {
-    fn drop(&mut self) {
-        for to_egressor in self.to_egressors.iter() {
-            to_egressor
-                .try_send(None)
-                .expect("ClassifyIngressor::Drop: try_send to_egressor shouldn't fail");
-        }
-        for task_park in self.task_parks.iter() {
-            die_and_notify(&task_park);
-        }
-    }
-}
-
 impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
     type Output = ();
 
@@ -211,7 +198,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
         loop {
             for (port, to_egressor) in ingressor.to_egressors.iter().enumerate() {
                 if to_egressor.is_full() {
-                    park_and_notify(&ingressor.task_parks[port], cx.waker().clone()); //TODO, switch to new task park
+                    park_and_notify(&ingressor.task_parks[port], cx.waker().clone());
                     return Poll::Pending;
                 }
             }
@@ -221,7 +208,17 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
                 ready!(Pin::new(&mut ingressor.input_stream).poll_next(cx));
 
             match packet_option {
-                None => return Poll::Ready(()),
+                None => {
+                    for to_egressor in ingressor.to_egressors.iter() {
+                        to_egressor
+                            .try_send(None)
+                            .expect("ClassifyIngressor::Drop: try_send to_egressor shouldn't fail");
+                    }
+                    for task_park in ingressor.task_parks.iter() {
+                        die_and_notify(&task_park);
+                    }                    
+                    return Poll::Ready(()) 
+                },
                 Some(packet) => {
                     let class = ingressor.classifier.classify(&packet);
                     let port = (ingressor.dispatcher)(class);
@@ -301,11 +298,11 @@ mod tests {
     fn even_odd() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
+            let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
             let results = run_link(even_link(packet_generator)).await;
-        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
-        assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+            assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+            assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
         });
     }
 
@@ -313,13 +310,13 @@ mod tests {
     fn even_odd_wait_between_packets() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator =
-            PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packet_generator =
+                PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
             let results = run_link(even_link(Box::new(packet_generator))).await;
-        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
-        assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+            assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+            assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
         });
     }
 
@@ -327,11 +324,11 @@ mod tests {
     fn only_odd() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
+            let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
             let results = run_link(even_link(packet_generator)).await;
-        assert_eq!(results[0], []);
-        assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
+            assert_eq!(results[0], []);
+            assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
         });
     }
 
@@ -339,11 +336,11 @@ mod tests {
     fn even_odd_long_stream() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packet_generator = immediate_stream(0..2000);
+            let packet_generator = immediate_stream(0..2000);
 
             let results = run_link(even_link(packet_generator)).await;
-        assert_eq!(results[0].len(), 1000);
-        assert_eq!(results[1].len(), 1000);
+            assert_eq!(results[0].len(), 1000);
+            assert_eq!(results[1].len(), 1000);
         });
     }
 
@@ -351,21 +348,21 @@ mod tests {
     fn fizz_buzz() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packet_generator = immediate_stream(0..=30);
+            let packet_generator = immediate_stream(0..=30);
 
             let results = run_link(fizz_buzz_link(packet_generator)).await;
 
-        let expected_fizz_buzz = vec![0, 15, 30];
-        assert_eq!(results[0], expected_fizz_buzz);
+            let expected_fizz_buzz = vec![0, 15, 30];
+            assert_eq!(results[0], expected_fizz_buzz);
 
-        let expected_fizz = vec![3, 6, 9, 12, 18, 21, 24, 27];
-        assert_eq!(results[1], expected_fizz);
+            let expected_fizz = vec![3, 6, 9, 12, 18, 21, 24, 27];
+            assert_eq!(results[1], expected_fizz);
 
-        let expected_buzz = vec![5, 10, 20, 25];
-        assert_eq!(results[2], expected_buzz);
+            let expected_buzz = vec![5, 10, 20, 25];
+            assert_eq!(results[2], expected_buzz);
 
-        let expected_other = vec![1, 2, 4, 7, 8, 11, 13, 14, 16, 17, 19, 22, 23, 26, 28, 29];
-        assert_eq!(results[3], expected_other);
+            let expected_other = vec![1, 2, 4, 7, 8, 11, 13, 14, 16, 17, 19, 22, 23, 26, 28, 29];
+            assert_eq!(results[3], expected_other);
         });
     }
 
@@ -373,18 +370,18 @@ mod tests {
     fn fizz_buzz_to_even_odd() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packet_generator = immediate_stream(0..=30);
+            let packet_generator = immediate_stream(0..=30);
 
-        let (mut fb_runnables, mut fb_egressors) = fizz_buzz_link(packet_generator);
+            let (mut fb_runnables, mut fb_egressors) = fizz_buzz_link(packet_generator);
 
-        let (mut eo_runnables, eo_egressors) = even_link(fb_egressors.pop().unwrap());
+            let (mut eo_runnables, eo_egressors) = even_link(fb_egressors.pop().unwrap());
 
-        fb_runnables.append(&mut eo_runnables);
+            fb_runnables.append(&mut eo_runnables);
 
-        let link = (fb_runnables, eo_egressors);
+            let link = (fb_runnables, eo_egressors);
             let results = run_link(link).await;
-        assert_eq!(results[0], vec![2, 4, 8, 14, 16, 22, 26, 28]);
-        assert_eq!(results[1], vec![1, 7, 11, 13, 17, 19, 23, 29]);
+            assert_eq!(results[0], vec![2, 4, 8, 14, 16, 22, 26, 28]);
+            assert_eq!(results[1], vec![1, 7, 11, 13, 17, 19, 23, 29]);
         });
     }
 }
