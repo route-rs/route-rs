@@ -187,7 +187,7 @@ impl<P: Send + Clone> Future for ForkIngressor<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::harness::run_link;
+    use crate::utils::test::harness::{initialize_runtime, run_link};
     use crate::utils::test::packet_generators::immediate_stream;
 
     #[test]
@@ -219,17 +219,22 @@ mod tests {
 
     #[test]
     fn no_input() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let link = ForkLink::<i32>::new()
             .ingressor(immediate_stream(vec![]))
             .num_egressors(1)
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert!(results[0].is_empty());
+        });
     }
 
     #[test]
     fn one_way() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = ForkLink::new()
@@ -237,12 +242,15 @@ mod tests {
             .num_egressors(1)
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets);
+        });
     }
 
     #[test]
     fn two_way() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = ForkLink::new()
@@ -250,13 +258,16 @@ mod tests {
             .num_egressors(2)
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets.clone());
         assert_eq!(results[1], packets);
+        });
     }
 
     #[test]
     fn three_way() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = ForkLink::new()
@@ -264,9 +275,10 @@ mod tests {
             .num_egressors(3)
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets.clone());
         assert_eq!(results[1], packets.clone());
         assert_eq!(results[2], packets);
+        });
     }
 }

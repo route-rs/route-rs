@@ -286,7 +286,7 @@ mod tests {
     use crate::link::primitive::ProcessLink;
     use crate::link::{LinkBuilder, ProcessLinkBuilder};
     use crate::processor::{Drop, Identity, TransformFrom};
-    use crate::utils::test::harness::{execute_link, run_link};
+    use crate::utils::test::harness::{initialize_runtime, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
     use rand::{thread_rng, Rng};
@@ -324,6 +324,8 @@ mod tests {
 
     #[test]
     fn queue_link_works() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = QueueLink::new()
@@ -331,8 +333,9 @@ mod tests {
             .processor(Identity::new())
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets);
+        });
     }
 
     #[test]
@@ -340,13 +343,16 @@ mod tests {
         let mut rng = thread_rng();
         let stream_len = rng.gen_range(2000, 4000);
 
+        let runtime = initialize_runtime();
+        runtime.spawn(async move {
         let link = QueueLink::new()
             .ingressor(immediate_stream(0..stream_len))
             .processor(Identity::new())
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0].len(), stream_len);
+        });
     }
 
     #[test]
@@ -363,6 +369,8 @@ mod tests {
 
     #[test]
     fn small_channel() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = QueueLink::new()
@@ -371,12 +379,15 @@ mod tests {
             .queue_capacity(1)
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets);
+        });
     }
 
     #[test]
     fn empty_stream() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets: Vec<i32> = vec![];
 
         let link = QueueLink::new()
@@ -384,12 +395,15 @@ mod tests {
             .processor(Identity::new())
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], []);
+        });
     }
 
     #[test]
     fn two_links() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let (mut runnables0, mut egressors0) = QueueLink::new()
@@ -405,12 +419,15 @@ mod tests {
         runnables0.append(&mut runnables1);
         egressors0.append(&mut egressors1);
         let link = (runnables0, egressors0);
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets);
+        });
     }
 
     #[test]
     fn series_of_process_and_queue_links() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let (_, mut egressors0) = ProcessLink::new()
@@ -440,17 +457,15 @@ mod tests {
         egressors0.append(&mut egressors3);
 
         let link = (runnables1, egressors0);
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], packets);
+        });
     }
 
     #[test]
     fn wait_between_packets() {
-        run_wait_between_packets();
-    }
-
-    #[tokio::main]
-    async fn run_wait_between_packets() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
         let packet_generator = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
@@ -462,12 +477,15 @@ mod tests {
             .processor(Identity::new())
             .build_link();
 
-        let results = execute_link(link).await;
+            let results = run_link(link).await;
         assert_eq!(results[0], packets);
+        });
     }
 
     #[test]
     fn transform_processor() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = "route-rs".chars();
 
         let link = QueueLink::new()
@@ -475,13 +493,16 @@ mod tests {
             .processor(TransformFrom::<char, u32>::new())
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         let expected: Vec<u32> = packets.map(|p| p.into()).collect();
         assert_eq!(results[0], expected);
+        });
     }
 
     #[test]
     fn drop_processor() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
         let link = QueueLink::new()
@@ -489,7 +510,8 @@ mod tests {
             .processor(Drop::new())
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], [])
+        });
     }
 }

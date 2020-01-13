@@ -95,7 +95,7 @@ impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
 mod tests {
     use super::*;
     use crate::classifier::even_link;
-    use crate::utils::test::harness::{execute_link, run_link};
+    use crate::utils::test::harness::{initialize_runtime, run_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -107,66 +107,73 @@ mod tests {
 
     #[test]
     fn finishes() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = DropLink::new()
-            .ingressor(immediate_stream(packets))
-            .build_link();
+            let link = DropLink::new()
+                .ingressor(immediate_stream(packets))
+                .build_link();
 
-        let results = run_link(link);
-        assert_eq!(results[0], vec![]);
+            let results = run_link(link).await;
+            assert_eq!(results[0], vec![]);
+        });
     }
 
     #[test]
     fn finishes_with_wait() {
-        run_finishes_with_wait();
-    }
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packet_generator =
+                PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
-    #[tokio::main]
-    async fn run_finishes_with_wait() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator =
-            PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
+            let link = DropLink::new()
+                .ingressor(Box::new(packet_generator))
+                .build_link();
 
-        let link = DropLink::new()
-            .ingressor(Box::new(packet_generator))
-            .build_link();
-
-        let results = execute_link(link).await;
-        assert_eq!(results[0], vec![]);
+            let results = run_link(link).await;
+            assert_eq!(results[0], vec![]);
+        });
     }
 
     #[test]
     fn drops_odd_packets() {
-        let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-        let (mut even_runnables, mut even_egressors) = even_link(packet_generator);
+            let (mut even_runnables, mut even_egressors) = even_link(packet_generator);
 
-        let (mut drop_runnables, mut drop_egressors) = DropLink::new()
-            .ingressor(even_egressors.pop().unwrap())
-            .build_link();
+            let (mut drop_runnables, mut drop_egressors) = DropLink::new()
+                .ingressor(even_egressors.pop().unwrap())
+                .build_link();
 
-        even_runnables.append(&mut drop_runnables);
+            even_runnables.append(&mut drop_runnables);
 
-        let link = (
-            even_runnables,
-            vec![even_egressors.pop().unwrap(), drop_egressors.remove(0)],
-        );
-        let results = run_link(link);
-        assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+            let link = (
+                even_runnables,
+                vec![even_egressors.pop().unwrap(), drop_egressors.remove(0)],
+            );
+            let results = run_link(link).await;
+            assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
+        });
     }
 
     #[test]
     fn drops_randomly() {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link: Link<i32> = DropLink::new()
-            .ingressor(immediate_stream(packets))
-            .drop_chance(0.7)
-            .seed(0)
-            .build_link();
+            let link: Link<i32> = DropLink::new()
+                .ingressor(immediate_stream(packets))
+                .drop_chance(0.7)
+                .seed(0)
+                .build_link();
 
-        let results = run_link(link);
-        assert_eq!(results[0], vec![1, 2, 1337, 7]);
+            let results = run_link(link).await;
+            assert_eq!(results[0], vec![1, 2, 1337, 7]);
+        });
     }
 }

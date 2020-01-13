@@ -278,7 +278,7 @@ mod tests {
     use core::time;
     use rand::{thread_rng, Rng};
 
-    use crate::utils::test::harness::{execute_link, run_link};
+    use crate::utils::test::harness::{initialize_runtime, run_link};
 
     #[test]
     #[should_panic]
@@ -312,6 +312,8 @@ mod tests {
 
     #[test]
     fn join_link() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
@@ -320,16 +322,15 @@ mod tests {
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0].len(), packets.len() * 2);
+        });
     }
 
-    // TODO: I'm not sure this behavior is appropriate for JoinLink.
-    // Since we know JoinLinks are N to 1 rather than 1 to 1, an `ingressor` function doesn't
-    // really make sense. I read the following example as resetting the single ingressor on a
-    // JoinLink. We should talk about this at the next meetup.
     #[test]
     fn multiple_ingressor_calls_works() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
         let link = JoinLink::new()
@@ -337,8 +338,9 @@ mod tests {
             .ingressor(immediate_stream(packets.clone()))
             .build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0].len(), packets.len() * 2);
+        });
     }
 
     #[test]
@@ -347,6 +349,8 @@ mod tests {
         let stream_len = rng.gen_range(2000, 3000);
         let num_streams = rng.gen_range(5, 10);
 
+        let runtime = initialize_runtime();
+        runtime.spawn(async move {
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         for _ in 0..num_streams {
             input_streams.push(immediate_stream(0..stream_len));
@@ -354,8 +358,9 @@ mod tests {
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0].len(), stream_len * num_streams);
+        });
     }
 
     // This test calls out to a helper async function because async fn are not allowed in tests yet. This allows us to use
@@ -365,11 +370,8 @@ mod tests {
     // would be a better
     #[test]
     fn wait_between_packets() {
-        run_wait_between_packets();
-    }
-
-    #[tokio::main]
-    async fn run_wait_between_packets() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
         let packet_generator0 = PacketIntervalGenerator::new(
             time::Duration::from_millis(10),
@@ -386,12 +388,15 @@ mod tests {
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = execute_link(link).await;
+            let results = run_link(link).await;
         assert_eq!(results[0].len(), packets.len() * 2);
+        });
     }
 
     #[test]
     fn fairness_test() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         //If fairness changes, may need to update test
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(immediate_stream(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
@@ -399,12 +404,15 @@ mod tests {
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0][0..10].iter().sum::<usize>(), 4);
+        });
     }
 
     #[test]
     fn small_channel() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
@@ -413,20 +421,24 @@ mod tests {
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0].len(), packets.len() * 2);
+        });
     }
 
     #[test]
     fn empty_stream() {
+        let runtime = initialize_runtime();
+        runtime.spawn(async {
         let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
         input_streams.push(immediate_stream(vec![]));
         input_streams.push(immediate_stream(vec![]));
 
         let link = JoinLink::new().ingressors(input_streams).build_link();
 
-        let results = run_link(link);
+            let results = run_link(link).await;
         assert_eq!(results[0], []);
+        });
     }
 
     #[test]
