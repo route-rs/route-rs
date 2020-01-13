@@ -127,15 +127,6 @@ impl<Packet: Sized> JoinIngressor<Packet> {
     }
 }
 
-impl<Packet: Sized> Drop for JoinIngressor<Packet> {
-    fn drop(&mut self) {
-        self.to_egressor
-            .try_send(None)
-            .expect("JoinIngressor::Drop: try_send to_egressor shouldn't fail");
-        die_and_notify(&self.task_park);
-    }
-}
-
 impl<Packet: Sized> Future for JoinIngressor<Packet> {
     type Output = ();
 
@@ -167,12 +158,19 @@ impl<Packet: Sized> Future for JoinIngressor<Packet> {
                 ready!(Pin::new(&mut ingressor.input_stream).poll_next(cx));
 
             match input_packet_option {
-                None => return Poll::Ready(()),
+                None => {
+                    ingressor
+                        .to_egressor
+                        .try_send(None)
+                        .expect("JoinIngressor::Poll::Ready(None) try_send to_egressor shouldn't fail");
+                    die_and_notify(&ingressor.task_park);
+                    return Poll::Ready(()) 
+                },
                 Some(packet) => {
                     ingressor
                         .to_egressor
                         .try_send(Some(packet))
-                        .expect("JoinIngressor::Poll: try_send to_egressor shouldn't fail");
+                        .expect("JoinIngressor::Poll:Ready(Some(Val)) try_send to_egressor shouldn't fail");
                     unpark_and_notify(&ingressor.task_park);
                 }
             }
@@ -208,9 +206,7 @@ impl<Packet: Sized> Unpin for JoinEgressor<Packet> {}
 
 impl<Packet: Sized> Drop for JoinEgressor<Packet> {
     fn drop(&mut self) {
-        for task_park in self.task_parks.iter() {
-            die_and_notify(&task_park);
-        }
+
     }
 }
 
@@ -240,13 +236,14 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
                     //Got a none from a consumer that has shutdown
                     egressor.ingressors_alive -= 1;
                     if egressor.ingressors_alive == 0 {
+                        for task_park in egressor.task_parks.iter() {
+                            die_and_notify(&task_park);
+                        }
                         return Poll::Ready(None);
                     }
                 }
                 Err(_) => {
                     //On an error go to next channel.
-                    //TODO: Should we be setting the ingressors alive to -1?
-                    //  Does this error even ever happen? If so, what should we do? Safest thing to do may be panic.
                 }
             }
         }
@@ -314,16 +311,16 @@ mod tests {
     fn join_link() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(immediate_stream(packets.clone()));
-        input_streams.push(immediate_stream(packets.clone()));
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            input_streams.push(immediate_stream(packets.clone()));
+            input_streams.push(immediate_stream(packets.clone()));
 
-        let link = JoinLink::new().ingressors(input_streams).build_link();
+            let link = JoinLink::new().ingressors(input_streams).build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0].len(), packets.len() * 2);
+            assert_eq!(results[0].len(), packets.len() * 2);
         });
     }
 
@@ -331,15 +328,15 @@ mod tests {
     fn multiple_ingressor_calls_works() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
-        let link = JoinLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .ingressor(immediate_stream(packets.clone()))
-            .build_link();
+            let link = JoinLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .ingressor(immediate_stream(packets.clone()))
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0].len(), packets.len() * 2);
+            assert_eq!(results[0].len(), packets.len() * 2);
         });
     }
 
@@ -351,15 +348,15 @@ mod tests {
 
         let runtime = initialize_runtime();
         runtime.spawn(async move {
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        for _ in 0..num_streams {
-            input_streams.push(immediate_stream(0..stream_len));
-        }
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            for _ in 0..num_streams {
+                input_streams.push(immediate_stream(0..stream_len));
+            }
 
-        let link = JoinLink::new().ingressors(input_streams).build_link();
+            let link = JoinLink::new().ingressors(input_streams).build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0].len(), stream_len * num_streams);
+            assert_eq!(results[0].len(), stream_len * num_streams);
         });
     }
 
@@ -372,24 +369,24 @@ mod tests {
     fn wait_between_packets() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
-        let packet_generator0 = PacketIntervalGenerator::new(
-            time::Duration::from_millis(10),
-            packets.clone().into_iter(),
-        );
-        let packet_generator1 = PacketIntervalGenerator::new(
-            time::Duration::from_millis(10),
-            packets.clone().into_iter(),
-        );
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+            let packet_generator0 = PacketIntervalGenerator::new(
+                time::Duration::from_millis(10),
+                packets.clone().into_iter(),
+            );
+            let packet_generator1 = PacketIntervalGenerator::new(
+                time::Duration::from_millis(10),
+                packets.clone().into_iter(),
+            );
 
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(Box::new(packet_generator0));
-        input_streams.push(Box::new(packet_generator1));
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            input_streams.push(Box::new(packet_generator0));
+            input_streams.push(Box::new(packet_generator1));
 
-        let link = JoinLink::new().ingressors(input_streams).build_link();
+            let link = JoinLink::new().ingressors(input_streams).build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0].len(), packets.len() * 2);
+            assert_eq!(results[0].len(), packets.len() * 2);
         });
     }
 
@@ -397,15 +394,15 @@ mod tests {
     fn fairness_test() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        //If fairness changes, may need to update test
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(immediate_stream(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
-        input_streams.push(immediate_stream(vec![1, 1, 1, 1]));
+            //If fairness changes, may need to update test
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            input_streams.push(immediate_stream(vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+            input_streams.push(immediate_stream(vec![1, 1, 1, 1]));
 
-        let link = JoinLink::new().ingressors(input_streams).build_link();
+            let link = JoinLink::new().ingressors(input_streams).build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0][0..10].iter().sum::<usize>(), 4);
+            assert_eq!(results[0][0..10].iter().sum::<usize>(), 4);
         });
     }
 
@@ -413,16 +410,16 @@ mod tests {
     fn small_channel() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9, 11];
 
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(immediate_stream(packets.clone()));
-        input_streams.push(immediate_stream(packets.clone()));
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            input_streams.push(immediate_stream(packets.clone()));
+            input_streams.push(immediate_stream(packets.clone()));
 
-        let link = JoinLink::new().ingressors(input_streams).build_link();
+            let link = JoinLink::new().ingressors(input_streams).build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0].len(), packets.len() * 2);
+            assert_eq!(results[0].len(), packets.len() * 2);
         });
     }
 
@@ -430,14 +427,14 @@ mod tests {
     fn empty_stream() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
-        input_streams.push(immediate_stream(vec![]));
-        input_streams.push(immediate_stream(vec![]));
+            let mut input_streams: Vec<PacketStream<usize>> = Vec::new();
+            input_streams.push(immediate_stream(vec![]));
+            input_streams.push(immediate_stream(vec![]));
 
-        let link = JoinLink::new().ingressors(input_streams).build_link();
+            let link = JoinLink::new().ingressors(input_streams).build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0], []);
+            assert_eq!(results[0], []);
         });
     }
 

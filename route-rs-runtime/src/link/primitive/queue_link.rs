@@ -139,24 +139,6 @@ impl<P: Processor> QueueIngressor<P> {
 
 impl<P: Processor> Unpin for QueueIngressor<P> {}
 
-/// Special Drop for QueueIngressor
-///
-/// When we are dropping the Ingressor, we want to send a message to the
-/// Egressor so that it may drop as well. Additionally, we awaken the
-/// Egressor, since an asleep Egressor counts on the Ingressor to awaken
-/// it. This prevents a deadlock during Ingressor drops, or unexpected
-/// teardown. We also place a `TaskParkState::Dead` in the task_park
-/// so that the Egressor knows it can not rely on the Ingressor to awaken
-/// it in the future.
-impl<P: Processor> Drop for QueueIngressor<P> {
-    fn drop(&mut self) {
-        self.to_egressor
-            .try_send(None)
-            .expect("QueueIngressor::Drop: try_send to_egressor shouldn't fail");
-        die_and_notify(&self.task_park);
-    }
-}
-
 impl<P: Processor> Future for QueueIngressor<P> {
     type Output = ();
 
@@ -194,12 +176,18 @@ impl<P: Processor> Future for QueueIngressor<P> {
                 ready!(Pin::new(&mut self.input_stream).poll_next(cx));
 
             match input_packet_option {
-                None => return Poll::Ready(()),
+                None => {
+                    self.to_egressor.try_send(None).expect(
+                        "QueueIngressor::Poll::Ready(None) try_send to_egressor shouldn't fail",
+                    );
+                    die_and_notify(&self.task_park);
+                    return Poll::Ready(());
+                }
                 Some(input_packet) => {
                     if let Some(output_packet) = self.processor.process(input_packet) {
                         self.to_egressor
                             .try_send(Some(output_packet))
-                            .expect("QueueIngressor::Poll: try_send to_egressor shouldn't fail");
+                            .expect("QueueIngressor::Poll::Ready(Some(val)) try_send to_egressor shouldn't fail");
                         unpark_and_notify(&self.task_park);
                     }
                 }
@@ -226,18 +214,6 @@ impl<Packet: Sized> QueueEgressor<Packet> {
             from_ingressor,
             task_park,
         }
-    }
-}
-
-/// Special Drop for Egressor
-///
-/// This Drop notifies the Ingressor that is can no longer rely on the Egressor
-/// to awaken it. It is not expected behavior that the Egressor dies while the
-/// Ingressor is still alive. But it may happen in edge cases and we want to
-/// ensure that a deadlock does not occur.
-impl<Packet: Sized> Drop for QueueEgressor<Packet> {
-    fn drop(&mut self) {
-        die_and_notify(&self.task_park);
     }
 }
 
@@ -270,7 +246,10 @@ impl<Packet: Sized> Stream for QueueEgressor<Packet> {
                 unpark_and_notify(&self.task_park);
                 Poll::Ready(Some(packet))
             }
-            Ok(None) => Poll::Ready(None),
+            Ok(None) => {
+                die_and_notify(&self.task_park);
+                Poll::Ready(None)
+            },
             Err(TryRecvError::Empty) => {
                 park_and_notify(&self.task_park, cx.waker().clone());
                 Poll::Pending
@@ -326,15 +305,15 @@ mod tests {
     fn queue_link_works() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = QueueLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .processor(Identity::new())
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .processor(Identity::new())
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0], packets);
+            assert_eq!(results[0], packets);
         });
     }
 
@@ -345,13 +324,13 @@ mod tests {
 
         let runtime = initialize_runtime();
         runtime.spawn(async move {
-        let link = QueueLink::new()
-            .ingressor(immediate_stream(0..stream_len))
-            .processor(Identity::new())
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(immediate_stream(0..stream_len))
+                .processor(Identity::new())
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0].len(), stream_len);
+            assert_eq!(results[0].len(), stream_len);
         });
     }
 
@@ -371,16 +350,16 @@ mod tests {
     fn small_channel() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = QueueLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .processor(Identity::new())
-            .queue_capacity(1)
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .processor(Identity::new())
+                .queue_capacity(1)
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0], packets);
+            assert_eq!(results[0], packets);
         });
     }
 
@@ -388,15 +367,15 @@ mod tests {
     fn empty_stream() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets: Vec<i32> = vec![];
+            let packets: Vec<i32> = vec![];
 
-        let link = QueueLink::new()
-            .ingressor(immediate_stream(packets))
-            .processor(Identity::new())
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(immediate_stream(packets))
+                .processor(Identity::new())
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0], []);
+            assert_eq!(results[0], []);
         });
     }
 
@@ -404,23 +383,23 @@ mod tests {
     fn two_links() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let (mut runnables0, mut egressors0) = QueueLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .processor(Identity::new())
-            .build_link();
+            let (mut runnables0, mut egressors0) = QueueLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .processor(Identity::new())
+                .build_link();
 
-        let (mut runnables1, mut egressors1) = QueueLink::new()
-            .ingressor(egressors0.remove(0))
-            .processor(Identity::new())
-            .build_link();
+            let (mut runnables1, mut egressors1) = QueueLink::new()
+                .ingressor(egressors0.remove(0))
+                .processor(Identity::new())
+                .build_link();
 
-        runnables0.append(&mut runnables1);
-        egressors0.append(&mut egressors1);
-        let link = (runnables0, egressors0);
+            runnables0.append(&mut runnables1);
+            egressors0.append(&mut egressors1);
+            let link = (runnables0, egressors0);
             let results = run_link(link).await;
-        assert_eq!(results[0], packets);
+            assert_eq!(results[0], packets);
         });
     }
 
@@ -428,37 +407,37 @@ mod tests {
     fn series_of_process_and_queue_links() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let (_, mut egressors0) = ProcessLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .processor(Identity::new())
-            .build_link();
+            let (_, mut egressors0) = ProcessLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .processor(Identity::new())
+                .build_link();
 
-        let (mut runnables1, mut egressors1) = QueueLink::new()
-            .ingressor(egressors0.remove(0))
-            .processor(Identity::new())
-            .build_link();
+            let (mut runnables1, mut egressors1) = QueueLink::new()
+                .ingressor(egressors0.remove(0))
+                .processor(Identity::new())
+                .build_link();
 
-        let (_, mut egressors2) = ProcessLink::new()
-            .ingressor(egressors1.remove(0))
-            .processor(Identity::new())
-            .build_link();
+            let (_, mut egressors2) = ProcessLink::new()
+                .ingressor(egressors1.remove(0))
+                .processor(Identity::new())
+                .build_link();
 
-        let (mut runnables3, mut egressors3) = QueueLink::new()
-            .ingressor(egressors2.remove(0))
-            .processor(Identity::new())
-            .build_link();
+            let (mut runnables3, mut egressors3) = QueueLink::new()
+                .ingressor(egressors2.remove(0))
+                .processor(Identity::new())
+                .build_link();
 
-        runnables1.append(&mut runnables3);
-        // TODO: is there a better way to chain Vec concatenation?
-        egressors0.append(&mut egressors1);
-        egressors0.append(&mut egressors2);
-        egressors0.append(&mut egressors3);
+            runnables1.append(&mut runnables3);
+            // TODO: is there a better way to chain Vec concatenation?
+            egressors0.append(&mut egressors1);
+            egressors0.append(&mut egressors2);
+            egressors0.append(&mut egressors3);
 
-        let link = (runnables1, egressors0);
+            let link = (runnables1, egressors0);
             let results = run_link(link).await;
-        assert_eq!(results[0], packets);
+            assert_eq!(results[0], packets);
         });
     }
 
@@ -466,19 +445,19 @@ mod tests {
     fn wait_between_packets() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
-        let packet_generator = PacketIntervalGenerator::new(
-            time::Duration::from_millis(10),
-            packets.clone().into_iter(),
-        );
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packet_generator = PacketIntervalGenerator::new(
+                time::Duration::from_millis(10),
+                packets.clone().into_iter(),
+            );
 
-        let link = QueueLink::new()
-            .ingressor(Box::new(packet_generator))
-            .processor(Identity::new())
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(Box::new(packet_generator))
+                .processor(Identity::new())
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0], packets);
+            assert_eq!(results[0], packets);
         });
     }
 
@@ -486,16 +465,16 @@ mod tests {
     fn transform_processor() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = "route-rs".chars();
+            let packets = "route-rs".chars();
 
-        let link = QueueLink::new()
-            .ingressor(immediate_stream(packets.clone()))
-            .processor(TransformFrom::<char, u32>::new())
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(immediate_stream(packets.clone()))
+                .processor(TransformFrom::<char, u32>::new())
+                .build_link();
 
             let results = run_link(link).await;
-        let expected: Vec<u32> = packets.map(|p| p.into()).collect();
-        assert_eq!(results[0], expected);
+            let expected: Vec<u32> = packets.map(|p| p.into()).collect();
+            assert_eq!(results[0], expected);
         });
     }
 
@@ -503,15 +482,15 @@ mod tests {
     fn drop_processor() {
         let runtime = initialize_runtime();
         runtime.spawn(async {
-        let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
+            let packets = vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9];
 
-        let link = QueueLink::new()
-            .ingressor(immediate_stream(packets))
-            .processor(Drop::new())
-            .build_link();
+            let link = QueueLink::new()
+                .ingressor(immediate_stream(packets))
+                .processor(Drop::new())
+                .build_link();
 
             let results = run_link(link).await;
-        assert_eq!(results[0], [])
+            assert_eq!(results[0], [])
         });
     }
 }
