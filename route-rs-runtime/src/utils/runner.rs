@@ -21,6 +21,7 @@ pub fn runner(link_builder: fn() -> Vec<TokioRunnable>) {
     runtime.block_on(async {
         let runnables = link_builder();
         let handles: Vec<JoinHandle<()>> = runnables.into_iter().map(|runnable| tokio::spawn(runnable)).collect();
+        // 🏃💨💨
         for handle in handles {
             handle.await.unwrap();
         }

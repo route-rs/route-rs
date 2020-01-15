@@ -53,6 +53,7 @@ pub async fn run_link<OutputPacket: Debug + Send + Clone + 'static>(
     // gather link's runnables and tokio-driven consumers into one collection
     runnables.append(&mut consumers);
 
+    // 🏃💨💨
     spawn_runnables(runnables).await;
 
     // collect packets from consumers via receiver channels
