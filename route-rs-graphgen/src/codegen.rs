@@ -4,6 +4,13 @@ extern crate quote;
 use quote::ToTokens;
 use std::iter::FromIterator;
 
+/// We need Span structs all over the place because syn expects to be used as a parser. We're using
+/// it for pure codegen, so we have to pretend that we parsed our code somewhere. Conveniently, we
+/// can just say that somewhere is right here, so we will.
+fn fake_span() -> proc_macro2::Span {
+    proc_macro2::Span::call_site()
+}
+
 /// Indents every non-blank line in the input text by the given string.
 pub fn indent<S, T>(indentation: S, text: T) -> String
 where
@@ -86,17 +93,14 @@ mod comment {
 }
 
 pub fn ident(name: &str) -> syn::Ident {
-    syn::Ident::new(name, proc_macro2::Span::call_site())
+    syn::Ident::new(name, fake_span())
 }
 
 pub fn use_path(name: &str, cont: syn::UseTree) -> syn::UsePath {
     syn::UsePath {
         ident: ident(name),
         colon2_token: syn::token::Colon2 {
-            spans: [
-                proc_macro2::Span::call_site(),
-                proc_macro2::Span::call_site(),
-            ],
+            spans: [fake_span(), fake_span()],
         },
         tree: Box::new(cont),
     }
@@ -105,7 +109,7 @@ pub fn use_path(name: &str, cont: syn::UseTree) -> syn::UsePath {
 pub fn use_glob() -> syn::UseGlob {
     syn::UseGlob {
         star_token: syn::token::Star {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
     }
 }
@@ -118,13 +122,11 @@ pub fn import(imports: &[syn::UseTree]) -> String {
             syn::Item::Use(syn::ItemUse {
                 attrs: vec![],
                 vis: syn::Visibility::Inherited,
-                use_token: syn::token::Use {
-                    span: proc_macro2::Span::call_site(),
-                },
+                use_token: syn::token::Use { span: fake_span() },
                 leading_colon: None,
                 tree: i.to_owned(),
                 semi_token: syn::token::Semi {
-                    spans: [proc_macro2::Span::call_site()],
+                    spans: [fake_span()],
                 },
             })
         })
@@ -140,9 +142,7 @@ mod import {
 
     fn use_group(subtrees: Vec<syn::UseTree>) -> syn::UseGroup {
         syn::UseGroup {
-            brace_token: syn::token::Brace {
-                span: proc_macro2::Span::call_site(),
-            },
+            brace_token: syn::token::Brace { span: fake_span() },
             items: syn::punctuated::Punctuated::from_iter(subtrees.into_iter()),
         }
     }
@@ -314,10 +314,7 @@ pub fn simple_path(segments: Vec<syn::Ident>, with_leading_colon: bool) -> syn::
     syn::Path {
         leading_colon: if with_leading_colon {
             Some(syn::token::Colon2 {
-                spans: [
-                    proc_macro2::Span::call_site(),
-                    proc_macro2::Span::call_site(),
-                ],
+                spans: [fake_span(), fake_span()],
             })
         } else {
             None
@@ -338,9 +335,7 @@ pub fn typedef(types: Vec<(syn::Ident, syn::Type)>) -> String {
         .map(|(new_type, existing_type)| syn::ItemType {
             attrs: vec![],
             vis: syn::Visibility::Inherited,
-            type_token: syn::token::Type {
-                span: proc_macro2::Span::call_site(),
-            },
+            type_token: syn::token::Type { span: fake_span() },
             ident: new_type,
             generics: syn::Generics {
                 lt_token: None,
@@ -349,11 +344,11 @@ pub fn typedef(types: Vec<(syn::Ident, syn::Type)>) -> String {
                 where_clause: None,
             },
             eq_token: syn::token::Eq {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
             ty: Box::new(existing_type),
             semi_token: syn::token::Semi {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
         })
         .map(|t| t.to_token_stream().to_string())
@@ -407,13 +402,13 @@ pub fn angle_bracketed_types(types: Vec<syn::Type>) -> syn::AngleBracketedGeneri
     syn::AngleBracketedGenericArguments {
         colon2_token: None,
         lt_token: syn::token::Lt {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
         args: syn::punctuated::Punctuated::from_iter(
             types.into_iter().map(syn::GenericArgument::Type),
         ),
         gt_token: syn::token::Gt {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
     }
 }
@@ -428,9 +423,7 @@ pub fn let_simple(
         attrs: vec![],
         by_ref: None,
         mutability: if mutable {
-            Some(syn::token::Mut {
-                span: proc_macro2::Span::call_site(),
-            })
+            Some(syn::token::Mut { span: fake_span() })
         } else {
             None
         },
@@ -439,28 +432,26 @@ pub fn let_simple(
     });
     syn::Local {
         attrs: vec![],
-        let_token: syn::token::Let {
-            span: proc_macro2::Span::call_site(),
-        },
+        let_token: syn::token::Let { span: fake_span() },
         pat: match type_annotation {
             None => id,
             Some(ty) => syn::Pat::Type(syn::PatType {
                 attrs: vec![],
                 pat: Box::new(id),
                 colon_token: syn::token::Colon {
-                    spans: [proc_macro2::Span::call_site()],
+                    spans: [fake_span()],
                 },
                 ty: Box::new(ty),
             }),
         },
         init: Some((
             syn::token::Eq {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
             Box::new(expression),
         )),
         semi_token: syn::token::Semi {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
     }
 }
@@ -481,9 +472,7 @@ pub fn builder(base: syn::Ident, setters: Vec<(syn::Ident, Vec<syn::Expr>)>) -> 
             qself: None,
             path: simple_path(vec![base, ident("new")], false),
         })),
-        paren_token: syn::token::Paren {
-            span: proc_macro2::Span::call_site(),
-        },
+        paren_token: syn::token::Paren { span: fake_span() },
         args: Default::default(),
     });
 
@@ -492,13 +481,11 @@ pub fn builder(base: syn::Ident, setters: Vec<(syn::Ident, Vec<syn::Expr>)>) -> 
             attrs: vec![],
             receiver: Box::new(expr_accum),
             dot_token: syn::token::Dot {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
             method,
             turbofish: None,
-            paren_token: syn::token::Paren {
-                span: proc_macro2::Span::call_site(),
-            },
+            paren_token: syn::token::Paren { span: fake_span() },
             args: syn::punctuated::Punctuated::from_iter(args.into_iter()),
         })
     }
@@ -507,13 +494,11 @@ pub fn builder(base: syn::Ident, setters: Vec<(syn::Ident, Vec<syn::Expr>)>) -> 
         attrs: vec![],
         receiver: Box::new(expr_accum),
         dot_token: syn::token::Dot {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
         method: ident("build_link"),
         turbofish: None,
-        paren_token: syn::token::Paren {
-            span: proc_macro2::Span::call_site(),
-        },
+        paren_token: syn::token::Paren { span: fake_span() },
         args: syn::punctuated::Punctuated::from_iter(Vec::<syn::Expr>::new().into_iter()),
     });
 
@@ -530,31 +515,23 @@ pub fn build_link(
 
     stmts.push(syn::Stmt::Local(syn::Local {
         attrs: vec![],
-        let_token: syn::token::Let {
-            span: proc_macro2::Span::call_site(),
-        },
+        let_token: syn::token::Let { span: fake_span() },
         pat: syn::Pat::Tuple(syn::PatTuple {
             attrs: vec![],
-            paren_token: syn::token::Paren {
-                span: proc_macro2::Span::call_site(),
-            },
+            paren_token: syn::token::Paren { span: fake_span() },
             elems: syn::punctuated::Punctuated::from_iter(
                 vec![
                     syn::Pat::Ident(syn::PatIdent {
                         attrs: vec![],
                         by_ref: None,
-                        mutability: Some(syn::token::Mut {
-                            span: proc_macro2::Span::call_site(),
-                        }),
+                        mutability: Some(syn::token::Mut { span: fake_span() }),
                         ident: ident(format!("runnables_{}", &index).as_str()),
                         subpat: None,
                     }),
                     syn::Pat::Ident(syn::PatIdent {
                         attrs: vec![],
                         by_ref: None,
-                        mutability: Some(syn::token::Mut {
-                            span: proc_macro2::Span::call_site(),
-                        }),
+                        mutability: Some(syn::token::Mut { span: fake_span() }),
                         ident: if num_egressors > 0 {
                             ident(format!("egressors_{}", &index).as_str())
                         } else {
@@ -568,12 +545,12 @@ pub fn build_link(
         }),
         init: Some((
             syn::token::Eq {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
             Box::new(builder(ident(link_type), setters)),
         )),
         semi_token: syn::token::Semi {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
     }));
 
@@ -586,23 +563,19 @@ pub fn build_link(
                 path: simple_path(vec![ident("all_runnables")], false),
             })),
             dot_token: syn::token::Dot {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
             method: ident("append"),
             turbofish: None,
-            paren_token: syn::token::Paren {
-                span: proc_macro2::Span::call_site(),
-            },
+            paren_token: syn::token::Paren { span: fake_span() },
             args: syn::punctuated::Punctuated::from_iter(vec![syn::Expr::Reference(
                 syn::ExprReference {
                     attrs: vec![],
                     and_token: syn::token::And {
-                        spans: [proc_macro2::Span::call_site()],
+                        spans: [fake_span()],
                     },
                     raw: Default::default(),
-                    mutability: Some(syn::token::Mut {
-                        span: proc_macro2::Span::call_site(),
-                    }),
+                    mutability: Some(syn::token::Mut { span: fake_span() }),
                     expr: Box::new(syn::Expr::Path(syn::ExprPath {
                         attrs: vec![],
                         qself: None,
@@ -615,7 +588,7 @@ pub fn build_link(
             )]),
         }),
         syn::token::Semi {
-            spans: [proc_macro2::Span::call_site()],
+            spans: [fake_span()],
         },
     ));
 
@@ -631,16 +604,14 @@ pub fn build_link(
                     path: simple_path(vec![ident(format!("egressors_{}", &index).as_str())], false),
                 })),
                 dot_token: syn::token::Dot {
-                    spans: [proc_macro2::Span::call_site()],
+                    spans: [fake_span()],
                 },
                 method: ident("remove"),
                 turbofish: None,
-                paren_token: syn::token::Paren {
-                    span: proc_macro2::Span::call_site(),
-                },
+                paren_token: syn::token::Paren { span: fake_span() },
                 args: syn::punctuated::Punctuated::from_iter(vec![syn::Expr::Lit(syn::ExprLit {
                     attrs: vec![],
-                    lit: syn::Lit::Int(syn::LitInt::new("0", proc_macro2::Span::call_site())),
+                    lit: syn::Lit::Int(syn::LitInt::new("0", fake_span())),
                 })]),
             }),
             false,
@@ -656,11 +627,9 @@ pub fn vec(exprs: Vec<syn::Expr>) -> syn::Expr {
         mac: syn::Macro {
             path: simple_path(vec![ident("vec")], false),
             bang_token: syn::token::Bang {
-                spans: [proc_macro2::Span::call_site()],
+                spans: [fake_span()],
             },
-            delimiter: syn::MacroDelimiter::Bracket(syn::token::Bracket {
-                span: proc_macro2::Span::call_site(),
-            }),
+            delimiter: syn::MacroDelimiter::Bracket(syn::token::Bracket { span: fake_span() }),
             tokens: syn::punctuated::Punctuated::<syn::Expr, syn::token::Comma>::from_iter(exprs)
                 .to_token_stream(),
         },
