@@ -198,7 +198,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
         loop {
             for (port, to_egressor) in ingressor.to_egressors.iter().enumerate() {
                 if to_egressor.is_full() {
-                    park_and_notify(&ingressor.task_parks[port], cx.waker().clone());
+                    park_and_wake(&ingressor.task_parks[port], cx.waker().clone());
                     return Poll::Pending;
                 }
             }
@@ -215,7 +215,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
                             .expect("ClassifyIngressor::Drop: try_send to_egressor shouldn't fail");
                     }
                     for task_park in ingressor.task_parks.iter() {
-                        die_and_notify(&task_park);
+                        die_and_wake(&task_park);
                     }
                     return Poll::Ready(());
                 }
@@ -231,7 +231,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
                             port, err
                         );
                     }
-                    unpark_and_notify(&ingressor.task_parks[port]);
+                    unpark_and_wake(&ingressor.task_parks[port]);
                 }
             }
         }

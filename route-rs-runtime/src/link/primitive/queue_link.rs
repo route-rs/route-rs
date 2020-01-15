@@ -148,7 +148,7 @@ impl<P: Processor> Future for QueueIngressor<P> {
     /// packets off it's input queue until it reaches a point where it can not
     /// make forward progress. There are several cases:
     /// ###
-    /// #1 The to_egressor queue is full, we notify the Egressor that we need
+    /// #1 The to_egressor queue is full, we wake the Egressor that we need
     /// awaking when there is work to do, and go to sleep by returning `Async::NotReady`.
     ///
     /// #2 The input_stream returns a NotReady, we sleep, with the assumption
@@ -160,7 +160,7 @@ impl<P: Processor> Future for QueueIngressor<P> {
     ///
     /// #4 If our upstream `PacketStream` has a packet for us, we pass it to our `processor`
     /// for `process`ing. Most of the time, it will yield a `Some(output_packet)` that has
-    /// been transformed in some way. We pass that on to our egress channel and notify
+    /// been transformed in some way. We pass that on to our egress channel and wake
     /// our `Egressor` that it has work to do, and continue polling our upstream `PacketStream`.
     ///
     /// #5 `processor`s may also choose to "drop" packets by returning `None`, so we do nothing
@@ -169,7 +169,7 @@ impl<P: Processor> Future for QueueIngressor<P> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         loop {
             if self.to_egressor.is_full() {
-                park_and_notify(&self.task_park, cx.waker().clone());
+                park_and_wake(&self.task_park, cx.waker().clone());
                 return Poll::Pending;
             }
             let input_packet_option: Option<P::Input> =
@@ -180,7 +180,7 @@ impl<P: Processor> Future for QueueIngressor<P> {
                     self.to_egressor.try_send(None).expect(
                         "QueueIngressor::Poll::Ready(None) try_send to_egressor shouldn't fail",
                     );
-                    die_and_notify(&self.task_park);
+                    die_and_wake(&self.task_park);
                     return Poll::Ready(());
                 }
                 Some(input_packet) => {
@@ -188,7 +188,7 @@ impl<P: Processor> Future for QueueIngressor<P> {
                         self.to_egressor
                             .try_send(Some(output_packet))
                             .expect("QueueIngressor::Poll::Ready(Some(val)) try_send to_egressor shouldn't fail");
-                        unpark_and_notify(&self.task_park);
+                        unpark_and_wake(&self.task_park);
                     }
                 }
             }
@@ -243,15 +243,15 @@ impl<Packet: Sized> Stream for QueueEgressor<Packet> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.from_ingressor.try_recv() {
             Ok(Some(packet)) => {
-                unpark_and_notify(&self.task_park);
+                unpark_and_wake(&self.task_park);
                 Poll::Ready(Some(packet))
             }
             Ok(None) => {
-                die_and_notify(&self.task_park);
+                die_and_wake(&self.task_park);
                 Poll::Ready(None)
             }
             Err(TryRecvError::Empty) => {
-                park_and_notify(&self.task_park, cx.waker().clone());
+                park_and_wake(&self.task_park, cx.waker().clone());
                 Poll::Pending
             }
             Err(TryRecvError::Disconnected) => Poll::Ready(None),

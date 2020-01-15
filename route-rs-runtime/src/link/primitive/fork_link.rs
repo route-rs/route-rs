@@ -144,7 +144,7 @@ impl<P: Send + Clone> Future for ForkIngressor<P> {
         loop {
             for (port, to_egressor) in self.to_egressors.iter().enumerate() {
                 if to_egressor.is_full() {
-                    park_and_notify(&self.task_parks[port], cx.waker().clone());
+                    park_and_wake(&self.task_parks[port], cx.waker().clone());
                     return Poll::Pending;
                 }
             }
@@ -158,7 +158,7 @@ impl<P: Send + Clone> Future for ForkIngressor<P> {
                         }
                     }
                     for task_park in self.task_parks.iter() {
-                        die_and_notify(&task_park);
+                        die_and_wake(&task_park);
                     }
                     return Poll::Ready(());
                 }
@@ -172,7 +172,7 @@ impl<P: Send + Clone> Future for ForkIngressor<P> {
                                 port, err
                             );
                         }
-                        unpark_and_notify(&self.task_parks[port]);
+                        unpark_and_wake(&self.task_parks[port]);
                     }
                 }
             }

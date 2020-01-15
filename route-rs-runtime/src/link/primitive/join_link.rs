@@ -136,7 +136,7 @@ impl<Packet: Sized> Future for JoinIngressor<Packet> {
     /// packets off it's input queue until it reaches a point where it can not
     /// make forward progress. There are three cases:
     /// ###
-    /// #1 The to_egressor queue is full, we notify the egressor that we need
+    /// #1 The to_egressor queue is full, we wake the egressor that we need
     /// awaking when there is work to do, and go to sleep.
     ///
     /// #2 The input_stream returns a NotReady, we sleep, with the assumption
@@ -151,7 +151,7 @@ impl<Packet: Sized> Future for JoinIngressor<Packet> {
         let ingressor = Pin::into_inner(self);
         loop {
             if ingressor.to_egressor.is_full() {
-                park_and_notify(&ingressor.task_park, cx.waker().clone()); //TODO: Change task park to cx based
+                park_and_wake(&ingressor.task_park, cx.waker().clone()); //TODO: Change task park to cx based
                 return Poll::Pending;
             }
             let input_packet_option: Option<Packet> =
@@ -162,14 +162,14 @@ impl<Packet: Sized> Future for JoinIngressor<Packet> {
                     ingressor.to_egressor.try_send(None).expect(
                         "JoinIngressor::Poll::Ready(None) try_send to_egressor shouldn't fail",
                     );
-                    die_and_notify(&ingressor.task_park);
+                    die_and_wake(&ingressor.task_park);
                     return Poll::Ready(());
                 }
                 Some(packet) => {
                     ingressor.to_egressor.try_send(Some(packet)).expect(
                         "JoinIngressor::Poll:Ready(Some(Val)) try_send to_egressor shouldn't fail",
                     );
-                    unpark_and_notify(&ingressor.task_park);
+                    unpark_and_wake(&ingressor.task_park);
                 }
             }
         }
@@ -224,7 +224,7 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
         for (port, from_ingressor) in rotated_iter {
             match from_ingressor.try_recv() {
                 Ok(Some(packet)) => {
-                    unpark_and_notify(&egressor.task_parks[port]);
+                    unpark_and_wake(&egressor.task_parks[port]);
                     egressor.next_pull_ingressor = port + 1;
                     return Poll::Ready(Some(packet));
                 }
@@ -233,7 +233,7 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
                     egressor.ingressors_alive -= 1;
                     if egressor.ingressors_alive == 0 {
                         for task_park in egressor.task_parks.iter() {
-                            die_and_notify(&task_park);
+                            die_and_wake(&task_park);
                         }
                         return Poll::Ready(None);
                     }
@@ -250,11 +250,11 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
         let mut parked_egressor_task = false;
         let egressor_task = Arc::new(AtomicCell::new(Some(cx.waker().clone())));
         for task_park in egressor.task_parks.iter() {
-            if indirect_park_and_notify(&task_park, Arc::clone(&egressor_task)) {
+            if indirect_park_and_wake(&task_park, Arc::clone(&egressor_task)) {
                 parked_egressor_task = true;
             }
         }
-        //we were unable to park task, so we must self notify, presumably all the ingressors are dead.
+        //we were unable to park task, so we must self wake, presumably all the ingressors are dead.
         if !parked_egressor_task {
             cx.waker().clone().wake();
         }

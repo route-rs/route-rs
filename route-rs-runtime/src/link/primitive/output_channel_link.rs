@@ -80,7 +80,7 @@ impl<Packet> Future for StreamToChannel<Packet> {
         loop {
             if self.channel_sender.is_full() {
                 // Since we don't know anything about the other side of our channel, we have to
-                // self-notify and just hope that the other side empties it eventually.
+                // self-wake and just hope that the other side empties it eventually.
                 cx.waker().clone().wake();
                 return Poll::Pending;
             }
