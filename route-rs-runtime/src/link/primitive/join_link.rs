@@ -248,7 +248,7 @@ impl<Packet: Sized> Stream for JoinEgressor<Packet> {
         // common location, and then hand out Arcs to all the ingressors to the common location. The first
         // one to access the egressor task will awaken us, so we can continue providing packets.
         let mut parked_egressor_task = false;
-        let egressor_task = Arc::new(AtomicCell::new(Some(cx.waker().clone()))); //TODO: Switch to CX based task parking.
+        let egressor_task = Arc::new(AtomicCell::new(Some(cx.waker().clone())));
         for task_park in egressor.task_parks.iter() {
             if indirect_park_and_notify(&task_park, Arc::clone(&egressor_task)) {
                 parked_egressor_task = true;
@@ -356,11 +356,6 @@ mod tests {
         assert_eq!(results[0].len(), stream_len * num_streams);
     }
 
-    // This test calls out to a helper async function because async fn are not allowed in tests yet. This allows us to use
-    // the provided macro tokio::main, which starts up a runtime. The runtime needs to be created first before we can make a
-    // packet_generator, since the packet generator needs to create an Interval, which needs to hook into a pre-created timer
-    // thread running in Tokio. As such, we also have a different harness function, execute_link, which is async. Perhaps this
-    // would be a better
     #[test]
     fn wait_between_packets() {
         let mut runtime = initialize_runtime();
