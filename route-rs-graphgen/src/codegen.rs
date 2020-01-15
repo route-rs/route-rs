@@ -635,3 +635,62 @@ pub fn vec(exprs: Vec<syn::Expr>) -> syn::Expr {
         },
     })
 }
+
+pub fn closure(
+    is_async: bool,
+    is_static: bool,
+    is_move: bool,
+    inputs: Vec<syn::Pat>,
+    return_type: syn::ReturnType,
+    body: Vec<syn::Stmt>,
+) -> syn::Expr {
+    syn::Expr::Closure(syn::ExprClosure {
+        attrs: vec![],
+        asyncness: if is_async {
+            Some(syn::token::Async { span: fake_span() })
+        } else {
+            None
+        },
+        movability: if is_static {
+            Some(syn::token::Static { span: fake_span() })
+        } else {
+            None
+        },
+        capture: if is_move {
+            Some(syn::token::Move { span: fake_span() })
+        } else {
+            None
+        },
+        or1_token: syn::token::Or {
+            spans: [fake_span()],
+        },
+        inputs: syn::punctuated::Punctuated::from_iter(inputs.into_iter()),
+        or2_token: syn::token::Or {
+            spans: [fake_span()],
+        },
+        output: return_type,
+        body: Box::new(syn::Expr::Block(syn::ExprBlock {
+            attrs: vec![],
+            label: None,
+            block: syn::Block {
+                brace_token: syn::token::Brace { span: fake_span() },
+                stmts: body,
+            },
+        })),
+    })
+}
+
+pub fn for_loop(item: syn::Pat, iterable: syn::Expr, body: Vec<syn::Stmt>) -> syn::Stmt {
+    syn::Stmt::Expr(syn::Expr::ForLoop(syn::ExprForLoop {
+        attrs: vec![],
+        label: None,
+        for_token: syn::token::For { span: fake_span() },
+        pat: item,
+        in_token: syn::token::In { span: fake_span() },
+        expr: Box::new(iterable),
+        body: syn::Block {
+            brace_token: syn::token::Brace { span: fake_span() },
+            stmts: body,
+        },
+    }))
+}
