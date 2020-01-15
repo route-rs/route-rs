@@ -297,114 +297,38 @@ fn gen_tokio_run() -> String {
             args: syn::punctuated::Punctuated::from_iter(
                 vec![syn::Expr::Call(syn::ExprCall {
                     attrs: vec![],
-                    func: Box::new(syn::Expr::Path(syn::ExprPath {
-                        attrs: vec![],
-                        qself: None,
-                        path: codegen::simple_path(vec![codegen::ident("lazy")], false),
-                    })),
+                    func: Box::new(codegen::expr_path_ident("lazy")),
                     paren_token: syn::token::Paren {
                         span: proc_macro2::Span::call_site(),
                     },
                     args: syn::punctuated::Punctuated::from_iter(
-                        vec![syn::Expr::Closure(syn::ExprClosure {
-                            attrs: vec![],
-                            asyncness: None,
-                            movability: None,
-                            capture: Some(syn::token::Move {
-                                span: proc_macro2::Span::call_site(),
-                            }),
-                            or1_token: syn::token::Or {
-                                spans: [proc_macro2::Span::call_site()],
-                            },
-                            inputs: Default::default(),
-                            or2_token: syn::token::Or {
-                                spans: [proc_macro2::Span::call_site()],
-                            },
-                            output: syn::ReturnType::Default,
-                            body: Box::new(syn::Expr::Block(syn::ExprBlock {
-                                attrs: vec![],
-                                label: None,
-                                block: syn::Block {
-                                    brace_token: syn::token::Brace {
-                                        span: proc_macro2::Span::call_site(),
-                                    },
-                                    stmts: vec![
-                                        syn::Stmt::Expr(syn::Expr::ForLoop(syn::ExprForLoop {
-                                            attrs: vec![],
-                                            label: None,
-                                            for_token: syn::token::For {
-                                                span: proc_macro2::Span::call_site(),
-                                            },
-                                            pat: syn::Pat::Ident(syn::PatIdent {
-                                                attrs: vec![],
-                                                by_ref: None,
-                                                mutability: None,
-                                                ident: codegen::ident("r"),
-                                                subpat: None,
-                                            }),
-                                            in_token: syn::token::In {
-                                                span: proc_macro2::Span::call_site(),
-                                            },
-                                            expr: Box::new(syn::Expr::Path(syn::ExprPath {
-                                                attrs: vec![],
-                                                qself: None,
-                                                path: codegen::simple_path(
-                                                    vec![codegen::ident("all_runnables")],
-                                                    false,
-                                                ),
-                                            })),
-                                            body: syn::Block {
-                                                brace_token: syn::token::Brace {
-                                                    span: proc_macro2::Span::call_site(),
-                                                },
-                                                stmts: vec![syn::Stmt::Semi(
-                                                    syn::Expr::Call(syn::ExprCall {
-                                                        attrs: vec![],
-                                                        func: Box::new(syn::Expr::Path(
-                                                            syn::ExprPath {
-                                                                attrs: vec![],
-                                                                qself: None,
-                                                                path: codegen::simple_path(
-                                                                    vec![
-                                                                        codegen::ident("tokio"),
-                                                                        codegen::ident("spawn"),
-                                                                    ],
-                                                                    false,
-                                                                ),
-                                                            },
-                                                        )),
-                                                        paren_token: syn::token::Paren {
-                                                            span: proc_macro2::Span::call_site(),
-                                                        },
-                                                        args:
-                                                            syn::punctuated::Punctuated::from_iter(
-                                                                vec![syn::Expr::Path(
-                                                                    syn::ExprPath {
-                                                                        attrs: vec![],
-                                                                        qself: None,
-                                                                        path: codegen::simple_path(
-                                                                            vec![codegen::ident(
-                                                                                "r",
-                                                                            )],
-                                                                            false,
-                                                                        ),
-                                                                    },
-                                                                )],
-                                                            ),
-                                                    }),
-                                                    syn::token::Semi {
-                                                        spans: [proc_macro2::Span::call_site()],
-                                                    },
-                                                )],
-                                            },
-                                        })),
-                                        syn::Stmt::Expr(syn::Expr::Call(syn::ExprCall {
+                        vec![codegen::closure(
+                            false,
+                            false,
+                            true,
+                            vec![],
+                            syn::ReturnType::Default,
+                            vec![
+                                codegen::for_loop(
+                                    syn::Pat::Ident(syn::PatIdent {
+                                        attrs: vec![],
+                                        by_ref: None,
+                                        mutability: None,
+                                        ident: codegen::ident("r"),
+                                        subpat: None,
+                                    }),
+                                    codegen::expr_path_ident("all_runnables"),
+                                    vec![syn::Stmt::Semi(
+                                        syn::Expr::Call(syn::ExprCall {
                                             attrs: vec![],
                                             func: Box::new(syn::Expr::Path(syn::ExprPath {
                                                 attrs: vec![],
                                                 qself: None,
                                                 path: codegen::simple_path(
-                                                    vec![codegen::ident("Ok")],
+                                                    vec![
+                                                        codegen::ident("tokio"),
+                                                        codegen::ident("spawn"),
+                                                    ],
                                                     false,
                                                 ),
                                             })),
@@ -412,19 +336,32 @@ fn gen_tokio_run() -> String {
                                                 span: proc_macro2::Span::call_site(),
                                             },
                                             args: syn::punctuated::Punctuated::from_iter(vec![
-                                                syn::Expr::Tuple(syn::ExprTuple {
-                                                    attrs: vec![],
-                                                    paren_token: syn::token::Paren {
-                                                        span: proc_macro2::Span::call_site(),
-                                                    },
-                                                    elems: syn::punctuated::Punctuated::new(),
-                                                }),
+                                                codegen::expr_path_ident("r"),
                                             ]),
-                                        })),
-                                    ],
-                                },
-                            })),
-                        })]
+                                        }),
+                                        syn::token::Semi {
+                                            spans: [proc_macro2::Span::call_site()],
+                                        },
+                                    )],
+                                ),
+                                syn::Stmt::Expr(syn::Expr::Call(syn::ExprCall {
+                                    attrs: vec![],
+                                    func: Box::new(codegen::expr_path_ident("Ok")),
+                                    paren_token: syn::token::Paren {
+                                        span: proc_macro2::Span::call_site(),
+                                    },
+                                    args: syn::punctuated::Punctuated::from_iter(vec![
+                                        syn::Expr::Tuple(syn::ExprTuple {
+                                            attrs: vec![],
+                                            paren_token: syn::token::Paren {
+                                                span: proc_macro2::Span::call_site(),
+                                            },
+                                            elems: syn::punctuated::Punctuated::new(),
+                                        }),
+                                    ]),
+                                })),
+                            ],
+                        )]
                         .into_iter(),
                     ),
                 })]
