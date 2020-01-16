@@ -694,3 +694,12 @@ pub fn for_loop(item: syn::Pat, iterable: syn::Expr, body: Vec<syn::Stmt>) -> sy
         },
     }))
 }
+
+pub fn call_function(function: syn::Expr, args: Vec<syn::Expr>) -> syn::Expr {
+    syn::Expr::Call(syn::ExprCall {
+        attrs: vec![],
+        func: Box::new(function),
+        paren_token: syn::token::Paren { span: fake_span() },
+        args: syn::punctuated::Punctuated::from_iter(args),
+    })
+}

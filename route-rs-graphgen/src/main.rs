@@ -278,93 +278,64 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
 
 fn gen_tokio_run() -> String {
     syn::Stmt::Semi(
-        syn::Expr::Call(syn::ExprCall {
-            attrs: vec![],
-            func: Box::new(syn::Expr::Path(syn::ExprPath {
+        codegen::call_function(
+            syn::Expr::Path(syn::ExprPath {
                 attrs: vec![],
                 qself: None,
                 path: codegen::simple_path(
                     vec![codegen::ident("tokio"), codegen::ident("run")],
                     false,
                 ),
-            })),
-            paren_token: syn::token::Paren {
-                span: proc_macro2::Span::call_site(),
-            },
-            args: syn::punctuated::Punctuated::from_iter(
-                vec![syn::Expr::Call(syn::ExprCall {
-                    attrs: vec![],
-                    func: Box::new(codegen::expr_path_ident("lazy")),
-                    paren_token: syn::token::Paren {
-                        span: proc_macro2::Span::call_site(),
-                    },
-                    args: syn::punctuated::Punctuated::from_iter(
-                        vec![codegen::closure(
-                            false,
-                            false,
-                            true,
-                            vec![],
-                            syn::ReturnType::Default,
-                            vec![
-                                codegen::for_loop(
-                                    syn::Pat::Ident(syn::PatIdent {
+            }),
+            vec![codegen::call_function(
+                codegen::expr_path_ident("lazy"),
+                vec![codegen::closure(
+                    false,
+                    false,
+                    true,
+                    vec![],
+                    syn::ReturnType::Default,
+                    vec![
+                        codegen::for_loop(
+                            syn::Pat::Ident(syn::PatIdent {
+                                attrs: vec![],
+                                by_ref: None,
+                                mutability: None,
+                                ident: codegen::ident("r"),
+                                subpat: None,
+                            }),
+                            codegen::expr_path_ident("all_runnables"),
+                            vec![syn::Stmt::Semi(
+                                codegen::call_function(
+                                    syn::Expr::Path(syn::ExprPath {
                                         attrs: vec![],
-                                        by_ref: None,
-                                        mutability: None,
-                                        ident: codegen::ident("r"),
-                                        subpat: None,
+                                        qself: None,
+                                        path: codegen::simple_path(
+                                            vec![codegen::ident("tokio"), codegen::ident("spawn")],
+                                            false,
+                                        ),
                                     }),
-                                    codegen::expr_path_ident("all_runnables"),
-                                    vec![syn::Stmt::Semi(
-                                        syn::Expr::Call(syn::ExprCall {
-                                            attrs: vec![],
-                                            func: Box::new(syn::Expr::Path(syn::ExprPath {
-                                                attrs: vec![],
-                                                qself: None,
-                                                path: codegen::simple_path(
-                                                    vec![
-                                                        codegen::ident("tokio"),
-                                                        codegen::ident("spawn"),
-                                                    ],
-                                                    false,
-                                                ),
-                                            })),
-                                            paren_token: syn::token::Paren {
-                                                span: proc_macro2::Span::call_site(),
-                                            },
-                                            args: syn::punctuated::Punctuated::from_iter(vec![
-                                                codegen::expr_path_ident("r"),
-                                            ]),
-                                        }),
-                                        syn::token::Semi {
-                                            spans: [proc_macro2::Span::call_site()],
-                                        },
-                                    )],
+                                    vec![codegen::expr_path_ident("r")],
                                 ),
-                                syn::Stmt::Expr(syn::Expr::Call(syn::ExprCall {
-                                    attrs: vec![],
-                                    func: Box::new(codegen::expr_path_ident("Ok")),
-                                    paren_token: syn::token::Paren {
-                                        span: proc_macro2::Span::call_site(),
-                                    },
-                                    args: syn::punctuated::Punctuated::from_iter(vec![
-                                        syn::Expr::Tuple(syn::ExprTuple {
-                                            attrs: vec![],
-                                            paren_token: syn::token::Paren {
-                                                span: proc_macro2::Span::call_site(),
-                                            },
-                                            elems: syn::punctuated::Punctuated::new(),
-                                        }),
-                                    ]),
-                                })),
-                            ],
-                        )]
-                        .into_iter(),
-                    ),
-                })]
-                .into_iter(),
-            ),
-        }),
+                                syn::token::Semi {
+                                    spans: [proc_macro2::Span::call_site()],
+                                },
+                            )],
+                        ),
+                        syn::Stmt::Expr(codegen::call_function(
+                            codegen::expr_path_ident("Ok"),
+                            vec![syn::Expr::Tuple(syn::ExprTuple {
+                                attrs: vec![],
+                                paren_token: syn::token::Paren {
+                                    span: proc_macro2::Span::call_site(),
+                                },
+                                elems: syn::punctuated::Punctuated::new(),
+                            })],
+                        )),
+                    ],
+                )],
+            )],
+        ),
         syn::token::Semi {
             spans: [proc_macro2::Span::call_site()],
         },
