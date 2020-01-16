@@ -3,42 +3,51 @@ use route_rs_runtime::link::{
     primitive::{ClassifyLink, JoinLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
-use route_rs_runtime::utils::test::{
-    harness::{initialize_runtime, run_link},
-    packet_generators::immediate_stream,
-};
+use route_rs_runtime::utils::{runner::runner, test::packet_generators::immediate_stream};
 
 mod classifiers;
 mod processors;
 
 fn main() {
-    let runtime = initialize_runtime();
-    runtime.spawn(async {
-        let data_v4: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 8, 00, 0x45, 0, 0, 20, 0, 0, 0,
-            0, 64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
-        ];
-        let data_v6: Vec<u8> = vec![
-            0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4,
-            17, 64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde,
-            0xad, 0xbe, 0xef, 0x20, 0x01, 0x0d, 0xb8, 0xbe, 0xef, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-            0xa, 0xb, 0xc, 0xd,
-        ];
-        let frame1 = EthernetFrame::from_buffer(data_v4, 0).unwrap();
-        let frame2 = EthernetFrame::from_buffer(data_v6, 0).unwrap();
-        let packets = vec![frame1.clone(), frame2.clone()];
-        // Create our router
-        let router = Router::new()
-            .ingressors(vec![immediate_stream(packets)])
-            .build_link();
+    let data_v4: Vec<u8> = vec![
+        0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 8, 00, 0x45, 0, 0, 20, 0, 0, 0, 0,
+        64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+    ];
+    let data_v6: Vec<u8> = vec![
+        0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4, 17,
+        64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
+        0xbe, 0xef, 0x20, 0x01, 0x0d, 0xb8, 0xbe, 0xef, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xa, 0xb,
+        0xc, 0xd,
+    ];
+    let test_frame1 = EthernetFrame::from_buffer(data_v4, 0).unwrap();
+    let test_frame2 = EthernetFrame::from_buffer(data_v6, 0).unwrap();
 
-        let results = run_link(router).await;
-        println!("It finished!");
+    let results = runner(router_runner);
+    println!("It finished!");
 
-        assert_eq!(results[1][0], frame1);
-        assert_eq!(results[2][0], frame2);
-        println!("Got all packets on the expected interface!");
-    });
+    assert_eq!(results[1][0], test_frame1);
+    assert_eq!(results[2][0], test_frame2);
+    println!("Got all packets on the expected interface!");
+}
+
+fn router_runner() -> Link<EthernetFrame> {
+    let data_v4: Vec<u8> = vec![
+        0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 8, 00, 0x45, 0, 0, 20, 0, 0, 0, 0,
+        64, 17, 0, 0, 192, 178, 128, 0, 10, 0, 0, 1,
+    ];
+    let data_v6: Vec<u8> = vec![
+        0xde, 0xad, 0xbe, 0xef, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 0x86, 0xDD, 0x60, 0, 0, 0, 0, 4, 17,
+        64, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad,
+        0xbe, 0xef, 0x20, 0x01, 0x0d, 0xb8, 0xbe, 0xef, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xa, 0xb,
+        0xc, 0xd,
+    ];
+    let frame1 = EthernetFrame::from_buffer(data_v4, 0).unwrap();
+    let frame2 = EthernetFrame::from_buffer(data_v6, 0).unwrap();
+    let packets = vec![frame1, frame2];
+    // Create our router
+    Router::new()
+        .ingressors(vec![immediate_stream(packets)])
+        .build_link()
 }
 
 // Note that Router is not Generic! This router only takes in EthernetFrames
