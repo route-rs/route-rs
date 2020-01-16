@@ -218,22 +218,19 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                                 paren_token: syn::token::Paren {
                                     span: proc_macro2::Span::call_site(),
                                 },
-                                args: syn::punctuated::Punctuated::from_iter(vec![syn::Expr::Closure(syn::ExprClosure {
-                                    attrs: vec![],
-                                    asyncness: None,
-                                    movability: None,
-                                    capture: None,
-                                    or1_token: syn::token::Or { spans: [proc_macro2::Span::call_site()] },
-                                    inputs: syn::punctuated::Punctuated::from_iter(vec![syn::Pat::Ident(syn::PatIdent {
+                                args: syn::punctuated::Punctuated::from_iter(vec![codegen::closure(
+                                    false,
+                                    false,
+                                    false,
+                                    vec![syn::Pat::Ident(syn::PatIdent {
                                         attrs: vec![],
                                         by_ref: None,
                                         mutability: None,
                                         ident: codegen::ident("c"),
                                         subpat: None
-                                    })].into_iter()),
-                                    or2_token: syn::token::Or { spans: [proc_macro2::Span::call_site()] },
-                                    output: syn::ReturnType::Default,
-                                    body: Box::new(syn::Expr::Match(syn::ExprMatch {
+                                    })],
+                                    syn::ReturnType::Default,
+                                    vec![syn::Stmt::Expr(syn::Expr::Match(syn::ExprMatch {
                                         attrs: vec![],
                                         match_token: syn::token::Match { span: proc_macro2::Span::call_site() },
                                         expr: Box::new(codegen::expr_path_ident("c")),
@@ -246,8 +243,8 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                                             body: Box::new(syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(b.as_str(), proc_macro2::Span::call_site())) })),
                                             comma: Some(syn::token::Comma { spans: [proc_macro2::Span::call_site()] })
                                         }).collect::<Vec<syn::Arm>>()
-                                    }))
-                                })].into_iter()),
+                                    }))]
+                                )].into_iter()),
                             })]),
                             (codegen::ident("num_egressors"), vec![syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(branches.len().to_string().as_str(), proc_macro2::Span::call_site())) })]),
                         ],
