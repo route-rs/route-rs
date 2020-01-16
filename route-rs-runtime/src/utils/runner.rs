@@ -16,7 +16,7 @@ use tokio::task::JoinHandle;
 /// out the routers physical ports.
 ///
 /// However, if the link your `link_builder()` fn provides does return egressors, this function will automatically
-/// hook them into Collector links, and whatever packets come out of those egressors will be returned to you once
+/// hook them into `PacketCollector` links, and whatever packets come out of those egressors will be returned to you once
 /// the router completes operation and joins. In a production router, the router likely never stops running so
 /// nothing will ever get returned.  Use this functionality only for testing.  
 pub fn runner<OutputPacket: Debug + Send + Clone + 'static>(
