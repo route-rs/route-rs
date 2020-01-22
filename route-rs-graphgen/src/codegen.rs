@@ -2,6 +2,7 @@ extern crate proc_macro2;
 extern crate quote;
 
 use quote::ToTokens;
+use regex::Regex;
 use std::iter::FromIterator;
 
 /// We need Span structs all over the place because syn expects to be used as a parser. We're using
@@ -194,75 +195,6 @@ mod import {
             ])),
         ));
         assert_eq!(import(&[tree]), "use fooasdfbar :: { hello , goodbye } ;");
-    }
-}
-
-/// Generates a function definition
-pub fn function<S, T, U, V, W>(name: S, args: Vec<(T, U)>, return_type: V, body: W) -> String
-where
-    S: Into<String>,
-    T: Into<String>,
-    U: Into<String>,
-    V: Into<String>,
-    W: Into<String>,
-{
-    let args_formatted = args
-        .into_iter()
-        .map(|(a, t)| format!("{}: {}", a.into(), t.into()))
-        .collect::<Vec<String>>()
-        .join(", ");
-    let name_and_args = format!("fn {}({})", name.into(), args_formatted);
-    let return_type_string = return_type.into();
-    let body_block = format!("{{\n{}\n}}", indent("    ", body));
-    if return_type_string == "" {
-        [name_and_args, body_block].join(" ")
-    } else {
-        let arrow_return = format!("-> {}", return_type_string);
-        [name_and_args, arrow_return, body_block].join(" ")
-    }
-}
-
-#[cfg(test)]
-mod function {
-    use super::*;
-
-    #[test]
-    fn no_args() {
-        let empty_vec: Vec<(&str, &str)> = vec![];
-        assert_eq!(
-            function("fooasdfbar", empty_vec, "()", "return;"),
-            "fn fooasdfbar() -> () {\n    return;\n}"
-        );
-    }
-
-    #[test]
-    fn single_arg() {
-        assert_eq!(
-            function("fooasdfbar", vec![("foo", "asdf::Bar")], "()", "return;"),
-            "fn fooasdfbar(foo: asdf::Bar) -> () {\n    return;\n}"
-        );
-    }
-
-    #[test]
-    fn multiple_args() {
-        assert_eq!(
-            function(
-                "fooasdfbar",
-                vec![("foo", "asdf::Bar"), ("bar", "asdf::Foo")],
-                "()",
-                "return;"
-            ),
-            "fn fooasdfbar(foo: asdf::Bar, bar: asdf::Foo) -> () {\n    return;\n}"
-        );
-    }
-
-    #[test]
-    fn blank_return_type() {
-        let empty_vec: Vec<(&str, &str)> = vec![];
-        assert_eq!(
-            function("fooasdfbar", empty_vec, "", "return;"),
-            "fn fooasdfbar() {\n    return;\n}"
-        );
     }
 }
 
@@ -702,4 +634,108 @@ pub fn call_function(function: syn::Expr, args: Vec<syn::Expr>) -> syn::Expr {
         paren_token: syn::token::Paren { span: fake_span() },
         args: syn::punctuated::Punctuated::from_iter(args),
     })
+}
+
+fn typed_function_arg(name: &str, typ: syn::Type) -> syn::FnArg {
+    syn::FnArg::Typed(syn::PatType {
+        attrs: vec![],
+        pat: Box::new(syn::Pat::Ident(syn::PatIdent {
+            attrs: vec![],
+            by_ref: None,
+            mutability: None,
+            ident: ident(name),
+            subpat: None,
+        })),
+        colon_token: syn::token::Colon {
+            spans: [fake_span()],
+        },
+        ty: Box::new(typ),
+    })
+}
+
+pub fn function_def(
+    name: syn::Ident,
+    inputs: Vec<(&str, syn::Type)>,
+    stmts: Vec<syn::Stmt>,
+    return_type: syn::ReturnType,
+) -> syn::Item {
+    syn::Item::Fn(syn::ItemFn {
+        attrs: vec![],
+        vis: syn::Visibility::Inherited,
+        sig: syn::Signature {
+            constness: None,
+            asyncness: None,
+            unsafety: None,
+            abi: None,
+            fn_token: syn::token::Fn { span: fake_span() },
+            ident: name,
+            generics: Default::default(),
+            paren_token: syn::token::Paren { span: fake_span() },
+            inputs: syn::punctuated::Punctuated::from_iter(
+                inputs
+                    .into_iter()
+                    .map(|(name, typ)| typed_function_arg(name, typ)),
+            ),
+            variadic: None,
+            output: return_type,
+        },
+        block: Box::new(syn::Block {
+            brace_token: syn::token::Brace { span: fake_span() },
+            stmts,
+        }),
+    })
+}
+
+pub fn path(segments: Vec<(syn::Ident, Option<Vec<syn::GenericArgument>>)>) -> syn::Path {
+    syn::Path {
+        leading_colon: None,
+        segments: syn::punctuated::Punctuated::from_iter(segments.into_iter().map(|(id, args)| {
+            syn::PathSegment {
+                ident: id,
+                arguments: match args {
+                    None => Default::default(),
+                    Some(generic_args) => {
+                        syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                            colon2_token: None,
+                            lt_token: syn::token::Lt {
+                                spans: [fake_span()],
+                            },
+                            args: syn::punctuated::Punctuated::from_iter(generic_args),
+                            gt_token: syn::token::Gt {
+                                spans: [fake_span()],
+                            },
+                        })
+                    }
+                },
+            }
+        })),
+    }
+}
+
+pub fn magic_newline() -> syn::Macro {
+    syn::Macro {
+        path: simple_path(vec![ident("graphgen_magic_newline")], false),
+        bang_token: syn::token::Bang {
+            spans: [fake_span()],
+        },
+        delimiter: syn::MacroDelimiter::Paren(syn::token::Paren { span: fake_span() }),
+        tokens: proc_macro2::TokenStream::new(),
+    }
+}
+
+pub fn magic_newline_stmt() -> syn::Stmt {
+    syn::Stmt::Semi(
+        syn::Expr::Macro(syn::ExprMacro {
+            attrs: vec![],
+            mac: magic_newline(),
+        }),
+        syn::token::Semi {
+            spans: [fake_span()],
+        },
+    )
+}
+
+pub fn unmagic_newlines(source: String) -> String {
+    let re = Regex::new("graphgen_magic_newline\\s*!\\s*\\(\\s*\\)\\s*;").unwrap();
+    re.replace_all(source.as_str(), "\n\n").to_string()
 }
