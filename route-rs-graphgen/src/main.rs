@@ -9,6 +9,7 @@ use clap::{App, Arg, ArgMatches};
 extern crate xml;
 use xml::reader::EventReader;
 
+use crate::codegen::magic_newline_stmt;
 use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNodeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -95,10 +96,10 @@ fn get_io_nodes(nodes: &[&NodeData], edges: &[&EdgeData]) -> (NodeData, NodeData
     (input_types[0].to_owned(), output_types[0].to_owned())
 }
 
-fn gen_processor_decls(processors: &[&&NodeData]) -> (String, HashMap<String, String>) {
+fn gen_processor_decls(processors: &[&&NodeData]) -> (Vec<syn::Stmt>, HashMap<String, String>) {
     let mut decl_idx: usize = 1;
     let mut processor_decls_map = HashMap::new();
-    let decls: Vec<String> = processors
+    let decls: Vec<syn::Stmt> = processors
         .iter()
         .map(|e| {
             let symbol = format!("elem_{}_{}", decl_idx, e.node_class.to_lowercase());
@@ -124,11 +125,9 @@ fn gen_processor_decls(processors: &[&&NodeData]) -> (String, HashMap<String, St
                 }),
                 false,
             ))
-            .to_token_stream()
-            .to_string()
         })
         .collect();
-    (decls.join("\n"), processor_decls_map)
+    (decls, processor_decls_map)
 }
 
 fn map_get_with_panic<'a, A, B>(map: &'a HashMap<A, B>, key: &A) -> &'a B
@@ -142,10 +141,13 @@ where
     }
 }
 
-fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, String>) -> String {
+fn gen_link_decls(
+    links: &[(XmlNodeId, Link)],
+    processor_decls: HashMap<String, String>,
+) -> Vec<syn::Stmt> {
     let mut decl_idx: usize = 0;
     let mut link_decls_map = HashMap::new();
-    let decls: Vec<String> = links
+    let decls: Vec<Vec<syn::Stmt>> = links
         .iter()
         .map(|(id, el)| {
             decl_idx += 1;
@@ -159,7 +161,7 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                             (codegen::ident("channel"), vec![codegen::expr_path_ident("input_channel")]),
                         ],
                         1
-                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
+                    )
                 }
                 Link::Output(feeder) => {
                     codegen::build_link(
@@ -170,7 +172,7 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                             (codegen::ident("channel"), vec![codegen::expr_path_ident("output_channel")]),
                         ],
                         0
-                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
+                    )
                 }
                 Link::Sync(feeder, processor) => {
                     link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx, 0));
@@ -182,7 +184,7 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                             (codegen::ident("processor"), vec![codegen::expr_path_ident(processor_decls.get(processor.as_str()).unwrap())])
                         ],
                         1
-                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
+                    )
                 }
                 Link::Classify(feeder, processor, branches) => {
                     let mut match_branches = vec![];
@@ -249,7 +251,7 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                             (codegen::ident("num_egressors"), vec![syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(branches.len().to_string().as_str(), proc_macro2::Span::call_site())) })]),
                         ],
                         branches.len()
-                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
+                    )
                 }
                 Link::Join(feeders) => {
                     let egressor_symbol = format!("link_{}_egress_{}", decl_idx, 0);
@@ -268,15 +270,24 @@ fn gen_link_decls(links: &[(XmlNodeId, Link)], processor_decls: HashMap<String, 
                             (codegen::ident("ingressors"), vec![codegen::vec(feeders_decls.into_iter().map(|d| codegen::expr_path_ident(d)).collect::<Vec<syn::Expr>>())])
                         ],
                         1
-                    ).into_iter().map(|s| s.to_token_stream().to_string()).collect::<Vec<String>>().join("\n")
+                    )
                 }
             }
         })
         .collect();
-    decls.join("\n\n")
+    decls
+        .into_iter()
+        .map(|mut ss| {
+            // Add magic newlines between each link section. These will be replaced with real newlines
+            // right before we write out the source, since syn doesn't have a way to generate newlines.
+            ss.push(magic_newline_stmt());
+            ss
+        })
+        .flatten()
+        .collect()
 }
 
-fn gen_tokio_run() -> String {
+fn gen_tokio_run() -> syn::Stmt {
     syn::Stmt::Semi(
         codegen::call_function(
             syn::Expr::Path(syn::ExprPath {
@@ -340,8 +351,6 @@ fn gen_tokio_run() -> String {
             spans: [proc_macro2::Span::call_site()],
         },
     )
-    .to_token_stream()
-    .to_string()
 }
 
 fn expand_join_link<'a>(
@@ -374,7 +383,7 @@ fn gen_run_body(
     edges: &[&EdgeData],
     input_node: &NodeData,
     output_node: &NodeData,
-) -> String {
+) -> Vec<syn::Stmt> {
     let mut processors = vec![];
     let mut links = vec![];
 
@@ -426,7 +435,7 @@ fn gen_run_body(
         }
     }
 
-    let all_runnables_str = codegen::let_simple(
+    let all_runnables_stmt = syn::Stmt::Local(codegen::let_simple(
         codegen::ident("all_runnables"),
         Some(syn::Type::Path(syn::TypePath {
             qself: None,
@@ -460,18 +469,16 @@ fn gen_run_body(
             },
         }),
         true,
-    )
-    .to_token_stream()
-    .to_string();
-    let (processor_decls_str, processor_decls_map) = gen_processor_decls(&processors);
-    let link_decls_str = gen_link_decls(&links, processor_decls_map);
-    [
-        all_runnables_str,
-        processor_decls_str,
-        link_decls_str,
-        gen_tokio_run(),
-    ]
-    .join("\n\n")
+    ));
+    let (mut processor_decls_stmts, processor_decls_map) = gen_processor_decls(&processors);
+    processor_decls_stmts.push(magic_newline_stmt());
+    let mut stmts = vec![];
+    stmts.push(all_runnables_stmt);
+    stmts.push(magic_newline_stmt());
+    stmts.append(&mut processor_decls_stmts);
+    stmts.append(&mut gen_link_decls(&links, processor_decls_map));
+    stmts.push(gen_tokio_run());
+    stmts
 }
 
 fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
@@ -492,15 +499,57 @@ fn gen_source_pipeline(nodes: Vec<&NodeData>, edges: Vec<&EdgeData>) -> String {
                         syn::parse_str::<syn::Type>(&output_node.node_class).unwrap(),
                     ),
                 ]),
-                codegen::function(
-                    "run",
+                codegen::function_def(
+                    codegen::ident("run"),
                     vec![
-                        ("input_channel", "crossbeam::Receiver<Self::Input>"),
-                        ("output_channel", "crossbeam::Sender<Self::Output>"),
+                        (
+                            "input_channel",
+                            syn::Type::Path(syn::TypePath {
+                                qself: None,
+                                path: codegen::path(vec![
+                                    (codegen::ident("crossbeam"), None),
+                                    (
+                                        codegen::ident("Receiver"),
+                                        Some(vec![syn::GenericArgument::Type(syn::Type::Path(
+                                            syn::TypePath {
+                                                qself: None,
+                                                path: codegen::path(vec![
+                                                    (codegen::ident("Self"), None),
+                                                    (codegen::ident("Input"), None),
+                                                ]),
+                                            },
+                                        ))]),
+                                    ),
+                                ]),
+                            }),
+                        ),
+                        (
+                            "output_channel",
+                            syn::Type::Path(syn::TypePath {
+                                qself: None,
+                                path: codegen::path(vec![
+                                    (codegen::ident("crossbeam"), None),
+                                    (
+                                        codegen::ident("Sender"),
+                                        Some(vec![syn::GenericArgument::Type(syn::Type::Path(
+                                            syn::TypePath {
+                                                qself: None,
+                                                path: codegen::path(vec![
+                                                    (codegen::ident("Self"), None),
+                                                    (codegen::ident("Output"), None),
+                                                ]),
+                                            },
+                                        ))]),
+                                    ),
+                                ]),
+                            }),
+                        ),
                     ],
-                    "",
                     gen_run_body(&nodes, &edges, &input_node, &output_node),
-                ),
+                    syn::ReturnType::Default,
+                )
+                .to_token_stream()
+                .to_string(),
             ]
             .join("\n\n"),
         ),
@@ -628,7 +677,9 @@ fn main() {
         edges,
     );
     let mut output_file = File::create(&output_file_path).unwrap();
-    output_file.write_all(pipeline_source.as_bytes()).unwrap();
+    output_file
+        .write_all(codegen::unmagic_newlines(pipeline_source).as_bytes())
+        .unwrap();
     if app.is_present("rustfmt") {
         let rustfmt = std::process::Command::new("rustfmt")
             .args(&[output_file_path])
