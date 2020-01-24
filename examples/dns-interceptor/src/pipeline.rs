@@ -68,9 +68,14 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
             .build_link();
         all_runnables.append(&mut runnables_6);
 
-        let mut rt = runtime::Builder::new().threaded_scheduler().enable_all().build().unwrap();
+        let mut rt = runtime::Builder::new()
+            .threaded_scheduler()
+            .enable_all()
+            .build()
+            .unwrap();
         rt.block_on(async {
-            let handles: Vec<JoinHandle<()>> = all_runnables.into_iter().map(tokio::spawn).collect();
+            let handles: Vec<JoinHandle<()>> =
+                all_runnables.into_iter().map(tokio::spawn).collect();
             for handle in handles {
                 handle.await.unwrap();
             }
