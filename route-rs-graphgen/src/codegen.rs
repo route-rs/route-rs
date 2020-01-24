@@ -736,6 +736,18 @@ pub fn path(segments: Vec<(syn::Ident, Option<Vec<syn::GenericArgument>>)>) -> s
     }
 }
 
+pub fn expr_async(stmts: Vec<syn::Stmt>) -> syn::Expr {
+    syn::Expr::Async(syn::ExprAsync {
+        attrs: vec![],
+        async_token: syn::token::Async { span: fake_span() },
+        capture: None,
+        block: syn::Block {
+            brace_token: syn::token::Brace { span: fake_span() },
+            stmts,
+        },
+    })
+}
+
 pub fn magic_newline() -> syn::Macro {
     syn::Macro {
         path: simple_path(vec![ident("graphgen_magic_newline")], false),
