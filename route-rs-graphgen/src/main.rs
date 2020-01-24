@@ -296,70 +296,100 @@ fn gen_link_decls(
         .collect()
 }
 
-fn gen_tokio_run() -> syn::Stmt {
-    syn::Stmt::Semi(
-        codegen::call_function(
-            syn::Expr::Path(syn::ExprPath {
-                attrs: vec![],
-                qself: None,
-                path: codegen::simple_path(
-                    vec![codegen::ident("tokio"), codegen::ident("run")],
-                    false,
-                ),
-            }),
-            vec![codegen::call_function(
-                codegen::expr_path_ident("lazy"),
-                vec![codegen::closure(
-                    false,
-                    false,
-                    true,
+fn gen_tokio_run() -> Vec<syn::Stmt> {
+    vec![
+        syn::Stmt::Local(codegen::let_simple(
+            codegen::ident("rt"),
+            None,
+            codegen::call_chain(
+                codegen::call_function(
+                    syn::Expr::Path(syn::ExprPath {
+                        attrs: vec![],
+                        qself: None,
+                        path: codegen::path(vec![
+                            (codegen::ident("runtime"), None),
+                            (codegen::ident("Builder"), None),
+                            (codegen::ident("new"), None),
+                        ]),
+                    }),
                     vec![],
-                    syn::ReturnType::Default,
-                    vec![
-                        codegen::for_loop(
-                            syn::Pat::Ident(syn::PatIdent {
-                                attrs: vec![],
-                                by_ref: None,
-                                mutability: None,
-                                ident: codegen::ident("r"),
-                                subpat: None,
-                            }),
-                            codegen::expr_path_ident("all_runnables"),
-                            vec![syn::Stmt::Semi(
-                                codegen::call_function(
-                                    syn::Expr::Path(syn::ExprPath {
-                                        attrs: vec![],
-                                        qself: None,
-                                        path: codegen::simple_path(
-                                            vec![codegen::ident("tokio"), codegen::ident("spawn")],
-                                            false,
-                                        ),
-                                    }),
-                                    vec![codegen::expr_path_ident("r")],
-                                ),
-                                syn::token::Semi {
-                                    spans: [proc_macro2::Span::call_site()],
-                                },
-                            )],
-                        ),
-                        syn::Stmt::Expr(codegen::call_function(
-                            codegen::expr_path_ident("Ok"),
-                            vec![syn::Expr::Tuple(syn::ExprTuple {
-                                attrs: vec![],
-                                paren_token: syn::token::Paren {
-                                    span: proc_macro2::Span::call_site(),
-                                },
-                                elems: syn::punctuated::Punctuated::new(),
-                            })],
-                        )),
-                    ],
+                ),
+                vec![
+                    ("threaded_scheduler", vec![]),
+                    ("enable_all", vec![]),
+                    ("build", vec![]),
+                    ("unwrap", vec![]),
+                ],
+            ),
+            true,
+        )),
+        syn::Stmt::Semi(
+            codegen::call_function(
+                syn::Expr::Path(syn::ExprPath {
+                    attrs: vec![],
+                    qself: None,
+                    path: codegen::simple_path(
+                        vec![codegen::ident("tokio"), codegen::ident("run")],
+                        false,
+                    ),
+                }),
+                vec![codegen::call_function(
+                    codegen::expr_path_ident("lazy"),
+                    vec![codegen::closure(
+                        false,
+                        false,
+                        true,
+                        vec![],
+                        syn::ReturnType::Default,
+                        vec![
+                            codegen::for_loop(
+                                syn::Pat::Ident(syn::PatIdent {
+                                    attrs: vec![],
+                                    by_ref: None,
+                                    mutability: None,
+                                    ident: codegen::ident("r"),
+                                    subpat: None,
+                                }),
+                                codegen::expr_path_ident("all_runnables"),
+                                vec![syn::Stmt::Semi(
+                                    codegen::call_function(
+                                        syn::Expr::Path(syn::ExprPath {
+                                            attrs: vec![],
+                                            qself: None,
+                                            path: codegen::simple_path(
+                                                vec![
+                                                    codegen::ident("tokio"),
+                                                    codegen::ident("spawn"),
+                                                ],
+                                                false,
+                                            ),
+                                        }),
+                                        vec![codegen::expr_path_ident("r")],
+                                    ),
+                                    syn::token::Semi {
+                                        spans: [proc_macro2::Span::call_site()],
+                                    },
+                                )],
+                            ),
+                            syn::Stmt::Expr(codegen::call_function(
+                                codegen::expr_path_ident("Ok"),
+                                vec![syn::Expr::Tuple(syn::ExprTuple {
+                                    attrs: vec![],
+                                    paren_token: syn::token::Paren {
+                                        span: proc_macro2::Span::call_site(),
+                                    },
+                                    elems: syn::punctuated::Punctuated::new(),
+                                })],
+                            )),
+                        ],
+                    )],
                 )],
-            )],
+            ),
+            syn::token::Semi {
+                spans: [proc_macro2::Span::call_site()],
+            },
         ),
-        syn::token::Semi {
-            spans: [proc_macro2::Span::call_site()],
-        },
-    )
+    ]
 }
 
 fn expand_join_link<'a>(
@@ -486,7 +516,7 @@ fn gen_run_body(
     stmts.push(magic_newline_stmt());
     stmts.append(&mut processor_decls_stmts);
     stmts.append(&mut gen_link_decls(&links, processor_decls_map));
-    stmts.push(gen_tokio_run());
+    stmts.append(&mut gen_tokio_run());
     stmts
 }
 
