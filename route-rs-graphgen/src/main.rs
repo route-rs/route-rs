@@ -66,10 +66,19 @@ fn gen_source_imports(local_modules: Vec<&str>, runtime_modules: Vec<&str>) -> S
         )))
     }
     imports.push(syn::UseTree::Path(codegen::use_path(
-        "futures",
+        "tokio",
         syn::UseTree::Name(syn::UseName {
-            ident: codegen::ident("lazy"),
+            ident: codegen::ident("runtime"),
         }),
+    )));
+    imports.push(syn::UseTree::Path(codegen::use_path(
+        "tokio",
+        syn::UseTree::Path(codegen::use_path(
+            "task",
+            syn::UseTree::Name(syn::UseName {
+                ident: codegen::ident("JoinHandle"),
+            }),
+        )),
     )));
 
     codegen::import(&imports)
