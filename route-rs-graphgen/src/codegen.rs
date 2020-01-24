@@ -636,6 +636,30 @@ pub fn call_function(function: syn::Expr, args: Vec<syn::Expr>) -> syn::Expr {
     })
 }
 
+pub fn expr_field(base: syn::Expr, field_name: &str) -> syn::Expr {
+    syn::Expr::Field(syn::ExprField {
+        attrs: vec![],
+        base: Box::new(base),
+        dot_token: syn::token::Dot {
+            spans: [fake_span()],
+        },
+        member: syn::Member::Named(ident(field_name)),
+    })
+}
+
+pub fn call_chain(base: syn::Expr, mut calls: Vec<(&str, Vec<syn::Expr>)>) -> syn::Expr {
+    match calls[..] {
+        [] => base,
+        _ => {
+            let (outer_function, outer_args) = calls.pop().unwrap();
+            call_function(
+                expr_field(call_chain(base, calls), outer_function),
+                outer_args,
+            )
+        }
+    }
+}
+
 fn typed_function_arg(name: &str, typ: syn::Type) -> syn::FnArg {
     syn::FnArg::Typed(syn::PatType {
         attrs: vec![],
