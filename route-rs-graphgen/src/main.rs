@@ -267,40 +267,24 @@ fn gen_link_decls(
                                             subpat: None,
                                         })],
                                         syn::ReturnType::Default,
-                                        vec![syn::Stmt::Expr(syn::Expr::Match(syn::ExprMatch {
-                                            attrs: vec![],
-                                            match_token: syn::token::Match {
-                                                span: proc_macro2::Span::call_site(),
-                                            },
-                                            expr: Box::new(codegen::expr_path_ident("c")),
-                                            brace_token: syn::token::Brace {
-                                                span: proc_macro2::Span::call_site(),
-                                            },
-                                            arms: match_branches
+                                        vec![syn::Stmt::Expr(codegen::expr_match(
+                                            codegen::expr_path_ident("c"),
+                                            match_branches
                                                 .into_iter()
-                                                .map(|(p, b)| syn::Arm {
-                                                    attrs: vec![],
-                                                    pat: syn::parse_str::<syn::Pat>(p).unwrap(),
-                                                    guard: None,
-                                                    fat_arrow_token: syn::token::FatArrow {
-                                                        spans: [
-                                                            proc_macro2::Span::call_site(),
-                                                            proc_macro2::Span::call_site(),
-                                                        ],
-                                                    },
-                                                    body: Box::new(syn::Expr::Lit(syn::ExprLit {
-                                                        attrs: vec![],
-                                                        lit: syn::Lit::Int(syn::LitInt::new(
-                                                            b.as_str(),
-                                                            proc_macro2::Span::call_site(),
-                                                        )),
-                                                    })),
-                                                    comma: Some(syn::token::Comma {
-                                                        spans: [proc_macro2::Span::call_site()],
-                                                    }),
+                                                .map(|(p, b)| {
+                                                    (
+                                                        syn::parse_str::<syn::Pat>(p).unwrap(),
+                                                        syn::Expr::Lit(syn::ExprLit {
+                                                            attrs: vec![],
+                                                            lit: syn::Lit::Int(syn::LitInt::new(
+                                                                b.as_str(),
+                                                                proc_macro2::Span::call_site(),
+                                                            )),
+                                                        }),
+                                                    )
                                                 })
-                                                .collect::<Vec<syn::Arm>>(),
-                                        }))],
+                                                .collect(),
+                                        ))],
                                     )],
                                 )],
                             ),

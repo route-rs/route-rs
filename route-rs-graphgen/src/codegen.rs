@@ -718,6 +718,30 @@ pub fn expr_async(stmts: Vec<syn::Stmt>) -> syn::Expr {
     })
 }
 
+pub fn expr_match(input: syn::Expr, arms: Vec<(syn::Pat, syn::Expr)>) -> syn::Expr {
+    syn::Expr::Match(syn::ExprMatch {
+        attrs: vec![],
+        match_token: syn::token::Match { span: fake_span() },
+        expr: Box::new(input),
+        brace_token: syn::token::Brace { span: fake_span() },
+        arms: arms
+            .into_iter()
+            .map(|(pattern, expr)| syn::Arm {
+                attrs: vec![],
+                pat: pattern,
+                guard: None,
+                fat_arrow_token: syn::token::FatArrow {
+                    spans: [fake_span(), fake_span()],
+                },
+                body: Box::new(expr),
+                comma: Some(syn::token::Comma {
+                    spans: [fake_span()],
+                }),
+            })
+            .collect::<Vec<syn::Arm>>(),
+    })
+}
+
 pub fn magic_newline() -> syn::Macro {
     syn::Macro {
         path: path(vec![(ident("graphgen_magic_newline"), None)]),
