@@ -752,6 +752,15 @@ where
     })
 }
 
+pub fn stmt_expr_semi(expr: syn::Expr) -> syn::Stmt {
+    syn::Stmt::Semi(
+        expr,
+        syn::token::Semi {
+            spans: [fake_span()],
+        },
+    )
+}
+
 pub fn magic_newline() -> syn::Macro {
     syn::Macro {
         path: path(vec![(ident("graphgen_magic_newline"), None)]),
