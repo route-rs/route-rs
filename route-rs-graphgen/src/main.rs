@@ -117,21 +117,17 @@ fn gen_processor_decls(processors: &[&&NodeData]) -> (Vec<syn::Stmt>, HashMap<St
             syn::Stmt::Local(codegen::let_simple(
                 codegen::ident(symbol.as_str()),
                 None,
-                syn::Expr::Call(syn::ExprCall {
-                    attrs: vec![],
-                    func: Box::new(syn::Expr::Path(syn::ExprPath {
+                codegen::call_function(
+                    syn::Expr::Path(syn::ExprPath {
                         attrs: vec![],
                         qself: None,
                         path: codegen::simple_path(
                             vec![codegen::ident(&e.node_class), codegen::ident("new")],
                             false,
                         ),
-                    })),
-                    paren_token: syn::token::Paren {
-                        span: proc_macro2::Span::call_site(),
-                    },
-                    args: syn::punctuated::Punctuated::new(),
-                }),
+                    }),
+                    vec![],
+                ),
                 false,
             ))
         })
