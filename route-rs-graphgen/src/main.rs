@@ -274,13 +274,7 @@ fn gen_link_decls(
                                                 .map(|(p, b)| {
                                                     (
                                                         syn::parse_str::<syn::Pat>(p).unwrap(),
-                                                        syn::Expr::Lit(syn::ExprLit {
-                                                            attrs: vec![],
-                                                            lit: syn::Lit::Int(syn::LitInt::new(
-                                                                b.as_str(),
-                                                                proc_macro2::Span::call_site(),
-                                                            )),
-                                                        }),
+                                                        codegen::expr_lit_int(b),
                                                     )
                                                 })
                                                 .collect(),
@@ -290,13 +284,7 @@ fn gen_link_decls(
                             ),
                             (
                                 codegen::ident("num_egressors"),
-                                vec![syn::Expr::Lit(syn::ExprLit {
-                                    attrs: vec![],
-                                    lit: syn::Lit::Int(syn::LitInt::new(
-                                        branches.len().to_string().as_str(),
-                                        proc_macro2::Span::call_site(),
-                                    )),
-                                })],
+                                vec![codegen::expr_lit_int(branches.len())],
                             ),
                         ],
                         branches.len(),
