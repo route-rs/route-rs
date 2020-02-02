@@ -330,21 +330,6 @@ mod typedef {
     }
 }
 
-pub fn angle_bracketed_types(types: Vec<syn::Type>) -> syn::AngleBracketedGenericArguments {
-    syn::AngleBracketedGenericArguments {
-        colon2_token: None,
-        lt_token: syn::token::Lt {
-            spans: [fake_span()],
-        },
-        args: syn::punctuated::Punctuated::from_iter(
-            types.into_iter().map(syn::GenericArgument::Type),
-        ),
-        gt_token: syn::token::Gt {
-            spans: [fake_span()],
-        },
-    }
-}
-
 pub fn let_simple(
     identifier: syn::Ident,
     type_annotation: Option<syn::Type>,
