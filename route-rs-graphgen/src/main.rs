@@ -158,37 +158,60 @@ fn gen_link_decls(
             decl_idx += 1;
             match el {
                 Link::Input => {
-                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx, 0));
+                    link_decls_map.insert(
+                        (id.to_owned(), None),
+                        format!("link_{}_egress_{}", decl_idx, 0),
+                    );
                     codegen::build_link(
                         decl_idx,
                         "InputChannelLink",
-                        vec![
-                            (codegen::ident("channel"), vec![codegen::expr_path_ident("input_channel")]),
-                        ],
-                        1
+                        vec![(
+                            codegen::ident("channel"),
+                            vec![codegen::expr_path_ident("input_channel")],
+                        )],
+                        1,
                     )
                 }
-                Link::Output(feeder) => {
-                    codegen::build_link(
-                        decl_idx,
-                        "OutputChannelLink",
-                        vec![
-                            (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
-                            (codegen::ident("channel"), vec![codegen::expr_path_ident("output_channel")]),
-                        ],
-                        0
-                    )
-                }
+                Link::Output(feeder) => codegen::build_link(
+                    decl_idx,
+                    "OutputChannelLink",
+                    vec![
+                        (
+                            codegen::ident("ingressor"),
+                            vec![codegen::expr_path_ident(
+                                map_get_with_panic(&link_decls_map, &feeder).as_str(),
+                            )],
+                        ),
+                        (
+                            codegen::ident("channel"),
+                            vec![codegen::expr_path_ident("output_channel")],
+                        ),
+                    ],
+                    0,
+                ),
                 Link::Sync(feeder, processor) => {
-                    link_decls_map.insert((id.to_owned(), None), format!("link_{}_egress_{}", decl_idx, 0));
+                    link_decls_map.insert(
+                        (id.to_owned(), None),
+                        format!("link_{}_egress_{}", decl_idx, 0),
+                    );
                     codegen::build_link(
                         decl_idx,
                         "ProcessLink",
                         vec![
-                            (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
-                            (codegen::ident("processor"), vec![codegen::expr_path_ident(processor_decls.get(processor.as_str()).unwrap())])
+                            (
+                                codegen::ident("ingressor"),
+                                vec![codegen::expr_path_ident(
+                                    map_get_with_panic(&link_decls_map, &feeder).as_str(),
+                                )],
+                            ),
+                            (
+                                codegen::ident("processor"),
+                                vec![codegen::expr_path_ident(
+                                    processor_decls.get(processor.as_str()).unwrap(),
+                                )],
+                            ),
                         ],
-                        1
+                        1,
                     )
                 }
                 Link::Classify(feeder, processor, branches) => {
@@ -210,52 +233,90 @@ fn gen_link_decls(
                         decl_idx,
                         "ClassifyLink",
                         vec![
-                            (codegen::ident("ingressor"), vec![codegen::expr_path_ident(map_get_with_panic(&link_decls_map, &feeder).as_str())]),
-                            (codegen::ident("classifier"), vec![codegen::expr_path_ident(processor_decls.get(processor.as_str()).unwrap())]),
-                            (codegen::ident("dispatcher"), vec![syn::Expr::Call(syn::ExprCall {
-                                attrs: vec![],
-                                func: Box::new(syn::Expr::Path(syn::ExprPath {
-                                    attrs: vec![],
-                                    qself: None,
-                                    path: codegen::simple_path(
-                                        vec![codegen::ident("Box"), codegen::ident("new")],
+                            (
+                                codegen::ident("ingressor"),
+                                vec![codegen::expr_path_ident(
+                                    map_get_with_panic(&link_decls_map, &feeder).as_str(),
+                                )],
+                            ),
+                            (
+                                codegen::ident("classifier"),
+                                vec![codegen::expr_path_ident(
+                                    processor_decls.get(processor.as_str()).unwrap(),
+                                )],
+                            ),
+                            (
+                                codegen::ident("dispatcher"),
+                                vec![codegen::call_function(
+                                    syn::Expr::Path(syn::ExprPath {
+                                        attrs: vec![],
+                                        qself: None,
+                                        path: codegen::simple_path(
+                                            vec![codegen::ident("Box"), codegen::ident("new")],
+                                            false,
+                                        ),
+                                    }),
+                                    vec![codegen::closure(
                                         false,
-                                    ),
-                                })),
-                                paren_token: syn::token::Paren {
-                                    span: proc_macro2::Span::call_site(),
-                                },
-                                args: syn::punctuated::Punctuated::from_iter(vec![codegen::closure(
-                                    false,
-                                    false,
-                                    false,
-                                    vec![syn::Pat::Ident(syn::PatIdent {
-                                        attrs: vec![],
-                                        by_ref: None,
-                                        mutability: None,
-                                        ident: codegen::ident("c"),
-                                        subpat: None
-                                    })],
-                                    syn::ReturnType::Default,
-                                    vec![syn::Stmt::Expr(syn::Expr::Match(syn::ExprMatch {
-                                        attrs: vec![],
-                                        match_token: syn::token::Match { span: proc_macro2::Span::call_site() },
-                                        expr: Box::new(codegen::expr_path_ident("c")),
-                                        brace_token: syn::token::Brace { span: proc_macro2::Span::call_site() },
-                                        arms: match_branches.into_iter().map(|(p, b)| syn::Arm {
+                                        false,
+                                        false,
+                                        vec![syn::Pat::Ident(syn::PatIdent {
                                             attrs: vec![],
-                                            pat: syn::parse_str::<syn::Pat>(p).unwrap(),
-                                            guard: None,
-                                            fat_arrow_token: syn::token::FatArrow { spans: [proc_macro2::Span::call_site(), proc_macro2::Span::call_site()] },
-                                            body: Box::new(syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(b.as_str(), proc_macro2::Span::call_site())) })),
-                                            comma: Some(syn::token::Comma { spans: [proc_macro2::Span::call_site()] })
-                                        }).collect::<Vec<syn::Arm>>()
-                                    }))]
-                                )].into_iter()),
-                            })]),
-                            (codegen::ident("num_egressors"), vec![syn::Expr::Lit(syn::ExprLit { attrs: vec![], lit: syn::Lit::Int(syn::LitInt::new(branches.len().to_string().as_str(), proc_macro2::Span::call_site())) })]),
+                                            by_ref: None,
+                                            mutability: None,
+                                            ident: codegen::ident("c"),
+                                            subpat: None,
+                                        })],
+                                        syn::ReturnType::Default,
+                                        vec![syn::Stmt::Expr(syn::Expr::Match(syn::ExprMatch {
+                                            attrs: vec![],
+                                            match_token: syn::token::Match {
+                                                span: proc_macro2::Span::call_site(),
+                                            },
+                                            expr: Box::new(codegen::expr_path_ident("c")),
+                                            brace_token: syn::token::Brace {
+                                                span: proc_macro2::Span::call_site(),
+                                            },
+                                            arms: match_branches
+                                                .into_iter()
+                                                .map(|(p, b)| syn::Arm {
+                                                    attrs: vec![],
+                                                    pat: syn::parse_str::<syn::Pat>(p).unwrap(),
+                                                    guard: None,
+                                                    fat_arrow_token: syn::token::FatArrow {
+                                                        spans: [
+                                                            proc_macro2::Span::call_site(),
+                                                            proc_macro2::Span::call_site(),
+                                                        ],
+                                                    },
+                                                    body: Box::new(syn::Expr::Lit(syn::ExprLit {
+                                                        attrs: vec![],
+                                                        lit: syn::Lit::Int(syn::LitInt::new(
+                                                            b.as_str(),
+                                                            proc_macro2::Span::call_site(),
+                                                        )),
+                                                    })),
+                                                    comma: Some(syn::token::Comma {
+                                                        spans: [proc_macro2::Span::call_site()],
+                                                    }),
+                                                })
+                                                .collect::<Vec<syn::Arm>>(),
+                                        }))],
+                                    )],
+                                )],
+                            ),
+                            (
+                                codegen::ident("num_egressors"),
+                                vec![syn::Expr::Lit(syn::ExprLit {
+                                    attrs: vec![],
+                                    lit: syn::Lit::Int(syn::LitInt::new(
+                                        branches.len().to_string().as_str(),
+                                        proc_macro2::Span::call_site(),
+                                    )),
+                                })],
+                            ),
                         ],
-                        branches.len()
+                        branches.len(),
                     )
                 }
                 Link::Join(feeders) => {
@@ -271,10 +332,16 @@ fn gen_link_decls(
                     codegen::build_link(
                         decl_idx,
                         "JoinLink",
-                        vec![
-                            (codegen::ident("ingressors"), vec![codegen::vec(feeders_decls.into_iter().map(|d| codegen::expr_path_ident(d)).collect::<Vec<syn::Expr>>())])
-                        ],
-                        1
+                        vec![(
+                            codegen::ident("ingressors"),
+                            vec![codegen::vec(
+                                feeders_decls
+                                    .into_iter()
+                                    .map(|d| codegen::expr_path_ident(d))
+                                    .collect::<Vec<syn::Expr>>(),
+                            )],
+                        )],
+                        1,
                     )
                 }
             }
