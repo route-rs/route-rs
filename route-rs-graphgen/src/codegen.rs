@@ -761,6 +761,13 @@ pub fn stmt_expr_semi(expr: syn::Expr) -> syn::Stmt {
     )
 }
 
+pub fn type_tuple(types: Vec<syn::Type>) -> syn::Type {
+    syn::Type::Tuple(syn::TypeTuple {
+        paren_token: syn::token::Paren { span: fake_span() },
+        elems: syn::punctuated::Punctuated::from_iter(types.into_iter()),
+    })
+}
+
 pub fn magic_newline() -> syn::Macro {
     syn::Macro {
         path: path(vec![(ident("graphgen_magic_newline"), None)]),

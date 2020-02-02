@@ -371,14 +371,9 @@ fn gen_tokio_run() -> Vec<syn::Stmt> {
                                     qself: None,
                                     path: codegen::path(vec![(
                                         codegen::ident("JoinHandle"),
-                                        Some(vec![syn::GenericArgument::Type(syn::Type::Tuple(
-                                            syn::TypeTuple {
-                                                paren_token: syn::token::Paren {
-                                                    span: proc_macro2::Span::call_site(),
-                                                },
-                                                elems: Default::default(),
-                                            },
-                                        ))]),
+                                        Some(vec![syn::GenericArgument::Type(
+                                            codegen::type_tuple(vec![]),
+                                        )]),
                                     )]),
                                 },
                             ))]),
