@@ -120,10 +120,10 @@ fn gen_processor_decls(processors: &[&&NodeData]) -> (Vec<syn::Stmt>, HashMap<St
                     syn::Expr::Path(syn::ExprPath {
                         attrs: vec![],
                         qself: None,
-                        path: codegen::simple_path(
-                            vec![codegen::ident(&e.node_class), codegen::ident("new")],
-                            false,
-                        ),
+                        path: codegen::path(vec![
+                            (codegen::ident(&e.node_class), None),
+                            (codegen::ident("new"), None),
+                        ]),
                     }),
                     vec![],
                 ),
@@ -250,10 +250,10 @@ fn gen_link_decls(
                                     syn::Expr::Path(syn::ExprPath {
                                         attrs: vec![],
                                         qself: None,
-                                        path: codegen::simple_path(
-                                            vec![codegen::ident("Box"), codegen::ident("new")],
-                                            false,
-                                        ),
+                                        path: codegen::path(vec![
+                                            (codegen::ident("Box"), None),
+                                            (codegen::ident("new"), None),
+                                        ]),
                                     }),
                                     vec![codegen::closure(
                                         false,

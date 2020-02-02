@@ -242,24 +242,6 @@ mod impl_struct {
     }
 }
 
-pub fn simple_path(segments: Vec<syn::Ident>, with_leading_colon: bool) -> syn::Path {
-    syn::Path {
-        leading_colon: if with_leading_colon {
-            Some(syn::token::Colon2 {
-                spans: [fake_span(), fake_span()],
-            })
-        } else {
-            None
-        },
-        segments: syn::punctuated::Punctuated::from_iter(segments.into_iter().map(|s| {
-            syn::PathSegment {
-                ident: s,
-                arguments: syn::PathArguments::None,
-            }
-        })),
-    }
-}
-
 /// Generates type declaration statements
 pub fn typedef(types: Vec<(syn::Ident, syn::Type)>) -> String {
     types
@@ -299,7 +281,7 @@ mod typedef {
                 ident("FooAsdfBar"),
                 syn::Type::Path(syn::TypePath {
                     qself: None,
-                    path: simple_path(vec![ident("usize")], false)
+                    path: path(vec![(ident("usize"), None)])
                 })
             )]),
             "type FooAsdfBar = usize ;"
@@ -314,14 +296,14 @@ mod typedef {
                     ident("FooAsdfBar"),
                     syn::Type::Path(syn::TypePath {
                         qself: None,
-                        path: simple_path(vec![ident("usize")], false)
+                        path: path(vec![(ident("usize"), None)])
                     })
                 ),
                 (
                     ident("BarAsdfFoo"),
                     syn::Type::Path(syn::TypePath {
                         qself: None,
-                        path: simple_path(vec![ident("isize")], false)
+                        path: path(vec![(ident("isize"), None)])
                     })
                 )
             ]),
@@ -377,7 +359,7 @@ pub fn expr_path_ident(id: &str) -> syn::Expr {
     syn::Expr::Path(syn::ExprPath {
         attrs: vec![],
         qself: None,
-        path: simple_path(vec![ident(id)], false),
+        path: path(vec![(ident(id), None)]),
     })
 }
 
@@ -387,7 +369,7 @@ pub fn builder(base: syn::Ident, setters: Vec<(syn::Ident, Vec<syn::Expr>)>) -> 
         func: Box::new(syn::Expr::Path(syn::ExprPath {
             attrs: vec![],
             qself: None,
-            path: simple_path(vec![base, ident("new")], false),
+            path: path(vec![(base, None), (ident("new"), None)]),
         })),
         paren_token: syn::token::Paren { span: fake_span() },
         args: Default::default(),
@@ -477,7 +459,7 @@ pub fn build_link(
             receiver: Box::new(syn::Expr::Path(syn::ExprPath {
                 attrs: vec![],
                 qself: None,
-                path: simple_path(vec![ident("all_runnables")], false),
+                path: path(vec![(ident("all_runnables"), None)]),
             })),
             dot_token: syn::token::Dot {
                 spans: [fake_span()],
@@ -496,10 +478,10 @@ pub fn build_link(
                     expr: Box::new(syn::Expr::Path(syn::ExprPath {
                         attrs: vec![],
                         qself: None,
-                        path: simple_path(
-                            vec![ident(format!("runnables_{}", &index).as_str())],
-                            false,
-                        ),
+                        path: path(vec![(
+                            ident(format!("runnables_{}", &index).as_str()),
+                            None,
+                        )]),
                     })),
                 },
             )]),
@@ -518,7 +500,10 @@ pub fn build_link(
                 receiver: Box::new(syn::Expr::Path(syn::ExprPath {
                     attrs: vec![],
                     qself: None,
-                    path: simple_path(vec![ident(format!("egressors_{}", &index).as_str())], false),
+                    path: path(vec![(
+                        ident(format!("egressors_{}", &index).as_str()),
+                        None,
+                    )]),
                 })),
                 dot_token: syn::token::Dot {
                     spans: [fake_span()],
@@ -542,7 +527,7 @@ pub fn vec(exprs: Vec<syn::Expr>) -> syn::Expr {
     syn::Expr::Macro(syn::ExprMacro {
         attrs: vec![],
         mac: syn::Macro {
-            path: simple_path(vec![ident("vec")], false),
+            path: path(vec![(ident("vec"), None)]),
             bang_token: syn::token::Bang {
                 spans: [fake_span()],
             },
@@ -735,7 +720,7 @@ pub fn expr_async(stmts: Vec<syn::Stmt>) -> syn::Expr {
 
 pub fn magic_newline() -> syn::Macro {
     syn::Macro {
-        path: simple_path(vec![ident("graphgen_magic_newline")], false),
+        path: path(vec![(ident("graphgen_magic_newline"), None)]),
         bang_token: syn::token::Bang {
             spans: [fake_span()],
         },
