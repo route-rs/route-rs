@@ -14,7 +14,6 @@ use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNode
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::iter::FromIterator;
 use syn::export::ToTokens;
 
 mod codegen;
@@ -554,21 +553,15 @@ fn gen_run_body(
         codegen::ident("all_runnables"),
         Some(syn::Type::Path(syn::TypePath {
             qself: None,
-            path: syn::Path {
-                leading_colon: None,
-                segments: syn::punctuated::Punctuated::from_iter(vec![syn::PathSegment {
-                    ident: codegen::ident("Vec"),
-                    arguments: syn::PathArguments::AngleBracketed(codegen::angle_bracketed_types(
-                        vec![syn::Type::Path(syn::TypePath {
-                            qself: None,
-                            path: codegen::simple_path(
-                                vec![codegen::ident("TokioRunnable")],
-                                false,
-                            ),
-                        })],
-                    )),
-                }]),
-            },
+            path: codegen::path(vec![(
+                codegen::ident("Vec"),
+                Some(vec![syn::GenericArgument::Type(syn::Type::Path(
+                    syn::TypePath {
+                        qself: None,
+                        path: codegen::path(vec![(codegen::ident("TokioRunnable"), None)]),
+                    },
+                ))]),
+            )]),
         })),
         syn::Expr::Macro(syn::ExprMacro {
             attrs: vec![],
