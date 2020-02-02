@@ -563,19 +563,7 @@ fn gen_run_body(
                 ))]),
             )]),
         })),
-        syn::Expr::Macro(syn::ExprMacro {
-            attrs: vec![],
-            mac: syn::Macro {
-                path: codegen::simple_path(vec![codegen::ident("vec")], false),
-                bang_token: syn::token::Bang {
-                    spans: [proc_macro2::Span::call_site()],
-                },
-                delimiter: syn::MacroDelimiter::Bracket(syn::token::Bracket {
-                    span: proc_macro2::Span::call_site(),
-                }),
-                tokens: proc_macro2::TokenStream::new(),
-            },
-        }),
+        codegen::vec(vec![]),
         true,
     ));
     let (mut processor_decls_stmts, processor_decls_map) = gen_processor_decls(&processors);
