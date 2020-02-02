@@ -742,6 +742,16 @@ pub fn expr_match(input: syn::Expr, arms: Vec<(syn::Pat, syn::Expr)>) -> syn::Ex
     })
 }
 
+pub fn expr_lit_int<N>(number: N) -> syn::Expr
+where
+    N: std::string::ToString,
+{
+    syn::Expr::Lit(syn::ExprLit {
+        attrs: vec![],
+        lit: syn::Lit::Int(syn::LitInt::new(number.to_string().as_str(), fake_span())),
+    })
+}
+
 pub fn magic_newline() -> syn::Macro {
     syn::Macro {
         path: path(vec![(ident("graphgen_magic_newline"), None)]),
