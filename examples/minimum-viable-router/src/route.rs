@@ -3,6 +3,7 @@ use crate::processor::{DecapInterfaceTags, EncapInterfaceTags, Interface};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::primitive::{BlackHoleLink, ClassifyLink, JoinLink, ProcessLink};
 use route_rs_runtime::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
+use route_rs_runtime::processor::Trace;
 
 pub struct Route {
     in_streams: Option<Vec<PacketStream<EthernetFrame>>>,
@@ -94,10 +95,30 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Route {
         let join_interfaces_egressor_0 = join_interfaces_egressors.remove(0);
         // Join interfaces END
 
+        // Ingress trace BEGIN
+        let ingress_trace = Trace::new();
+        let (mut ingress_trace_runnables, mut ingress_trace_egressors) = ProcessLink::new()
+            .ingressor(join_interfaces_egressor_0)
+            .processor(ingress_trace)
+            .build_link();
+        all_runnables.append(&mut ingress_trace_runnables);
+        let ingress_trace_egressor_0 = ingress_trace_egressors.remove(0);
+        // Ingress trace END
+
+        // Egress trace BEGIN
+        let egress_trace = Trace::new();
+        let (mut egress_trace_runnables, mut egress_trace_egressors) = ProcessLink::new()
+            .ingressor(ingress_trace_egressor_0)
+            .processor(egress_trace)
+            .build_link();
+        all_runnables.append(&mut egress_trace_runnables);
+        let egress_trace_egressor_0 = egress_trace_egressors.remove(0);
+        // Egress trace END
+
         // Dispatch interfaces BEGIN
         let (mut classify_dst_interfaces_runnables, mut classify_dst_interfaces_egressors) =
             ClassifyLink::new()
-                .ingressors(vec![join_interfaces_egressor_0])
+                .ingressors(vec![egress_trace_egressor_0])
                 .num_egressors(4)
                 .classifier(classifier::ClassifyByDestinationInterface::new())
                 .dispatcher(Box::new(|c| match c {
