@@ -1,4 +1,5 @@
 use crate::classifier;
+use crate::classifier::Protocol;
 use crate::processor::{DecapInterfaceTags, EncapInterfaceTags, Interface};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::primitive::{BlackHoleLink, ClassifyLink, JoinLink, ProcessLink};
@@ -105,10 +106,54 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Route {
         let ingress_trace_egressor_0 = ingress_trace_egressors.remove(0);
         // Ingress trace END
 
+        // Classify based on Protocol BEGIN
+        let (mut classify_protocol_runnables, mut classify_protocol_egressors) =
+            ClassifyLink::new()
+                .ingressor(ingress_trace_egressor_0)
+                .num_egressors(6)
+                .classifier(classifier::ClassifyByProtocol::new())
+                .dispatcher(Box::new(|c| match c {
+                    Protocol::Unknown => 0,
+                    Protocol::ARP => 1,
+                    Protocol::NDP => 2,
+                    Protocol::DHCP => 3,
+                    Protocol::IPv4 => 4,
+                    Protocol::IPv6 => 5,
+                }))
+                .build_link();
+        all_runnables.append(&mut classify_protocol_runnables);
+        let classify_protocol_egressor_0 = classify_protocol_egressors.remove(0);
+        let classify_protocol_egressor_1 = classify_protocol_egressors.remove(0);
+        let classify_protocol_egressor_2 = classify_protocol_egressors.remove(0);
+        let classify_protocol_egressor_3 = classify_protocol_egressors.remove(0);
+        let classify_protocol_egressor_4 = classify_protocol_egressors.remove(0);
+        let classify_protocol_egressor_5 = classify_protocol_egressors.remove(0);
+
+        let (mut unknown_proto_drop_runnables, _unknown_proto_drop_egressors) =
+            BlackHoleLink::new()
+                .ingressor(classify_protocol_egressor_0)
+                .build_link();
+        all_runnables.append(&mut unknown_proto_drop_runnables);
+        // Classify based on Protocol END
+
+        // Join output packets BEGIN
+        let (mut join_outputs_runnables, mut join_outputs_egressors) = JoinLink::new()
+            .ingressors(vec![
+                classify_protocol_egressor_1,
+                classify_protocol_egressor_2,
+                classify_protocol_egressor_3,
+                classify_protocol_egressor_4,
+                classify_protocol_egressor_5,
+            ])
+            .build_link();
+        all_runnables.append(&mut join_outputs_runnables);
+        let join_outputs_egressor_0 = join_outputs_egressors.remove(0);
+        // Join output packets END
+
         // Egress trace BEGIN
         let egress_trace = Trace::new();
         let (mut egress_trace_runnables, mut egress_trace_egressors) = ProcessLink::new()
-            .ingressor(ingress_trace_egressor_0)
+            .ingressor(join_outputs_egressor_0)
             .processor(egress_trace)
             .build_link();
         all_runnables.append(&mut egress_trace_runnables);
