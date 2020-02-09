@@ -3,6 +3,7 @@ use route_rs_runtime::link::primitive::{InputChannelLink, OutputChannelLink};
 use route_rs_runtime::link::{LinkBuilder, PacketStream, TokioRunnable};
 use tokio::task::JoinHandle;
 
+mod classifier;
 mod processor;
 mod route;
 

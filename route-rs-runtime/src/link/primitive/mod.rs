@@ -34,3 +34,7 @@ pub use self::input_channel_link::*;
 /// Takes a stream and converts it to a channel for output.
 mod output_channel_link;
 pub use self::output_channel_link::*;
+
+/// Takes a stream and drops everything from it.
+mod black_hole_link;
+pub use self::black_hole_link::*;

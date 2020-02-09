@@ -14,11 +14,11 @@ pub enum Interface {
 #[derive(Clone)]
 pub struct InterfaceTaggedPacket<Packet: Send + Clone> {
     /// The interface tag for where the packet came from. None if we don't know yet.
-    src_interface: Option<Interface>,
+    pub src_interface: Option<Interface>,
     /// The interface tag for where the packet is going. None if we don't know yet.
-    dst_interface: Option<Interface>,
+    pub dst_interface: Option<Interface>,
     /// The actual data packet.
-    packet: Packet,
+    pub packet: Packet,
 }
 
 /// When receiving a packet from an interface, we want to tag it with that interface in order to
