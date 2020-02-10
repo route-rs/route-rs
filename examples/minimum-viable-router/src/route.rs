@@ -4,7 +4,7 @@ use crate::processor::{DecapInterfaceTags, EncapInterfaceTags, Interface};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::primitive::{BlackHoleLink, ClassifyLink, JoinLink, ProcessLink};
 use route_rs_runtime::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
-use route_rs_runtime::processor::Trace;
+use route_rs_runtime::processor::{Identity, Trace};
 
 pub struct Route {
     in_streams: Option<Vec<PacketStream<EthernetFrame>>>,
@@ -136,14 +136,59 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Route {
         all_runnables.append(&mut unknown_proto_drop_runnables);
         // Classify based on Protocol END
 
+        // ARP BEGIN
+        let (mut handle_arp_runnables, mut handle_arp_egressors) = ProcessLink::new()
+            .ingressor(classify_protocol_egressor_1)
+            .processor(Identity::new())
+            .build_link();
+        all_runnables.append(&mut handle_arp_runnables);
+        let handle_arp_egressor_0 = handle_arp_egressors.remove(0);
+        // ARP END
+
+        // NDP BEGIN
+        let (mut handle_ndp_runnables, mut handle_ndp_egressors) = ProcessLink::new()
+            .ingressor(classify_protocol_egressor_2)
+            .processor(Identity::new())
+            .build_link();
+        all_runnables.append(&mut handle_ndp_runnables);
+        let handle_ndp_egressor_0 = handle_ndp_egressors.remove(0);
+        // NDP END
+
+        // DHCP BEGIN
+        let (mut handle_dhcp_runnables, mut handle_dhcp_egressors) = ProcessLink::new()
+            .ingressor(classify_protocol_egressor_3)
+            .processor(Identity::new())
+            .build_link();
+        all_runnables.append(&mut handle_dhcp_runnables);
+        let handle_dhcp_egressor_0 = handle_dhcp_egressors.remove(0);
+        // DHCP END
+
+        // IPv4 BEGIN
+        let (mut handle_ipv4_runnables, mut handle_ipv4_egressors) = ProcessLink::new()
+            .ingressor(classify_protocol_egressor_4)
+            .processor(Identity::new())
+            .build_link();
+        all_runnables.append(&mut handle_ipv4_runnables);
+        let handle_ipv4_egressor_0 = handle_ipv4_egressors.remove(0);
+        // IPv4 END
+
+        // IPv6 BEGIN
+        let (mut handle_ipv6_runnables, mut handle_ipv6_egressors) = ProcessLink::new()
+            .ingressor(classify_protocol_egressor_5)
+            .processor(Identity::new())
+            .build_link();
+        all_runnables.append(&mut handle_ipv6_runnables);
+        let handle_ipv6_egressor_0 = handle_ipv6_egressors.remove(0);
+        // IPv6 END
+
         // Join output packets BEGIN
         let (mut join_outputs_runnables, mut join_outputs_egressors) = JoinLink::new()
             .ingressors(vec![
-                classify_protocol_egressor_1,
-                classify_protocol_egressor_2,
-                classify_protocol_egressor_3,
-                classify_protocol_egressor_4,
-                classify_protocol_egressor_5,
+                handle_arp_egressor_0,
+                handle_ndp_egressor_0,
+                handle_dhcp_egressor_0,
+                handle_ipv4_egressor_0,
+                handle_ipv6_egressor_0,
             ])
             .build_link();
         all_runnables.append(&mut join_outputs_runnables);
