@@ -19,6 +19,12 @@ pub use self::drop::*;
 mod dec_ip_hop;
 pub use self::dec_ip_hop::*;
 
+mod log;
+pub use self::log::*;
+
+mod file_log;
+pub use self::file_log::*;
+
 pub trait Processor {
     type Input: Send + Clone;
     type Output: Send + Clone;
