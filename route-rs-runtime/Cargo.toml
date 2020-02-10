@@ -11,3 +11,6 @@ futures = "0.3"
 crossbeam = "0.7.2"
 rand = "0.7.2"
 route-rs-packets = { path = "../route-rs-packets" }
+
+[dev-dependencies]
+uuid = { version = "0.8", features = ["v4"] }
