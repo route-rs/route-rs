@@ -110,7 +110,40 @@ impl Processor for InterfaceTagger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use route_rs_runtime::utils::test::harness::{initialize_runtime, run_link};
+    use route_rs_runtime::utils::test::packet_generators::immediate_stream;
 
     #[test]
-    fn InterfaceMux() {}
+    fn InterfaceMux() {
+        let packets = vec![EthernetFrame::empty(); 3];
+        let host = immediate_stream(packets.clone());
+        let lan = immediate_stream(packets.clone());
+        let wan = immediate_stream(packets.clone());
+        let streams = vec![host, lan, wan];
+
+        let mut runtime = initialize_runtime();
+        let results = runtime.block_on(async {
+            let link = InterfaceMux::new()
+                .ingressors(streams)
+                .build_link();
+
+            run_link(link).await
+        });
+
+        let output = &results[0];
+        let (mut host, mut lan, mut wan, mut unmarked) = (0, 0, 0, 0);
+        for packet in output {
+            match packet.inbound_interface {
+                Interface::Host => host += 1,
+                Interface::Lan => lan += 1,
+                Interface::Wan => wan += 1,
+                Interface::Unmarked => unmarked += 1,
+            }
+        }
+
+        assert!(host == 3, "Incorrect number of host packets");
+        assert!(lan == 3, "Incorrenct number of lan packts");
+        assert!(wan == 3, "Incorrect number of wan packets");
+        assert!(unmarked == 0, "Incorrect number of unmarked packets");
+    }
 }
