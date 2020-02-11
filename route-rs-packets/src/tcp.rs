@@ -11,6 +11,8 @@ pub struct TcpSegment {
     pub payload_offset: usize,
 }
 
+impl Packet for TcpSegment {}
+
 impl TcpSegment {
     pub fn from_buffer(
         data: PacketData,
