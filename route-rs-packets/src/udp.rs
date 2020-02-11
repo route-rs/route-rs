@@ -11,6 +11,8 @@ pub struct UdpSegment {
     pub payload_offset: usize,
 }
 
+impl Packet for UdpSegment {}
+
 impl<'packet> UdpSegment {
     pub fn from_buffer(
         data: PacketData,

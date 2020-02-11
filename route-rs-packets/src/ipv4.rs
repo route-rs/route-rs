@@ -11,6 +11,8 @@ pub struct Ipv4Packet {
     pub payload_offset: usize,
 }
 
+impl Packet for Ipv4Packet {}
+
 impl Ipv4Packet {
     pub fn from_buffer(
         data: PacketData,

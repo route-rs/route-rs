@@ -1,6 +1,9 @@
 // Let's use this area for now to declare common structs, constants, and common helper functions.
 use std::fmt;
 
+/// Marker trait that struct is a 'packets' type
+pub trait Packet {}
+
 /// The common datatype that all packet structures share to repreasent their data
 pub type PacketData = Vec<u8>;
 

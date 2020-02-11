@@ -9,6 +9,8 @@ pub struct EthernetFrame {
     pub payload_offset: usize,
 }
 
+impl Packet for EthernetFrame {}
+
 impl EthernetFrame {
     pub fn from_buffer(
         frame: PacketData,
