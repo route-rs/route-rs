@@ -4,10 +4,10 @@ use route_rs_runtime::link::{
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 use route_rs_runtime::processor::Processor;
+use crate::types::{Interface, InterfaceAnnotated};
 
-/// InterfaceMux: Link that joins many interfaces, and applys a tag to each packet based on
-/// what interface it originiated from.
-pub struct InterfaceMux {
+/// InterfaceMux: Link that our 3 input interfaces, Host, Lan and Wan, expected in that order.
+pub(crate) struct InterfaceMux {
     in_streams: Option<Vec<PacketStream<EthernetFrame>>>,
 }
 
@@ -17,9 +17,9 @@ impl InterfaceMux {
     }
 }
 
-impl LinkBuilder<EthernetFrame, (EthernetFrame, usize)> for InterfaceMux {
+impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for InterfaceMux {
     fn ingressors(self, ingressors: Vec<PacketStream<EthernetFrame>>) -> InterfaceMux {
-        assert!(ingressors.len() >= 1, "Requires at least one ingress stream");
+        assert!(ingressors.len() != 3, "Link only supports 3 interfaces [Host: 0, Lan: 1, Wan: 2]");
         if self.in_streams.is_some() {
             panic!("Interface Mux: Double call of ingressors function");
         }
@@ -43,17 +43,30 @@ impl LinkBuilder<EthernetFrame, (EthernetFrame, usize)> for InterfaceMux {
         }
     }
 
-    fn build_link(self) -> Link<(EthernetFrame, usize)> {
+    fn build_link(self) -> Link<InterfaceAnnotated<EthernetFrame>> {
         let mut tagger_streams = vec![];
+        let mut streams = self.in_streams.unwrap();
 
-        for (i, stream) in self.in_streams.unwrap().into_iter().enumerate() {
-            let tagger = InterfaceTagger::new(i);
-            let (_,mut tag_streams) = ProcessLink::new()
+            let tagger = InterfaceTagger::new(Interface::Host);
+            let (_,mut annotated_stream) = ProcessLink::new()
                 .processor(tagger)
-                .ingressor(stream)
+                .ingressor(streams.remove(0))
                 .build_link();
-            tagger_streams.append(&mut tag_streams);
-        }
+        tagger_streams.append(&mut annotated_stream);
+
+            let tagger = InterfaceTagger::new(Interface::Lan);
+            let (_,mut annotated_stream) = ProcessLink::new()
+                .processor(tagger)
+                .ingressor(streams.remove(1))
+                .build_link();
+        tagger_streams.append(&mut annotated_stream);
+
+            let tagger = InterfaceTagger::new(Interface::Wan);
+            let (_,mut annotated_stream) = ProcessLink::new()
+                .processor(tagger)
+                .ingressor(streams.remove(0))
+                .build_link();
+            tagger_streams.append(&mut annotated_stream);
 
         // Join link has the only tokio runnables here, can just return it
         JoinLink::new()
@@ -69,22 +82,26 @@ impl LinkBuilder<EthernetFrame, (EthernetFrame, usize)> for InterfaceMux {
 ///
 /// If we require more annotations in the future, we may decide to place a hashmap in the heap for each
 /// packet.
-pub struct InterfaceTagger {
-    tag: usize,
+pub(crate) struct InterfaceTagger {
+    tag: Interface,
 }
 
 impl InterfaceTagger {
-    pub fn new(tag: usize) -> Self {
+    pub(crate) fn new(tag: Interface) -> Self {
         InterfaceTagger{ tag }
     }
 }
 
 impl Processor for InterfaceTagger {
     type Input = EthernetFrame;
-    type Output = (EthernetFrame, usize);
+    type Output = InterfaceAnnotated<EthernetFrame>;
 
     fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
-        Some((packet, self.tag))
+        Some(InterfaceAnnotated{
+            packet: packet,
+            inbound_interface: self.tag,
+            outbound_interface: Interface::None,
+        })
     }
 }
 
@@ -94,6 +111,5 @@ mod tests {
 
     #[test]
     fn InterfaceMux() {
-        unimplemnted!();
     }
 }
