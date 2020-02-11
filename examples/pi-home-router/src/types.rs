@@ -21,5 +21,5 @@ pub enum Interface {
     Host,
     Wan,
     Lan,
-    None,
+    Unmarked,
 }

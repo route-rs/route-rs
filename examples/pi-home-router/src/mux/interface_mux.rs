@@ -20,7 +20,7 @@ impl InterfaceMux {
 impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for InterfaceMux {
     fn ingressors(self, ingressors: Vec<PacketStream<EthernetFrame>>) -> InterfaceMux {
         assert!(
-            ingressors.len() != 3,
+            ingressors.len() == 3,
             "Link only supports 3 interfaces [Host: 0, Lan: 1, Wan: 2]"
         );
         if self.in_streams.is_some() {
@@ -35,6 +35,7 @@ impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for Interface
     fn ingressor(self, ingressor: PacketStream<EthernetFrame>) -> InterfaceMux {
         match self.in_streams {
             Some(mut streams) => {
+                assert!(streams.len() < 3, "Trying to add too many streams");
                 streams.push(ingressor);
                 InterfaceMux {
                     in_streams: Some(streams),
@@ -101,7 +102,7 @@ impl Processor for InterfaceTagger {
         Some(InterfaceAnnotated {
             packet: packet,
             inbound_interface: self.tag,
-            outbound_interface: Interface::None,
+            outbound_interface: Interface::Unmarked,
         })
     }
 }
