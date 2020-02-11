@@ -7,9 +7,9 @@ use route_rs_packets::Packet;
 /// the packet originated from, and it marked to be router to.
 #[derive(Clone, Debug)]
 pub(crate) struct InterfaceAnnotated<P: Packet> {
-    pub(crate)  packet: P,
-    pub(crate)  inbound_interface: Interface,
-    pub(crate)  outbound_interface: Interface,
+    pub(crate) packet: P,
+    pub(crate) inbound_interface: Interface,
+    pub(crate) outbound_interface: Interface,
 }
 
 /// Interface:

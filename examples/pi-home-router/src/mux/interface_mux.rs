@@ -1,10 +1,10 @@
+use crate::types::{Interface, InterfaceAnnotated};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
     primitive::{JoinLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 use route_rs_runtime::processor::Processor;
-use crate::types::{Interface, InterfaceAnnotated};
 
 /// InterfaceMux: Link that our 3 input interfaces, Host, Lan and Wan, expected in that order.
 pub(crate) struct InterfaceMux {
@@ -13,18 +13,23 @@ pub(crate) struct InterfaceMux {
 
 impl InterfaceMux {
     pub fn new() -> Self {
-        InterfaceMux{ in_streams: None }
+        InterfaceMux { in_streams: None }
     }
 }
 
 impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for InterfaceMux {
     fn ingressors(self, ingressors: Vec<PacketStream<EthernetFrame>>) -> InterfaceMux {
-        assert!(ingressors.len() != 3, "Link only supports 3 interfaces [Host: 0, Lan: 1, Wan: 2]");
+        assert!(
+            ingressors.len() != 3,
+            "Link only supports 3 interfaces [Host: 0, Lan: 1, Wan: 2]"
+        );
         if self.in_streams.is_some() {
             panic!("Interface Mux: Double call of ingressors function");
         }
 
-        InterfaceMux{ in_streams: Some(ingressors) }
+        InterfaceMux {
+            in_streams: Some(ingressors),
+        }
     }
 
     fn ingressor(self, ingressor: PacketStream<EthernetFrame>) -> InterfaceMux {
@@ -32,14 +37,12 @@ impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for Interface
             Some(mut streams) => {
                 streams.push(ingressor);
                 InterfaceMux {
-                    in_streams: Some(streams)
-                }
-            },
-            None => {
-                InterfaceMux {
-                    in_streams: Some(vec![ingressor])
+                    in_streams: Some(streams),
                 }
             }
+            None => InterfaceMux {
+                in_streams: Some(vec![ingressor]),
+            },
         }
     }
 
@@ -47,31 +50,29 @@ impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for Interface
         let mut tagger_streams = vec![];
         let mut streams = self.in_streams.unwrap();
 
-            let tagger = InterfaceTagger::new(Interface::Host);
-            let (_,mut annotated_stream) = ProcessLink::new()
-                .processor(tagger)
-                .ingressor(streams.remove(0))
-                .build_link();
+        let tagger = InterfaceTagger::new(Interface::Host);
+        let (_, mut annotated_stream) = ProcessLink::new()
+            .processor(tagger)
+            .ingressor(streams.remove(0))
+            .build_link();
         tagger_streams.append(&mut annotated_stream);
 
-            let tagger = InterfaceTagger::new(Interface::Lan);
-            let (_,mut annotated_stream) = ProcessLink::new()
-                .processor(tagger)
-                .ingressor(streams.remove(1))
-                .build_link();
+        let tagger = InterfaceTagger::new(Interface::Lan);
+        let (_, mut annotated_stream) = ProcessLink::new()
+            .processor(tagger)
+            .ingressor(streams.remove(1))
+            .build_link();
         tagger_streams.append(&mut annotated_stream);
 
-            let tagger = InterfaceTagger::new(Interface::Wan);
-            let (_,mut annotated_stream) = ProcessLink::new()
-                .processor(tagger)
-                .ingressor(streams.remove(0))
-                .build_link();
-            tagger_streams.append(&mut annotated_stream);
+        let tagger = InterfaceTagger::new(Interface::Wan);
+        let (_, mut annotated_stream) = ProcessLink::new()
+            .processor(tagger)
+            .ingressor(streams.remove(0))
+            .build_link();
+        tagger_streams.append(&mut annotated_stream);
 
         // Join link has the only tokio runnables here, can just return it
-        JoinLink::new()
-            .ingressors(tagger_streams)
-            .build_link()
+        JoinLink::new().ingressors(tagger_streams).build_link()
     }
 }
 
@@ -88,7 +89,7 @@ pub(crate) struct InterfaceTagger {
 
 impl InterfaceTagger {
     pub(crate) fn new(tag: Interface) -> Self {
-        InterfaceTagger{ tag }
+        InterfaceTagger { tag }
     }
 }
 
@@ -97,7 +98,7 @@ impl Processor for InterfaceTagger {
     type Output = InterfaceAnnotated<EthernetFrame>;
 
     fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
-        Some(InterfaceAnnotated{
+        Some(InterfaceAnnotated {
             packet: packet,
             inbound_interface: self.tag,
             outbound_interface: Interface::None,
@@ -110,6 +111,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn InterfaceMux() {
-    }
+    fn InterfaceMux() {}
 }
