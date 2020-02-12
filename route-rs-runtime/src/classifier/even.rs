@@ -24,6 +24,6 @@ pub fn even_link(stream: PacketStream<i32>) -> Link<i32> {
         .ingressor(stream)
         .num_egressors(2)
         .classifier(Even::new())
-        .dispatcher(Box::new(|is_even| if is_even { 0 } else { 1 }))
+        .dispatcher(Box::new(|is_even| if is_even { Some(0) } else { Some(1) }))
         .build_link()
 }
