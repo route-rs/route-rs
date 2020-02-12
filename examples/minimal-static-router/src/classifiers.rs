@@ -151,9 +151,9 @@ mod tests {
                 .ingressor(immediate_stream(packets))
                 .classifier(ClassifyIP)
                 .dispatcher(Box::new(|c| match c {
-                    ClassifyIPType::IPv4 => 0,
-                    ClassifyIPType::IPv6 => 1,
-                    ClassifyIPType::None => 2,
+                    ClassifyIPType::IPv4 => Some(0),
+                    ClassifyIPType::IPv6 => Some(1),
+                    ClassifyIPType::None => Some(2),
                 }))
                 .num_egressors(3)
                 .build_link();
@@ -196,9 +196,9 @@ mod tests {
                 .num_egressors(3)
                 .classifier(ipv4_router)
                 .dispatcher(Box::new(|c| match c {
-                    Interface0 => 0,
-                    Interface1 => 1,
-                    Interface2 => 2,
+                    Interface0 => Some(0),
+                    Interface1 => Some(1),
+                    Interface2 => Some(2),
                 }))
                 .build_link();
 
@@ -244,9 +244,9 @@ mod tests {
                 .num_egressors(3)
                 .classifier(ipv6_router)
                 .dispatcher(Box::new(|c| match c {
-                    Interface0 => 0,
-                    Interface1 => 1,
-                    Interface2 => 2,
+                    Interface0 => Some(0),
+                    Interface1 => Some(1),
+                    Interface2 => Some(2),
                 }))
                 .build_link();
 
