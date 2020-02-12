@@ -4,7 +4,7 @@ use crate::linux;
 use libc;
 use std::{
     ffi::CStr,
-    io::{self, Read, Write},
+    io,
     mem::{self, MaybeUninit},
     os::unix::io::RawFd,
     ptr,
@@ -239,25 +239,6 @@ impl BoundSocket {
                 ))
             }
         }
-    }
-}
-
-impl Read for BoundSocket {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self.recv(buf) {
-            Ok((sz, _)) => Ok(sz),
-            Err(e) => Err(e),
-        }
-    }
-}
-
-impl Write for BoundSocket {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.send(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
     }
 }
 
