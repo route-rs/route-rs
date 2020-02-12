@@ -2,6 +2,7 @@
 mod test_helper;
 
 #[test]
+#[ignore]
 fn trivial_identity() {
     let test_helper = test_helper::TestHelper::new(
         "trivial-identity",
@@ -19,6 +20,7 @@ fn trivial_identity() {
 }
 
 #[test]
+#[ignore]
 fn dns_interceptor() {
     let test_helper = test_helper::TestHelper::new("dns-interceptor", vec!["--rustfmt"]);
 
