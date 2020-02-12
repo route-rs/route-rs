@@ -114,7 +114,7 @@ mod tests {
     use route_rs_runtime::utils::test::packet_generators::immediate_stream;
 
     #[test]
-    fn InterfaceMux() {
+    fn interface_mux() {
         let packets = vec![EthernetFrame::empty(); 3];
         let host = immediate_stream(packets.clone());
         let lan = immediate_stream(packets.clone());
