@@ -40,10 +40,10 @@ pub fn fizz_buzz_link(stream: PacketStream<i32>) -> Link<i32> {
         .num_egressors(4)
         .classifier(FizzBuzz::new())
         .dispatcher(Box::new(|fb| match fb {
-            FizzBuzzVariant::FizzBuzz => 0,
-            FizzBuzzVariant::Fizz => 1,
-            FizzBuzzVariant::Buzz => 2,
-            FizzBuzzVariant::None => 3,
+            FizzBuzzVariant::FizzBuzz => Some(0),
+            FizzBuzzVariant::Fizz => Some(1),
+            FizzBuzzVariant::Buzz => Some(2),
+            FizzBuzzVariant::None => Some(3),
         }))
         .build_link()
 }

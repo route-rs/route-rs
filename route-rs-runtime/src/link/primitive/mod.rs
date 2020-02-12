@@ -14,8 +14,9 @@ pub use self::process_link::*;
 mod queue_link;
 pub use self::queue_link::*;
 
-/// Uses processor defined classifications to sort input into different channels, a good example would
-/// be a flow that splits IPv4 and IPv6 packets, asynchronous.
+/// Uses processor defined classifications to sort input into different streams, a good example would
+/// be a flow that splits IPv4 and IPv6 packets, asynchronous. Packets are either dispatched to a
+/// particular stream, or dropped.
 mod classify_link;
 pub use self::classify_link::*;
 
