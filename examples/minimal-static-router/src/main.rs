@@ -116,10 +116,10 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                 .num_egressors(2)
                 .classifier(classifiers::ClassifyIP)
                 .dispatcher(Box::new(|c| match c {
-                    classifiers::ClassifyIPType::IPv4 => 0,
-                    classifiers::ClassifyIPType::IPv6 => 1,
-                    classifiers::ClassifyIPType::None => 1, // we can't drop packets in a classify. Maybe we do need
-                })) // the DropLink back?
+                    classifiers::ClassifyIPType::IPv4 => Some(0),
+                    classifiers::ClassifyIPType::IPv6 => Some(1),
+                    classifiers::ClassifyIPType::None => None, // Drop these packets
+                }))
                 .build_link();
             all_runnables.append(&mut classify_runables);
 
@@ -137,9 +137,9 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                     .num_egressors(3)
                     .classifier(ipv4_router)
                     .dispatcher(Box::new(|c| match c {
-                        classifiers::Interface::Interface0 => 0,
-                        classifiers::Interface::Interface1 => 1,
-                        classifiers::Interface::Interface2 => 2,
+                        classifiers::Interface::Interface0 => Some(0),
+                        classifiers::Interface::Interface1 => Some(1),
+                        classifiers::Interface::Interface2 => Some(2),
                     }))
                     .build_link();
             all_runnables.append(&mut ipv4_subnet_router_runnables);
@@ -172,9 +172,9 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                     .num_egressors(3)
                     .classifier(ipv6_router)
                     .dispatcher(Box::new(|c| match c {
-                        classifiers::Interface::Interface0 => 0,
-                        classifiers::Interface::Interface1 => 1,
-                        classifiers::Interface::Interface2 => 2,
+                        classifiers::Interface::Interface0 => Some(0),
+                        classifiers::Interface::Interface1 => Some(1),
+                        classifiers::Interface::Interface2 => Some(2),
                     }))
                     .build_link();
             all_runnables.append(&mut ipv6_subnet_router_runnables);
