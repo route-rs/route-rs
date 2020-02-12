@@ -14,7 +14,7 @@ use tokio::stream::Stream;
 pub struct ClassifyLink<C: Classifier> {
     in_stream: Option<PacketStream<C::Packet>>,
     classifier: Option<C>,
-    dispatcher: Option<Box<dyn Fn(C::Class) -> usize + Send + Sync + 'static>>,
+    dispatcher: Option<Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'static>>,
     queue_capacity: usize,
     num_egressors: Option<usize>,
 }
@@ -42,7 +42,7 @@ impl<C: Classifier> ClassifyLink<C> {
 
     pub fn dispatcher(
         self,
-        dispatcher: Box<dyn Fn(C::Class) -> usize + Send + Sync + 'static>,
+        dispatcher: Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'static>,
     ) -> Self {
         ClassifyLink {
             in_stream: self.in_stream,
@@ -160,7 +160,7 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
 
 pub struct ClassifyIngressor<'a, C: Classifier> {
     input_stream: PacketStream<C::Packet>,
-    dispatcher: Box<dyn Fn(C::Class) -> usize + Send + Sync + 'a>,
+    dispatcher: Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'a>,
     to_egressors: Vec<Sender<Option<C::Packet>>>,
     classifier: C,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
@@ -171,7 +171,7 @@ impl<'a, C: Classifier> Unpin for ClassifyIngressor<'a, C> {}
 impl<'a, C: Classifier> ClassifyIngressor<'a, C> {
     fn new(
         input_stream: PacketStream<C::Packet>,
-        dispatcher: Box<dyn Fn(C::Class) -> usize + Send + Sync + 'a>,
+        dispatcher: Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'a>,
         to_egressors: Vec<Sender<Option<C::Packet>>>,
         classifier: C,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
@@ -221,17 +221,19 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
                 }
                 Some(packet) => {
                     let class = ingressor.classifier.classify(&packet);
-                    let port = (ingressor.dispatcher)(class);
-                    if port >= ingressor.to_egressors.len() {
-                        panic!("Tried to access invalid port: {}", port);
+                    // If we get Some(port) back, send the packet; else we drop it.
+                    if let Some(port) = (ingressor.dispatcher)(class) {
+                        if port >= ingressor.to_egressors.len() {
+                            panic!("Tried to access invalid port: {}", port);
+                        }
+                        if let Err(err) = ingressor.to_egressors[port].try_send(Some(packet)) {
+                            panic!(
+                                "Error in to_egressors[{}] sender, have nowhere to put packet: {:?}",
+                                port, err
+                            );
+                        }
+                        unpark_and_wake(&ingressor.task_parks[port]);
                     }
-                    if let Err(err) = ingressor.to_egressors[port].try_send(Some(packet)) {
-                        panic!(
-                            "Error in to_egressors[{}] sender, have nowhere to put packet: {:?}",
-                            port, err
-                        );
-                    }
-                    unpark_and_wake(&ingressor.task_parks[port]);
                 }
             }
         }
@@ -252,7 +254,7 @@ mod tests {
         ClassifyLink::new()
             .num_egressors(10)
             .classifier(Even::new())
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
+            .dispatcher(Box::new(|evenness| if evenness { Some(0) } else { Some(1) }))
             .build_link();
     }
 
@@ -265,7 +267,7 @@ mod tests {
         ClassifyLink::new()
             .ingressor(packet_generator)
             .classifier(Even::new())
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
+            .dispatcher(Box::new(|evenness| if evenness { Some(0) } else { Some(1) }))
             .build_link();
     }
 
@@ -278,7 +280,7 @@ mod tests {
         ClassifyLink::<Even>::new()
             .ingressor(packet_generator)
             .num_egressors(10)
-            .dispatcher(Box::new(|evenness| if evenness { 0 } else { 1 }))
+            .dispatcher(Box::new(|evenness| if evenness { Some(0) } else { Some(1) }))
             .build_link();
     }
 
