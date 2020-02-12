@@ -40,8 +40,8 @@ impl route_rs_runtime::pipeline::Runner for Pipeline {
             .ingressor(link_2_egress_0)
             .classifier(elem_2_classifydns)
             .dispatcher(Box::new(|c| match c {
-                ClassifyDNSOutput::DNS => 0,
-                _ => 1,
+                ClassifyDNSOutput::DNS => Some(0),
+                _ => None,
             }))
             .num_egressors(2)
             .build_link();
