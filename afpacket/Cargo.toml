@@ -9,7 +9,7 @@ license = "MIT"
 
 [dependencies]
 libc = "0.2.62"
-futures = "0.3"
+futures = { version = "0.3", optional = true }
 tokio = { version = "0.2", optional = true, features = ["io-driver", "io-util"] }
 mio = { version = "0.6", optional = true }
 
@@ -21,4 +21,4 @@ rand = "0.7.0"
 [features]
 default = []
 
-tokio-support = ["tokio", "mio"]
+tokio-support = ["tokio", "mio", "futures"]
