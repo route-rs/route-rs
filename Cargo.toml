@@ -8,6 +8,7 @@ members = [
 
     # I/O Crates
     "afpacket",
+    "route-rs-afpacket",
 
     # Example crates
     # These crates show usage of route-rs features and should _not_ be published to crates.io
