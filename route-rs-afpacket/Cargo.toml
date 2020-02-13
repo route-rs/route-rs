@@ -1,0 +1,18 @@
+[package]
+name = "route-rs-afpacket"
+version = "0.1.0"
+authors = ["Nathan Moos <moosingin3space@gmail.com>"]
+edition = "2018"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+afpacket = { path = "../afpacket", features = ["tokio-support"] }
+route-rs-runtime = { path = "../route-rs-runtime" }
+futures = "0.3.4"
+
+[dev-dependencies]
+route-rs-packets = { path = "../route-rs-packets" }
+tokio = { version = "0.2", features = ["io-driver", "rt-core", "sync", "time"] }
+rand = "0.7.0"

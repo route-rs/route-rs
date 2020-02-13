@@ -1,3 +1,5 @@
+//! This crate exposes Linux's AF_PACKET sockets in a safe way.
+#![deny(missing_docs)]
 #![cfg(target_os = "linux")]
 mod linux;
 mod sockets;
