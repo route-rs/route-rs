@@ -64,3 +64,11 @@ pub trait LinkBuilder<Input, Output> {
 pub trait ProcessLinkBuilder<P: Processor>: LinkBuilder<P::Input, P::Output> {
     fn processor(self, processor: P) -> Self;
 }
+
+pub trait IngressLinkBuilder<Packet, Receiver>: LinkBuilder<(), Packet> {
+    fn channel(self, receiver: Receiver) -> Self;
+}
+
+pub trait EgressLinkBuilder<Packet, Sender>: LinkBuilder<Packet, ()> {
+    fn channel(self, sender: Sender) -> Self;
+}
