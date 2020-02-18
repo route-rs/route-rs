@@ -10,13 +10,6 @@ pub struct OutputChannelLink<Packet> {
 }
 
 impl<Packet> OutputChannelLink<Packet> {
-    pub fn new() -> Self {
-        OutputChannelLink {
-            in_stream: None,
-            channel_sender: None,
-        }
-    }
-
     pub fn channel(self, channel_sender: crossbeam::Sender<Packet>) -> Self {
         OutputChannelLink {
             in_stream: self.in_stream,
@@ -26,6 +19,13 @@ impl<Packet> OutputChannelLink<Packet> {
 }
 
 impl<Packet: Send + 'static> LinkBuilder<Packet, ()> for OutputChannelLink<Packet> {
+    fn new() -> Self {
+        OutputChannelLink {
+            in_stream: None,
+            channel_sender: None,
+        }
+    }
+
     fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),

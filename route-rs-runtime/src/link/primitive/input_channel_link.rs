@@ -10,12 +10,6 @@ pub struct InputChannelLink<Packet> {
 }
 
 impl<Packet> InputChannelLink<Packet> {
-    pub fn new() -> Self {
-        InputChannelLink {
-            channel_receiver: None,
-        }
-    }
-
     pub fn channel(self, channel_receiver: crossbeam::Receiver<Packet>) -> Self {
         InputChannelLink {
             channel_receiver: Some(channel_receiver),
@@ -24,6 +18,12 @@ impl<Packet> InputChannelLink<Packet> {
 }
 
 impl<Packet: Send + 'static> LinkBuilder<(), Packet> for InputChannelLink<Packet> {
+    fn new() -> Self {
+        InputChannelLink {
+            channel_receiver: None,
+        }
+    }
+
     fn ingressors(self, mut _in_streams: Vec<PacketStream<()>>) -> Self {
         panic!("InputChannelLink does not take stream ingressors")
     }
