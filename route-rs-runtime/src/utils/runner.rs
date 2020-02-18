@@ -134,3 +134,73 @@ pub fn build_and_run_router<
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::link::primitive::{ProcessLink, InputChannelLink, OutputChannelLink};
+    use crate::link::ProcessLinkBuilder;
+    use crate::processor::Identity;
+    use crate::link::composite::MtoNLink;
+
+    #[test]
+    fn identity_router() {
+        let router = ProcessLink::new()
+            .processor(Identity::<u32>::new());
+
+        let (ingress_sender, ingress_receiver) = crossbeam::unbounded::<u32>();
+        let (egress_sender, egress_receiver) = crossbeam::unbounded::<u32>();
+
+        assert_eq!(ingress_sender.send(1234), Ok(()));
+        assert_eq!(ingress_sender.send(5678), Ok(()));
+
+        drop(ingress_sender);
+
+        // TODO: Remove this comment if we fix the ugliness or decide it's intractable
+        // This is the ugliest part of this implementation and I would love to figure out a way to
+        // make it less awful. Named parameters don't seem to work here for mysterious reasons.
+        build_and_run_router::<_, InputChannelLink<u32>, _, OutputChannelLink<u32>, _>(
+            vec![ingress_receiver],
+            vec![egress_sender],
+            router,
+        );
+
+        assert_eq!(egress_receiver.recv(), Ok(1234));
+        assert_eq!(egress_receiver.recv(), Ok(5678));
+    }
+
+    #[test]
+    fn mton_router() {
+        let router = MtoNLink::new()
+            .num_egressors(3);
+
+        let (ingress_sender_1, ingress_receiver_1) = crossbeam::unbounded::<u32>();
+        let (ingress_sender_2, ingress_receiver_2) = crossbeam::unbounded::<u32>();
+
+        let (egress_sender_1, egress_receiver_1) = crossbeam::unbounded::<u32>();
+        let (egress_sender_2, egress_receiver_2) = crossbeam::unbounded::<u32>();
+        let (egress_sender_3, egress_receiver_3) = crossbeam::unbounded::<u32>();
+
+        assert_eq!(ingress_sender_1.send(1234), Ok(()));
+        assert_eq!(ingress_sender_2.send(5678), Ok(()));
+
+        drop(ingress_sender_1);
+        drop(ingress_sender_2);
+
+        build_and_run_router::<_, InputChannelLink<u32>, _, OutputChannelLink<u32>, _>(
+            vec![ingress_receiver_1, ingress_receiver_2],
+            vec![egress_sender_1, egress_sender_2, egress_sender_3],
+            router,
+        );
+
+        let mut egress_1_items = egress_receiver_1.iter().collect::<Vec<u32>>();
+        egress_1_items.sort();
+        assert_eq!(egress_1_items, &[1234, 5678]);
+        let mut egress_2_items = egress_receiver_2.iter().collect::<Vec<u32>>();
+        egress_2_items.sort();
+        assert_eq!(egress_2_items, &[1234, 5678]);
+        let mut egress_3_items = egress_receiver_3.iter().collect::<Vec<u32>>();
+        egress_3_items.sort();
+        assert_eq!(egress_3_items, &[1234, 5678]);
+    }
+}
