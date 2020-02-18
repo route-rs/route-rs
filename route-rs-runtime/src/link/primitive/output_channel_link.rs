@@ -1,4 +1,4 @@
-use crate::link::{Link, LinkBuilder, PacketStream};
+use crate::link::{EgressLinkBuilder, Link, LinkBuilder, PacketStream};
 use futures::prelude::*;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
@@ -9,8 +9,11 @@ pub struct OutputChannelLink<Packet> {
     channel_sender: Option<crossbeam::Sender<Packet>>,
 }
 
-impl<Packet> OutputChannelLink<Packet> {
-    pub fn channel(self, channel_sender: crossbeam::Sender<Packet>) -> Self {
+impl<Packet: Send + 'static> EgressLinkBuilder<Packet> for OutputChannelLink<Packet>
+{
+    type Sender = crossbeam::Sender<Packet>;
+
+    fn channel(self, channel_sender: crossbeam::Sender<Packet>) -> Self {
         OutputChannelLink {
             in_stream: self.in_stream,
             channel_sender: Some(channel_sender),

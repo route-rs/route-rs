@@ -1,4 +1,4 @@
-use crate::link::{Link, LinkBuilder, PacketStream};
+use crate::link::{IngressLinkBuilder, Link, LinkBuilder, PacketStream};
 use crossbeam::crossbeam_channel;
 use futures::prelude::*;
 use futures::task::{Context, Poll};
@@ -9,8 +9,11 @@ pub struct InputChannelLink<Packet> {
     channel_receiver: Option<crossbeam::Receiver<Packet>>,
 }
 
-impl<Packet> InputChannelLink<Packet> {
-    pub fn channel(self, channel_receiver: crossbeam::Receiver<Packet>) -> Self {
+impl<Packet: Send + 'static> IngressLinkBuilder<Packet> for InputChannelLink<Packet>
+{
+    type Receiver = crossbeam::Receiver<Packet>;
+
+    fn channel(self, channel_receiver: crossbeam::Receiver<Packet>) -> Self {
         InputChannelLink {
             channel_receiver: Some(channel_receiver),
         }
