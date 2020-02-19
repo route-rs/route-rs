@@ -121,7 +121,7 @@ mod tests {
     use route_rs_packets::EthernetFrame;
     use route_rs_runtime::link::primitive::ClassifyLink;
     use route_rs_runtime::link::LinkBuilder;
-    use route_rs_runtime::utils::test::harness::{initialize_runtime, run_link};
+    use route_rs_runtime::utils::test::harness::{initialize_runtime, test_link};
     use route_rs_runtime::utils::test::packet_generators::immediate_stream;
 
     #[test]
@@ -158,7 +158,7 @@ mod tests {
                 .num_egressors(3)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0][0], frame1);
         assert_eq!(results[1][0], frame2);
@@ -202,7 +202,7 @@ mod tests {
                 }))
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         assert_eq!(results[0][0], packet_interface0);
@@ -250,7 +250,7 @@ mod tests {
                 }))
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         assert_eq!(results[0][0], packet_interface0);
