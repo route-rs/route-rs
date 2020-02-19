@@ -95,7 +95,7 @@ impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
 mod tests {
     use super::*;
     use crate::classifier::even_link;
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -115,7 +115,7 @@ mod tests {
                 .ingressor(immediate_stream(packets))
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], vec![]);
     }
@@ -133,7 +133,7 @@ mod tests {
                 .ingressor(Box::new(packet_generator))
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], vec![]);
     }
@@ -156,7 +156,7 @@ mod tests {
                 even_runnables,
                 vec![even_egressors.pop().unwrap(), drop_egressors.remove(0)],
             );
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
     }
@@ -173,7 +173,7 @@ mod tests {
                 .seed(0)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], vec![1, 2, 1337, 7]);
     }

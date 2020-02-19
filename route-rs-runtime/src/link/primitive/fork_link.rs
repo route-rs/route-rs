@@ -183,7 +183,7 @@ impl<P: Send + Clone> Future for ForkIngressor<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::immediate_stream;
 
     #[test]
@@ -222,7 +222,7 @@ mod tests {
                 .num_egressors(1)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert!(results[0].is_empty());
     }
@@ -238,7 +238,7 @@ mod tests {
                 .num_egressors(1)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -254,7 +254,7 @@ mod tests {
                 .num_egressors(2)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets.clone());
         assert_eq!(results[1], packets);
@@ -271,7 +271,7 @@ mod tests {
                 .num_egressors(3)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets.clone());
         assert_eq!(results[1], packets.clone());
