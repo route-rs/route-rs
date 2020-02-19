@@ -271,7 +271,7 @@ mod tests {
     use core::time;
     use rand::{thread_rng, Rng};
 
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
 
     #[test]
     #[should_panic]
@@ -315,7 +315,7 @@ mod tests {
 
             let link = JoinLink::new().ingressors(input_streams).build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), packets.len() * 2);
     }
@@ -331,7 +331,7 @@ mod tests {
                 .ingressor(immediate_stream(packets.clone()))
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), packets.len() * 2);
     }
@@ -351,7 +351,7 @@ mod tests {
 
             let link = JoinLink::new().ingressors(input_streams).build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), stream_len * num_streams);
     }
@@ -376,7 +376,7 @@ mod tests {
 
             let link = JoinLink::new().ingressors(input_streams).build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), packets.len() * 2);
     }
@@ -392,7 +392,7 @@ mod tests {
 
             let link = JoinLink::new().ingressors(input_streams).build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0][0..10].iter().sum::<usize>(), 4);
     }
@@ -408,7 +408,7 @@ mod tests {
 
             let link = JoinLink::new().ingressors(input_streams).build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), packets.len() * 2);
     }
@@ -423,7 +423,7 @@ mod tests {
 
             let link = JoinLink::new().ingressors(input_streams).build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], []);
     }
