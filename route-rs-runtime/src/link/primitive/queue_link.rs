@@ -265,7 +265,7 @@ mod tests {
     use crate::link::primitive::ProcessLink;
     use crate::link::{LinkBuilder, ProcessLinkBuilder};
     use crate::processor::{Drop, Identity, TransformFrom};
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
     use rand::{thread_rng, Rng};
@@ -311,7 +311,7 @@ mod tests {
                 .ingressor(immediate_stream(packets.clone()))
                 .processor(Identity::new())
                 .build_link();
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -328,7 +328,7 @@ mod tests {
                 .processor(Identity::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), stream_len);
     }
@@ -357,7 +357,7 @@ mod tests {
                 .queue_capacity(1)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -373,7 +373,7 @@ mod tests {
                 .processor(Identity::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], []);
     }
@@ -397,7 +397,7 @@ mod tests {
             runnables0.append(&mut runnables1);
             egressors0.append(&mut egressors1);
             let link = (runnables0, egressors0);
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -435,7 +435,7 @@ mod tests {
             egressors0.append(&mut egressors3);
 
             let link = (runnables1, egressors0);
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -456,7 +456,7 @@ mod tests {
                 .processor(Identity::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -472,7 +472,7 @@ mod tests {
                 .processor(TransformFrom::<char, u32>::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         let expected: Vec<u32> = packets.map(|p| p.into()).collect();
@@ -490,7 +490,7 @@ mod tests {
                 .processor(Drop::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], [])
     }
