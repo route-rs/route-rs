@@ -162,7 +162,7 @@ mod tests {
     use crate::utils::test::packet_generators::immediate_stream;
     use std::net::Ipv4Addr;
 
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
 
     #[test]
     fn transform_m_streams_on_to_n_egress_streams() {
@@ -180,7 +180,7 @@ mod tests {
                 .processor(TransformFrom::<u32, Ipv4Addr>::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), packets.len() * 2);
         assert_eq!(results[1].len(), packets.len() * 2);

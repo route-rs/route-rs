@@ -244,7 +244,7 @@ impl<'a, C: Classifier> Future for ClassifyIngressor<'a, C> {
 mod tests {
     use super::*;
     use crate::classifier::{even_link, fizz_buzz_link, Even};
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -302,7 +302,7 @@ mod tests {
         let results = runtime.block_on(async {
             let packet_generator = immediate_stream(vec![0, 1, 2, 420, 1337, 3, 4, 5, 6, 7, 8, 9]);
 
-            run_link(even_link(packet_generator)).await
+            test_link(even_link(packet_generator), None).await
         });
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
@@ -317,7 +317,7 @@ mod tests {
             let packet_generator =
                 PacketIntervalGenerator::new(time::Duration::from_millis(10), packets.into_iter());
 
-            run_link(even_link(Box::new(packet_generator))).await
+            test_link(even_link(Box::new(packet_generator)), None).await
         });
         assert_eq!(results[0], vec![0, 2, 420, 4, 6, 8]);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
@@ -329,7 +329,7 @@ mod tests {
         let results = runtime.block_on(async {
             let packet_generator = immediate_stream(vec![1, 1337, 3, 5, 7, 9]);
 
-            run_link(even_link(packet_generator)).await
+            test_link(even_link(packet_generator), None).await
         });
         assert_eq!(results[0], []);
         assert_eq!(results[1], vec![1, 1337, 3, 5, 7, 9]);
@@ -341,7 +341,7 @@ mod tests {
         let results = runtime.block_on(async {
             let packet_generator = immediate_stream(0..2000);
 
-            run_link(even_link(packet_generator)).await
+            test_link(even_link(packet_generator), None).await
         });
         assert_eq!(results[0].len(), 1000);
         assert_eq!(results[1].len(), 1000);
@@ -353,7 +353,7 @@ mod tests {
         let results = runtime.block_on(async {
             let packet_generator = immediate_stream(0..=30);
 
-            run_link(fizz_buzz_link(packet_generator)).await
+            test_link(fizz_buzz_link(packet_generator), None).await
         });
 
         let expected_fizz_buzz = vec![0, 15, 30];
@@ -382,7 +382,7 @@ mod tests {
             fb_runnables.append(&mut eo_runnables);
 
             let link = (fb_runnables, eo_egressors);
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], vec![2, 4, 8, 14, 16, 22, 26, 28]);
         assert_eq!(results[1], vec![1, 7, 11, 13, 17, 19, 23, 29]);

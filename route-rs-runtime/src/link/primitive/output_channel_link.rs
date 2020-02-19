@@ -99,7 +99,7 @@ impl<Packet> Future for StreamToChannel<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::immediate_stream;
     use crossbeam::crossbeam_channel;
     use std::thread;
@@ -147,7 +147,7 @@ mod tests {
                 .channel(send)
                 .build_link();
 
-            let link_results = run_link(link).await;
+            let link_results = test_link(link, None).await;
             (link_results, recv)
         });
         assert!(results.0.is_empty());
@@ -175,7 +175,7 @@ mod tests {
                 .channel(send)
                 .build_link();
 
-            let link_results = run_link(link).await;
+            let link_results = test_link(link, None).await;
             let output_results = recv_thread.join().unwrap();
             (link_results, output_results)
         });

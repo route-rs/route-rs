@@ -132,7 +132,7 @@ impl<P: Processor> Stream for ProcessRunner<P> {
 mod tests {
     use super::*;
     use crate::processor::{Drop, Identity, TransformFrom};
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::{immediate_stream, PacketIntervalGenerator};
     use core::time;
 
@@ -180,7 +180,7 @@ mod tests {
                 .processor(Identity::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -201,7 +201,7 @@ mod tests {
                 .processor(Identity::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
@@ -219,7 +219,7 @@ mod tests {
                 .processor(TransformFrom::<char, u32>::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         let expected_output: Vec<u32> = packets.map(|p| p.into()).collect();
         assert_eq!(results[0], expected_output);
@@ -236,7 +236,7 @@ mod tests {
                 .processor(Drop::new())
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], []);
     }

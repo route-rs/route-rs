@@ -133,7 +133,7 @@ mod tests {
     use crate::link::LinkBuilder;
     use crate::utils::test::packet_generators::immediate_stream;
 
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
 
     #[test]
     fn clone_m_streams_on_to_n_egress_streams() {
@@ -150,7 +150,7 @@ mod tests {
                 .ingressors(input_streams)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0].len(), packets.len() * 2);
         assert_eq!(results[1].len(), packets.len() * 2);
