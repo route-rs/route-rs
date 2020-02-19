@@ -67,7 +67,7 @@ impl<Packet> Stream for StreamFromChannel<Packet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test::harness::{initialize_runtime, run_link};
+    use crate::utils::test::harness::{initialize_runtime, test_link};
     use crate::utils::test::packet_generators::immediate_stream;
 
     #[test]
@@ -102,7 +102,7 @@ mod tests {
             }
             drop(send);
 
-            run_link(link).await
+            test_link(link, None).await
         });
         assert_eq!(results[0], packets);
     }
