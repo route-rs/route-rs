@@ -64,7 +64,7 @@ mod tests {
     use route_rs_packets::{EthernetFrame, Ipv4Packet};
     use route_rs_runtime::link::primitive::ProcessLink;
     use route_rs_runtime::link::{LinkBuilder, ProcessLinkBuilder};
-    use route_rs_runtime::utils::test::harness::{initialize_runtime, run_link};
+    use route_rs_runtime::utils::test::harness::{initialize_runtime, test_link};
     use route_rs_runtime::utils::test::packet_generators::immediate_stream;
 
     #[test]
@@ -89,7 +89,7 @@ mod tests {
                 .processor(Ipv4Decap)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         let test_packet = Ipv4Packet::from_buffer(data, Some(0), 14).unwrap();
@@ -114,7 +114,7 @@ mod tests {
                 .processor(Ipv4Encap)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         let test_frame = EthernetFrame::from_buffer(data, 0).unwrap();
@@ -147,7 +147,7 @@ mod tests {
                 .processor(Ipv6Decap)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         let test_packet = Ipv6Packet::from_buffer(data, Some(0), 14).unwrap();
@@ -178,7 +178,7 @@ mod tests {
                 .processor(Ipv6Encap)
                 .build_link();
 
-            run_link(link).await
+            test_link(link, None).await
         });
 
         let test_frame = EthernetFrame::from_buffer(data, 0).unwrap();
