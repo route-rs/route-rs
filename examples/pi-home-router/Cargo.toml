@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 route-rs-runtime = { path = "../../route-rs-runtime" }
 route-rs-packets = { path = "../../route-rs-packets" }
+afpacket = { path = "../../afpacket" }
 tokio = {version = "0.2", features = ["full"] }
 futures = "0.3"
 crossbeam = "0.7.2"
