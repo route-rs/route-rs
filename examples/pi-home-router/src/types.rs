@@ -23,3 +23,16 @@ pub enum Interface {
     Lan,
     Unmarked,
 }
+
+/// EtherType:
+///
+/// An enum to label the ethernet type of a packet.
+/// This is not an exhaustive list, and only contains supported
+/// EtherTypes
+#[allow(dead_code)]
+pub(crate) enum EtherType {
+    ARP,
+    IPv4,
+    IPv6,
+    Unsupported,
+}
