@@ -1,6 +1,6 @@
 use crate::types::{InterfaceAnnotated, EtherType};
-use crate::link::interface::interface_collect::InterfaceCollect;
-use crate::classifier::ethertype::ClassifyByEtherType;
+use crate::interface::link::InterfaceCollect;
+use crate::interface::classifier::ByEtherType;
 use route_rs_runtime::link::{LinkBuilder, PacketStream, Link};
 use route_rs_runtime::link::primitive::ClassifyLink;
 use route_rs_packets::EthernetFrame;
@@ -104,7 +104,7 @@ impl LinkBuilder<(), InterfaceAnnotated<EthernetFrame>> for RouterIntake {
         let (mut sort_runnables, sort_egressors) = ClassifyLink::new()
             .ingressors(collect_egressors)
             .num_egressors(3)
-            .classifier(ClassifyByEtherType)
+            .classifier(ByEtherType)
             .dispatcher(|class| match class {
                 EtherType::ARP => Some(0),
                 EtherType::IPv4 => Some(1),
