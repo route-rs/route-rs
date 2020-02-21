@@ -1,5 +1,5 @@
 use crate::types::InterfaceAnnotated;
-use crate::link::interface::interface_dispatch::InterfaceDispatch;
+use crate::interface::link::InterfaceDispatch;
 use route_rs_runtime::link::{LinkBuilder, PacketStream, Link};
 use route_rs_runtime::link::primitive::JoinLink;
 use route_rs_packets::EthernetFrame;

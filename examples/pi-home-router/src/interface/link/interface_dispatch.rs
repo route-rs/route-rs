@@ -1,6 +1,6 @@
 use crate::types::{Interface, InterfaceAnnotated};
-use crate::classifier::interface::ClassifyByOutboundInterface;
-use crate::processor::interface::InterfaceAnnotationDecap;
+use crate::interface::processor::InterfaceAnnotationDecap;
+use crate::interface::classifier::ByOutboundInterface;
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
     primitive::{ProcessLink, ClassifyLink},
@@ -46,7 +46,7 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
     fn build_link(self) -> Link<EthernetFrame> {
         let (runnables, mut ce) = ClassifyLink::new()
             .ingressor(self.in_stream.unwrap())
-            .classifier(ClassifyByOutboundInterface)
+            .classifier(ByOutboundInterface)
             .num_egressors(3)
             .dispatcher(Box::new( |interface| match interface {
                 Interface::Host => Some(0),
