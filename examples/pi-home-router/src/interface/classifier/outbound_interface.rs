@@ -3,9 +3,9 @@ use route_rs_packets::EthernetFrame;
 use crate::types::{InterfaceAnnotated, Interface};
 
 #[derive(Default)]
-pub(crate) struct ClassifyByOutboundInterface;
+pub(crate) struct ByOutboundInterface;
 
-impl Classifier for ClassifyByOutboundInterface {
+impl Classifier for ByOutboundInterface {
     type Packet = InterfaceAnnotated<EthernetFrame>;
     type Class = Interface;
 
