@@ -1,5 +1,5 @@
 use crate::types::{Interface, InterfaceAnnotated};
-use crate::processor::interface::InterfaceAnnotationEncap;
+use crate::interface::processor::InterfaceAnnotationEncap;
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
     primitive::{JoinLink, ProcessLink},
