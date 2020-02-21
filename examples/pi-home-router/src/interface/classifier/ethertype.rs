@@ -2,9 +2,9 @@ use crate::types::{InterfaceAnnotated, EtherType};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::classifier::Classifier;
 
-pub(crate) struct ClassifyByEtherType {}
+pub(crate) struct ByEtherType {}
 
-impl Classifier for ClassifyByEtherType {
+impl Classifier for ByEtherType {
     type Packet = InterfaceAnnotated<EthernetFrame>;
     type Class = EtherType;
 
