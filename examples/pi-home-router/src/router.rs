@@ -1,4 +1,7 @@
-use route_rs_runtime::link::{Link, LinkBuilder, PacketStream};
+use crate::arp::ArpHandler;
+use route_rs_runtime::link::primitive::ProcessLink;
+use route_rs_runtime::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
+use route_rs_runtime::utils::test::packet_generators::immediate_stream;
 
 /// Top level structure, implements LinkBuilder so it can be run by the test harness
 #[derive(Default)]
@@ -55,6 +58,13 @@ impl LinkBuilder<(), ()> for Router {
     fn build_link(self) -> Link<()> {
         // Return an empty link for now. As we build the link, this should be returning
         // all the relevant runnables, and no egressors(Since our router has none)
+
+        // TODO: wire up from protocol classifier
+        let arp_link = ProcessLink::new()
+            .ingressor(immediate_stream(vec![]))
+            .processor(ArpHandler::new())
+            .build_link();
+
         (vec![], vec![])
     }
 }
