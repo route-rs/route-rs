@@ -16,7 +16,7 @@ pub(crate) struct InterfaceAnnotated<P: Packet> {
 ///
 /// An enum to label the inbound and outbound interfaces with, None is used to
 /// denote an unknown or yet-to-be determined interface.
-#[derive(Copy, Debug, Clone)]
+#[derive(Copy, Debug, Clone, PartialEq)]
 pub enum Interface {
     Host,
     Wan,
