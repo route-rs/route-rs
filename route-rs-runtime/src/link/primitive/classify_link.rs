@@ -10,11 +10,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::stream::Stream;
 
+type Dispatcher<'a, Class> = dyn Fn(Class) -> Option<usize> + Send + Sync + 'a;
+
 #[derive(Default)]
 pub struct ClassifyLink<C: Classifier> {
     in_stream: Option<PacketStream<C::Packet>>,
     classifier: Option<C>,
-    dispatcher: Option<Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'static>>,
+    dispatcher: Option<Box<Dispatcher<'static, C::Class>>>,
     queue_capacity: usize,
     num_egressors: Option<usize>,
 }
@@ -42,7 +44,7 @@ impl<C: Classifier> ClassifyLink<C> {
 
     pub fn dispatcher(
         self,
-        dispatcher: Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'static>,
+        dispatcher: Box<Dispatcher<'static, C::Class>>,
     ) -> Self {
         ClassifyLink {
             in_stream: self.in_stream,
@@ -160,7 +162,7 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
 
 pub struct ClassifyIngressor<'a, C: Classifier> {
     input_stream: PacketStream<C::Packet>,
-    dispatcher: Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'a>,
+    dispatcher: Box<Dispatcher<'a, C::Class>>,
     to_egressors: Vec<Sender<Option<C::Packet>>>,
     classifier: C,
     task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
@@ -171,7 +173,7 @@ impl<'a, C: Classifier> Unpin for ClassifyIngressor<'a, C> {}
 impl<'a, C: Classifier> ClassifyIngressor<'a, C> {
     fn new(
         input_stream: PacketStream<C::Packet>,
-        dispatcher: Box<dyn Fn(C::Class) -> Option<usize> + Send + Sync + 'a>,
+        dispatcher: Box<Dispatcher<'a, C::Class>>,
         to_egressors: Vec<Sender<Option<C::Packet>>>,
         classifier: C,
         task_parks: Vec<Arc<AtomicCell<TaskParkState>>>,
