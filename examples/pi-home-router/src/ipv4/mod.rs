@@ -161,6 +161,15 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
             .build_link();
         unpack_link!(host_to_lan_annotate => all_runnables, [from_host_to_lan_annotated]);
 
+        // Since the NAT encapsulator doesn't care where the packets come from, and we're going to
+        // rewrite the destination interface afterward anyways, we can just strip the annotation
+        // entirely at this point. We'll rebuild it on the other side.
+        let host_to_wan_annot_decap = ProcessLink::new()
+            .ingressor(from_host_to_wan_annotated)
+            .processor(InterfaceAnnotationDecap::new())
+            .build_link();
+        unpack_link!(host_to_wan_annot_decap => all_runnables, [from_host_to_wan]);
+
         // Packets from the LAN are either bound for the Host (or LAN Broadcast), else they go out
         // to the WAN. If we receive packets bound for the LAN, we discard them because we don't
         // want to reflect traffic back into the LAN link.
@@ -191,6 +200,42 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
             .processor(InterfaceAnnotationSetOutbound::new(Interface::Host))
             .build_link();
         unpack_link!(lan_to_host_annotate => all_runnables, [from_lan_to_host_annotated]);
+
+        // Since the NAT encapsulator doesn't care where the packets come from, and we're going to
+        // rewrite the destination interface afterward anyways, we can just strip the annotation
+        // entirely at this point. We'll rebuild it on the other side.
+        let lan_to_wan_annot_decap = ProcessLink::new()
+            .ingressor(from_lan_to_wan_annotated)
+            .processor(InterfaceAnnotationDecap::new())
+            .build_link();
+        unpack_link!(lan_to_wan_annot_decap => all_runnables, [from_lan_to_wan]);
+
+        // Join the LAN and Host traffic before NAT encapsulation
+        let join_host_lan_for_nat = JoinLink::new()
+            .ingressors(vec![from_host_to_wan, from_lan_to_wan])
+            .build_link();
+        unpack_link!(join_host_lan_for_nat => all_runnables, [from_join_host_lan_for_nat]);
+
+        // Host or LAN packets that are destined for the WAN must be encapsulated by NAT.
+        //
+        // TODO: Implement NAT encapsulator
+        let nat_encap = ProcessLink::new()
+            .ingressor(from_join_host_lan_for_nat)
+            .processor(Identity::new())
+            .build_link();
+        unpack_link!(nat_encap => all_runnables, [from_nat_encap]);
+
+        // Since all NAT encapsulated traffic is from the LAN bound for the WAN, we can just
+        // regenerate the interface annotations here. Traffic from the Host is marked as LAN here,
+        // but that's not really inaccurate and we won't use this information later anyway.
+        let nat_encap_to_wan = ProcessLink::new()
+            .ingressor(from_nat_encap)
+            .processor(InterfaceAnnotationEncap::new(
+                Interface::Lan,
+                Interface::Wan,
+            ))
+            .build_link();
+        unpack_link!(nat_encap_to_wan => all_runnables, [from_nat_encap_annotated]);
 
         // Discard all packets from the WAN that aren't destined for my WAN IP. We only have one WAN
         // address, so anything else that comes from the WAN is an error by upstream. We don't care
@@ -267,10 +312,9 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
         // Join everything so we have one outbound packet stream
         let final_join = JoinLink::new()
             .ingressors(vec![
-                from_host_to_wan_annotated,
                 from_host_to_lan_annotated,
+                from_nat_encap_annotated,
                 from_lan_to_host_annotated,
-                from_lan_to_wan_annotated,
                 from_nat_to_lan_annotated,
                 from_nat_to_host_annotated,
             ])
@@ -495,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn from_lan_to_wan_isnt_dropped() {
+    fn from_lan_to_wan_goes_to_wan() {
         let mut from_lan_to_wan_packet = Ipv4Packet::empty();
         from_lan_to_wan_packet.set_dest_addr(Ipv4Addr::new(192, 0, 2, 7));
         let from_lan_to_wan = InterfaceAnnotated {
@@ -511,10 +555,11 @@ mod tests {
             Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap(),
         );
         assert_eq!(output_packets.len(), 1);
+        assert_eq!(output_packets[0].outbound_interface, Interface::Wan);
     }
 
     #[test]
-    fn from_host_to_wan_isnt_dropped() {
+    fn from_host_to_wan_goes_to_wan() {
         let mut from_host_to_wan_packet = Ipv4Packet::empty();
         from_host_to_wan_packet.set_dest_addr(Ipv4Addr::new(192, 0, 2, 7));
         let from_host_to_wan = InterfaceAnnotated {
@@ -530,6 +575,7 @@ mod tests {
             Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap(),
         );
         assert_eq!(output_packets.len(), 1);
+        assert_eq!(output_packets[0].outbound_interface, Interface::Wan);
     }
 
     #[test]
