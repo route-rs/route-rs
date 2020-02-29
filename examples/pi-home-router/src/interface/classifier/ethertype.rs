@@ -1,4 +1,4 @@
-use crate::types::{InterfaceAnnotated, EtherType};
+use crate::types::{EtherType, InterfaceAnnotated};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::classifier::Classifier;
 

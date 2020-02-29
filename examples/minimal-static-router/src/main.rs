@@ -22,8 +22,7 @@ fn main() {
     let test_frame1 = EthernetFrame::from_buffer(data_v4, 0).unwrap();
     let test_frame2 = EthernetFrame::from_buffer(data_v6, 0).unwrap();
     let packets = vec![test_frame1.clone(), test_frame2.clone()];
-    let router = Router::new()
-        .ingressors(vec![immediate_stream(packets)]);
+    let router = Router::new().ingressors(vec![immediate_stream(packets)]);
 
     let results = runner(router);
     println!("It finished!");

@@ -1,9 +1,9 @@
-use crate::types::{Interface, InterfaceAnnotated};
-use crate::interface::processor::InterfaceAnnotationDecap;
 use crate::interface::classifier::ByOutboundInterface;
+use crate::interface::processor::InterfaceAnnotationDecap;
+use crate::types::{Interface, InterfaceAnnotated};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
-    primitive::{ProcessLink, ClassifyLink},
+    primitive::{ClassifyLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 
@@ -13,34 +13,47 @@ use route_rs_runtime::link::{
 /// outbound interface into 3 streams, each one destined for their respective
 /// interface (host, lan, wan)
 pub(crate) struct InterfaceDispatch {
-   in_stream: Option<PacketStream<InterfaceAnnotated<EthernetFrame>>>
+    in_stream: Option<PacketStream<InterfaceAnnotated<EthernetFrame>>>,
 }
 
 impl InterfaceDispatch {
     #[allow(dead_code)]
     pub fn new() -> Self {
-       InterfaceDispatch { in_stream: None }
+        InterfaceDispatch { in_stream: None }
     }
 }
 
 impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for InterfaceDispatch {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<InterfaceAnnotated<EthernetFrame>>>) -> InterfaceDispatch {
-        assert!(in_streams.len() == 1, "InterfaceDispatch only takes one input stream");
+    fn ingressors(
+        self,
+        mut in_streams: Vec<PacketStream<InterfaceAnnotated<EthernetFrame>>>,
+    ) -> InterfaceDispatch {
+        assert!(
+            in_streams.len() == 1,
+            "InterfaceDispatch only takes one input stream"
+        );
 
         if self.in_stream.is_some() {
             panic!("Double call of ingressors of InterfaceDeumx");
         }
 
         let stream = in_streams.remove(0);
-        InterfaceDispatch { in_stream: Some(stream) }
+        InterfaceDispatch {
+            in_stream: Some(stream),
+        }
     }
 
-    fn ingressor(self, in_stream: PacketStream<InterfaceAnnotated<EthernetFrame>>) -> InterfaceDispatch {
+    fn ingressor(
+        self,
+        in_stream: PacketStream<InterfaceAnnotated<EthernetFrame>>,
+    ) -> InterfaceDispatch {
         if self.in_stream.is_some() {
             panic!("Double call of ingressors of InterfaceDeumx");
         }
 
-        InterfaceDispatch { in_stream: Some(in_stream) }
+        InterfaceDispatch {
+            in_stream: Some(in_stream),
+        }
     }
 
     fn build_link(self) -> Link<EthernetFrame> {
@@ -48,7 +61,7 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
             .ingressor(self.in_stream.unwrap())
             .classifier(ByOutboundInterface)
             .num_egressors(3)
-            .dispatcher(Box::new( |interface| match interface {
+            .dispatcher(Box::new(|interface| match interface {
                 Interface::Host => Some(0),
                 Interface::Lan => Some(1),
                 Interface::Wan => Some(2),
@@ -61,12 +74,12 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
             .processor(InterfaceAnnotationDecap)
             .build_link();
 
-        let (_,mut lan_e) = ProcessLink::new()
+        let (_, mut lan_e) = ProcessLink::new()
             .ingressor(ce.remove(0))
             .processor(InterfaceAnnotationDecap)
             .build_link();
-      
-        let (_,mut wan_e) = ProcessLink::new()
+
+        let (_, mut wan_e) = ProcessLink::new()
             .ingressor(ce.remove(0))
             .processor(InterfaceAnnotationDecap)
             .build_link();
@@ -88,32 +101,32 @@ mod tests {
     #[test]
     fn interface_dispatch() {
         let for_host = vec![
-            InterfaceAnnotated{
-                packet : EthernetFrame::empty(),
+            InterfaceAnnotated {
+                packet: EthernetFrame::empty(),
                 inbound_interface: Interface::Unmarked,
                 outbound_interface: Interface::Host,
             };
             3
         ];
         let mut for_lan = vec![
-            InterfaceAnnotated{
-                packet : EthernetFrame::empty(),
+            InterfaceAnnotated {
+                packet: EthernetFrame::empty(),
                 inbound_interface: Interface::Unmarked,
                 outbound_interface: Interface::Lan,
             };
             3
         ];
         let mut for_wan = vec![
-            InterfaceAnnotated{
-                packet : EthernetFrame::empty(),
+            InterfaceAnnotated {
+                packet: EthernetFrame::empty(),
                 inbound_interface: Interface::Unmarked,
                 outbound_interface: Interface::Wan,
             };
             3
         ];
         let mut unmarked = vec![
-            InterfaceAnnotated{
-                packet : EthernetFrame::empty(),
+            InterfaceAnnotated {
+                packet: EthernetFrame::empty(),
                 inbound_interface: Interface::Unmarked,
                 outbound_interface: Interface::Unmarked,
             };

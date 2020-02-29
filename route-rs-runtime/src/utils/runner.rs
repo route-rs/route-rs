@@ -1,4 +1,4 @@
-use crate::link::{TokioRunnable, LinkBuilder};
+use crate::link::{LinkBuilder, TokioRunnable};
 use crate::utils::test::packet_collectors::ExhaustiveCollector;
 use crossbeam::crossbeam_channel;
 use std::fmt::Debug;

@@ -42,10 +42,7 @@ impl<C: Classifier> ClassifyLink<C> {
         }
     }
 
-    pub fn dispatcher(
-        self,
-        dispatcher: Box<Dispatcher<'static, C::Class>>,
-    ) -> Self {
+    pub fn dispatcher(self, dispatcher: Box<Dispatcher<'static, C::Class>>) -> Self {
         ClassifyLink {
             in_stream: self.in_stream,
             classifier: self.classifier,
@@ -256,7 +253,9 @@ mod tests {
         ClassifyLink::new()
             .num_egressors(10)
             .classifier(Even::new())
-            .dispatcher(Box::new(|evenness| if evenness { Some(0) } else { Some(1) }))
+            .dispatcher(Box::new(
+                |evenness| if evenness { Some(0) } else { Some(1) },
+            ))
             .build_link();
     }
 
@@ -269,7 +268,9 @@ mod tests {
         ClassifyLink::new()
             .ingressor(packet_generator)
             .classifier(Even::new())
-            .dispatcher(Box::new(|evenness| if evenness { Some(0) } else { Some(1) }))
+            .dispatcher(Box::new(
+                |evenness| if evenness { Some(0) } else { Some(1) },
+            ))
             .build_link();
     }
 
@@ -282,7 +283,9 @@ mod tests {
         ClassifyLink::<Even>::new()
             .ingressor(packet_generator)
             .num_egressors(10)
-            .dispatcher(Box::new(|evenness| if evenness { Some(0) } else { Some(1) }))
+            .dispatcher(Box::new(
+                |evenness| if evenness { Some(0) } else { Some(1) },
+            ))
             .build_link();
     }
 

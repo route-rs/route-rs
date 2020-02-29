@@ -1,6 +1,6 @@
-use route_rs_runtime::processor::Processor;
-use route_rs_packets::EthernetFrame;
 use crate::types::InterfaceAnnotated;
+use route_rs_packets::EthernetFrame;
+use route_rs_runtime::processor::Processor;
 
 /// Removes Interface annotations from a packet
 #[derive(Default)]
