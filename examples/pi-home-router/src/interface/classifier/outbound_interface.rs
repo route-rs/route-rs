@@ -1,6 +1,6 @@
-use route_rs_runtime::classifier::Classifier;
+use crate::types::{Interface, InterfaceAnnotated};
 use route_rs_packets::EthernetFrame;
-use crate::types::{InterfaceAnnotated, Interface};
+use route_rs_runtime::classifier::Classifier;
 
 #[derive(Default)]
 pub(crate) struct ByOutboundInterface;

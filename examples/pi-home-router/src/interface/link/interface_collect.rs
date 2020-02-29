@@ -1,5 +1,5 @@
-use crate::types::{Interface, InterfaceAnnotated};
 use crate::interface::processor::InterfaceAnnotationEncap;
+use crate::types::{Interface, InterfaceAnnotated};
 use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::{
     primitive::{JoinLink, ProcessLink},
@@ -94,9 +94,7 @@ mod tests {
 
         let mut runtime = initialize_runtime();
         let results = runtime.block_on(async {
-            let link = InterfaceCollect::new()
-                .ingressors(streams)
-                .build_link();
+            let link = InterfaceCollect::new().ingressors(streams).build_link();
 
             test_link(link, None).await
         });
