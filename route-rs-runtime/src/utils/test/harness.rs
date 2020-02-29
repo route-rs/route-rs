@@ -2,7 +2,10 @@ use crate::link::{Link, TokioRunnable};
 use crate::utils::test::packet_collectors::ExhaustiveCollector;
 use crossbeam::crossbeam_channel;
 use std::fmt::Debug;
-use tokio::{runtime, time::{Duration, timeout}};
+use tokio::{
+    runtime,
+    time::{timeout, Duration},
+};
 
 /// The utils::test::harness module should be able to help Link authors abstract away the
 /// complexity of dealing with the Tokio runtime. Tests should be expressed with the
@@ -36,10 +39,10 @@ pub fn initialize_runtime() -> runtime::Runtime {
 /// A testing harness to be used to run a link you wish to test. It takes a link to run
 /// and a max_test_duration option. If you have a link that should complete, ie it tears
 /// down, then put a None for Duration. If you have a link that is not expected to end
-/// 
+///
 pub async fn test_link<OutputPacket: Debug + Send + Clone + 'static>(
     link: Link<OutputPacket>,
-    max_test_duration: Option<Duration>
+    max_test_duration: Option<Duration>,
 ) -> Vec<Vec<OutputPacket>> {
     let (mut runnables, egressors) = link;
 
@@ -62,8 +65,12 @@ pub async fn test_link<OutputPacket: Debug + Send + Clone + 'static>(
 
     // 🏃💨💨
     match max_test_duration {
-        None => { spawn_runnables(runnables).await; },
-        Some(duration) => { let _res = timeout(duration, spawn_runnables(runnables)).await; },
+        None => {
+            spawn_runnables(runnables).await;
+        }
+        Some(duration) => {
+            let _res = timeout(duration, spawn_runnables(runnables)).await;
+        }
     }
 
     // collect packets from consumers via receiver channels

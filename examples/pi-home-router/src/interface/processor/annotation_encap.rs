@@ -1,6 +1,6 @@
-use route_rs_runtime::processor::Processor;
+use crate::types::{Interface, InterfaceAnnotated};
 use route_rs_packets::EthernetFrame;
-use crate::types::{InterfaceAnnotated, Interface};
+use route_rs_runtime::processor::Processor;
 
 /// InterfaceAnnotationEncap: Processor to apply interface annotation to a packet
 ///
@@ -26,7 +26,7 @@ impl Processor for InterfaceAnnotationEncap {
 
     fn process(&mut self, packet: Self::Input) -> Option<Self::Output> {
         Some(InterfaceAnnotated {
-            packet: packet,
+            packet,
             inbound_interface: self.inbound_interface,
             outbound_interface: self.outbound_interface,
         })
