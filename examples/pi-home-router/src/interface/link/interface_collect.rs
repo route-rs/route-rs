@@ -89,7 +89,7 @@ mod tests {
         let packets = vec![EthernetFrame::empty(); 3];
         let host = immediate_stream(packets.clone());
         let lan = immediate_stream(packets.clone());
-        let wan = immediate_stream(packets.clone());
+        let wan = immediate_stream(packets);
         let streams = vec![host, lan, wan];
 
         let mut runtime = initialize_runtime();

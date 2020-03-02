@@ -5,6 +5,7 @@ cache: cargo
 branches:
   only:
     - master
+    - /^dev\//
 jobs:
   include:
     - stage: test
