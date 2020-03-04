@@ -2,6 +2,8 @@ mod interface;
 mod router;
 mod types;
 
+mod ipv4;
+
 use clap::{App, Arg};
 use route_rs_runtime::utils::runner::runner;
 use router::Router;
