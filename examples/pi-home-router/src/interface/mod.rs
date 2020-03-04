@@ -1,3 +1,3 @@
-mod classifier;
+pub(crate) mod classifier;
 mod link;
-mod processor;
+pub(crate) mod processor;

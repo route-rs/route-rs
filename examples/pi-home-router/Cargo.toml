@@ -14,3 +14,5 @@ tokio = {version = "0.2", features = ["full"] }
 futures = "0.3"
 crossbeam = "0.7.2"
 clap = "2.33"
+cidr = "0.1.0"
+maplit = "1.0.2"

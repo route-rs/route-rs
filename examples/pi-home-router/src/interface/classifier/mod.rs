@@ -1,3 +1,6 @@
+mod inbound_interface;
+pub(crate) use self::inbound_interface::ByInboundInterface;
+
 mod outbound_interface;
 pub(crate) use self::outbound_interface::ByOutboundInterface;
 
