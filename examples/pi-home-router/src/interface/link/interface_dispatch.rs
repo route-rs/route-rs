@@ -71,21 +71,21 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
         unpack!(
             let (_, [host_e]) = ProcessLink::new()
                 .ingressor(ce_0)
-                .processor(InterfaceAnnotationDecap)
+                .processor(InterfaceAnnotationDecap::new())
                 .build_link();
         );
 
         unpack!(
             let (_, [lan_e]) = ProcessLink::new()
                 .ingressor(ce_1)
-                .processor(InterfaceAnnotationDecap)
+                .processor(InterfaceAnnotationDecap::new())
                 .build_link();
         );
 
         unpack!(
             let (_, [wan_e]) = ProcessLink::new()
                 .ingressor(ce_2)
-                .processor(InterfaceAnnotationDecap)
+                .processor(InterfaceAnnotationDecap::new())
                 .build_link();
         );
 
