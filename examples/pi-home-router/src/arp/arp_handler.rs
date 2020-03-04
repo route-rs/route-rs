@@ -1,4 +1,4 @@
-use crate::arp::{ArpFrame, ArpHardwareType, ArpOp};
+use crate::arp::{ipv4_array, ipv6_array, mac_array, ArpFrame, ArpHardwareType, ArpOp, ArpTable};
 use crate::types::EtherType::IPv4;
 use crate::types::InterfaceAnnotated;
 use route_rs_packets::IpProtocol;
@@ -14,63 +14,6 @@ use std::ops::Deref;
 // Where is this state stored? How to we access it?
 const ROUTER_IPv4_ADDR: Ipv4Addr = Ipv4Addr::LOCALHOST;
 const ROUTER_IPv6_ADDR: Ipv6Addr = Ipv6Addr::LOCALHOST;
-
-pub(crate) struct ArpTable {
-    /// Should we have separate translation tables for different layer 3 protocols so keys have a fixed size?
-    // Mappings between ((protocol type, protocol address) -> 48-bit Ethernet address)
-    ipv4_mac_translations: HashMap<Ipv4Addr, MacAddr>,
-    ipv6_mac_translations: HashMap<Ipv6Addr, MacAddr>,
-}
-
-impl ArpTable {
-    pub fn new() -> Self {
-        ArpTable {
-            ipv4_mac_translations: HashMap::new(),
-            ipv6_mac_translations: HashMap::new(),
-        }
-    }
-
-    pub fn contains_key(&self, protocol_type: u16, protocol_address: &[u8]) -> bool {
-        match protocol_type {
-            0x0800 => self
-                .ipv4_mac_translations
-                .contains_key(&Ipv4Addr::from(ipv4_array(protocol_address))),
-            0x86DD => self
-                .ipv6_mac_translations
-                .contains_key(&Ipv6Addr::from(ipv6_array(protocol_address))),
-            _ => false,
-        }
-    }
-
-    pub fn get(&self, protocol_type: u16, protocol_address: &[u8]) -> Option<&MacAddr> {
-        match protocol_type {
-            0x0800 => self
-                .ipv4_mac_translations
-                .get(&Ipv4Addr::from(ipv4_array(protocol_address))),
-            0x86DD => self
-                .ipv6_mac_translations
-                .get(&Ipv6Addr::from(ipv6_array(protocol_address))),
-            _ => None,
-        }
-    }
-
-    pub fn insert(
-        &mut self,
-        protocol_type: u16,
-        protocol_address: &[u8],
-        mac_address: MacAddr,
-    ) -> Option<MacAddr> {
-        match protocol_type {
-            0x0800 => self
-                .ipv4_mac_translations
-                .insert(Ipv4Addr::from(ipv4_array(protocol_address)), mac_address),
-            0x86DD => self
-                .ipv6_mac_translations
-                .insert(Ipv6Addr::from(ipv6_array(protocol_address)), mac_address),
-            _ => None,
-        }
-    }
-}
 
 pub(crate) struct ArpHandler {
     arp_table: ArpTable,
@@ -180,25 +123,6 @@ impl Processor for ArpHandler {
 
         None
     }
-}
-
-// TODO: These might want to live in route-rs-packets
-fn ipv4_array(bytes: &[u8]) -> [u8; 4] {
-    let mut ipv4_arr: [u8; 4] = Default::default();
-    ipv4_arr.copy_from_slice(&bytes[0..4]);
-    ipv4_arr
-}
-
-fn ipv6_array(bytes: &[u8]) -> [u8; 16] {
-    let mut ipv6_arr: [u8; 16] = Default::default();
-    ipv6_arr.copy_from_slice(&bytes[0..16]);
-    ipv6_arr
-}
-
-fn mac_array(bytes: &[u8]) -> [u8; 6] {
-    let mut mac_arr: [u8; 6] = Default::default();
-    mac_arr.copy_from_slice(&bytes[0..6]);
-    mac_arr
 }
 
 #[cfg(test)]

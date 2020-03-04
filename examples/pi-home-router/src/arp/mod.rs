@@ -16,6 +16,12 @@
 mod arp_frame;
 pub(crate) use self::arp_frame::*;
 
+mod arp_utils;
+pub(crate) use self::arp_utils::*;
+
+mod arp_table;
+pub(crate) use self::arp_table::ArpTable;
+
 mod arp_generator;
 pub(crate) use self::arp_generator::ArpGenerator;
 
