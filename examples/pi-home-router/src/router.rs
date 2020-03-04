@@ -1,4 +1,4 @@
-use crate::arp::ArpHandler;
+use crate::arp::{ArpGenerator, ArpHandler};
 use route_rs_runtime::link::primitive::ProcessLink;
 use route_rs_runtime::link::{Link, LinkBuilder, PacketStream, ProcessLinkBuilder};
 use route_rs_runtime::utils::test::packet_generators::immediate_stream;
@@ -60,9 +60,15 @@ impl LinkBuilder<(), ()> for Router {
         // all the relevant runnables, and no egressors(Since our router has none)
 
         // TODO: wire up from protocol classifier
-        let arp_link = ProcessLink::new()
+        let _arp_handler = ProcessLink::new()
             .ingressor(immediate_stream(vec![]))
             .processor(ArpHandler::new())
+            .build_link();
+
+        // TODO: not sure where to put ArpGenerator
+        let _arp_generator = ProcessLink::new()
+            .ingressor(immediate_stream(vec![]))
+            .processor(ArpGenerator::new())
             .build_link();
 
         (vec![], vec![])

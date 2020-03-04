@@ -20,6 +20,8 @@ pub(crate) struct ArpFrame {
     frame: EthernetFrame,
 }
 
+// TODO: remove after finished ARP implementation
+#[allow(dead_code)]
 impl ArpFrame {
     pub fn new(frame: EthernetFrame) -> Self {
         assert_eq!(frame.ether_type(), ARP_ETHER_TYPE);
@@ -62,39 +64,39 @@ impl ArpFrame {
         unimplemented!()
     }
 
-    pub fn set_hardware_type(&self, htype: u16) {
+    pub fn set_hardware_type(&self, _htype: u16) {
         unimplemented!()
     }
 
-    pub fn set_protocol_type(&self, ptype: u16) {
+    pub fn set_protocol_type(&self, _ptype: u16) {
         unimplemented!()
     }
 
-    pub fn set_hardware_addr_len(&self, len: u8) {
+    pub fn set_hardware_addr_len(&self, _len: u8) {
         unimplemented!()
     }
 
-    pub fn set_protocol_addr_len(&self, len: u8) {
+    pub fn set_protocol_addr_len(&self, _len: u8) {
         unimplemented!()
     }
 
-    pub fn set_opcode(&mut self, code: u8) {
+    pub fn set_opcode(&mut self, _code: u8) {
         unimplemented!()
     }
 
-    pub fn set_sender_hardware_addr(&mut self, addr: MacAddr) {
+    pub fn set_sender_hardware_addr(&mut self, _addr: MacAddr) {
         unimplemented!()
     }
 
-    pub fn set_sender_protocol_addr(&mut self, ip_addr: IpAddr) {
+    pub fn set_sender_protocol_addr(&mut self, _ip_addr: IpAddr) {
         unimplemented!()
     }
 
-    pub fn set_target_hardware_addr(&mut self, addr: MacAddr) {
+    pub fn set_target_hardware_addr(&mut self, _addr: MacAddr) {
         unimplemented!()
     }
 
-    pub fn set_target_protocol_addr(&mut self, ip_addr: IpAddr) {
+    pub fn set_target_protocol_addr(&mut self, _ip_addr: IpAddr) {
         unimplemented!()
     }
 

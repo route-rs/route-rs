@@ -2,21 +2,15 @@ use crate::arp::{
     ipv4_array, ipv6_array, mac_array, ArpFrame, ArpHardwareType, ArpOp, ArpTable,
     IPV4_PROTOCOL_TYPE, IPV6_PROTOCOL_TYPE,
 };
-use crate::types::EtherType::IPv4;
 use crate::types::InterfaceAnnotated;
-use route_rs_packets::IpProtocol;
-use route_rs_packets::IpProtocol::IPv6;
-use route_rs_packets::{EtherType, EthernetFrame, MacAddr};
+use route_rs_packets::{EthernetFrame, MacAddr};
 use route_rs_runtime::processor::Processor;
-use std::collections::HashMap;
-use std::mem;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::ops::Deref;
 
 // TODO: We need to respond to ARP requests that are targeted at the router.
 // Where is this state stored? How to we access it?
-const ROUTER_IPv4_ADDR: Ipv4Addr = Ipv4Addr::LOCALHOST;
-const ROUTER_IPv6_ADDR: Ipv6Addr = Ipv6Addr::LOCALHOST;
+const ROUTER_IPV4_ADDR: Ipv4Addr = Ipv4Addr::LOCALHOST;
+const ROUTER_IPV6_ADDR: Ipv6Addr = Ipv6Addr::LOCALHOST;
 
 pub(crate) struct ArpHandler {
     arp_table: ArpTable,
@@ -85,8 +79,8 @@ impl Processor for ArpHandler {
             let target_ipv4_address = Ipv4Addr::from(ipv4_array(target_protocol_address));
             let target_ipv6_address = Ipv6Addr::from(ipv6_array(target_protocol_address));
 
-            if (protocol_type == IPV4_PROTOCOL_TYPE && target_ipv4_address == ROUTER_IPv4_ADDR)
-                || (protocol_type == IPV6_PROTOCOL_TYPE && target_ipv6_address == ROUTER_IPv6_ADDR)
+            if (protocol_type == IPV4_PROTOCOL_TYPE && target_ipv4_address == ROUTER_IPV4_ADDR)
+                || (protocol_type == IPV6_PROTOCOL_TYPE && target_ipv6_address == ROUTER_IPV6_ADDR)
             {
                 let sender_mac_address = MacAddr::new(mac_array(arp_frame.sender_hardware_addr()));
                 if !updated_translation_table {
@@ -130,7 +124,7 @@ impl Processor for ArpHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[test]
     fn arp_test_runs() {

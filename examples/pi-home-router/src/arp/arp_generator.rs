@@ -93,7 +93,7 @@ impl Processor for ArpGenerator {
                     })
                 }
             }
-        } else if let Ok(ipv6_packet) = Ipv6Packet::try_from(frame.clone()) {
+        } else if let Ok(_ipv6_packet) = Ipv6Packet::try_from(frame) {
             // TODO: repeat for v6
             None
         } else {
@@ -105,7 +105,7 @@ impl Processor for ArpGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[test]
     fn arp_test_runs() {
