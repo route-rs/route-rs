@@ -1,4 +1,7 @@
-use crate::arp::{ipv4_array, ipv6_array, mac_array, ArpFrame, ArpHardwareType, ArpOp, ArpTable};
+use crate::arp::{
+    ipv4_array, ipv6_array, mac_array, ArpFrame, ArpHardwareType, ArpOp, ArpTable,
+    IPV4_PROTOCOL_TYPE, IPV6_PROTOCOL_TYPE,
+};
 use crate::types::EtherType::IPv4;
 use crate::types::InterfaceAnnotated;
 use route_rs_packets::IpProtocol;
@@ -82,8 +85,8 @@ impl Processor for ArpHandler {
             let target_ipv4_address = Ipv4Addr::from(ipv4_array(target_protocol_address));
             let target_ipv6_address = Ipv6Addr::from(ipv6_array(target_protocol_address));
 
-            if (protocol_type == 0x0800 && target_ipv4_address == ROUTER_IPv4_ADDR)
-                || (protocol_type == 0x86DD && target_ipv6_address == ROUTER_IPv6_ADDR)
+            if (protocol_type == IPV4_PROTOCOL_TYPE && target_ipv4_address == ROUTER_IPv4_ADDR)
+                || (protocol_type == IPV6_PROTOCOL_TYPE && target_ipv6_address == ROUTER_IPv6_ADDR)
             {
                 let sender_mac_address = MacAddr::new(mac_array(arp_frame.sender_hardware_addr()));
                 if !updated_translation_table {

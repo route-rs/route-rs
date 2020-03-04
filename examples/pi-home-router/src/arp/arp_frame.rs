@@ -62,6 +62,22 @@ impl ArpFrame {
         unimplemented!()
     }
 
+    pub fn set_hardware_type(&self, htype: u16) {
+        unimplemented!()
+    }
+
+    pub fn set_protocol_type(&self, ptype: u16) {
+        unimplemented!()
+    }
+
+    pub fn set_hardware_addr_len(&self, len: u8) {
+        unimplemented!()
+    }
+
+    pub fn set_protocol_addr_len(&self, len: u8) {
+        unimplemented!()
+    }
+
     pub fn set_opcode(&mut self, code: u8) {
         unimplemented!()
     }

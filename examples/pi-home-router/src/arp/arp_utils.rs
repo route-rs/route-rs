@@ -1,4 +1,8 @@
 // TODO: These might want to live in route-rs-packets
+
+pub const IPV4_PROTOCOL_TYPE: u16 = 0x0800;
+pub const IPV6_PROTOCOL_TYPE: u16 = 0x86DD;
+
 pub fn ipv4_array(bytes: &[u8]) -> [u8; 4] {
     let mut ipv4_arr: [u8; 4] = Default::default();
     ipv4_arr.copy_from_slice(&bytes[0..4]);
