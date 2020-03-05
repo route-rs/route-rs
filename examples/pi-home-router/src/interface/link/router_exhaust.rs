@@ -20,6 +20,7 @@ pub(crate) struct RouterExhaust {
 }
 
 impl RouterExhaust {
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         RouterExhaust { in_streams: None }
     }
@@ -45,15 +46,15 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, Vec<u8>> for RouterExhaust {
         ingressor: PacketStream<InterfaceAnnotated<EthernetFrame>>,
     ) -> RouterExhaust {
         if self.in_streams.is_none() {
-            return RouterExhaust {
+            RouterExhaust {
                 in_streams: Some(vec![ingressor]),
-            };
+            }
         } else {
             let mut streams = self.in_streams.unwrap();
             streams.push(ingressor);
-            return RouterExhaust {
+            RouterExhaust {
                 in_streams: Some(streams),
-            };
+            }
         }
     }
 
