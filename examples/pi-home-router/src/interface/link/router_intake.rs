@@ -27,6 +27,7 @@ pub(crate) struct RouterIntake {
 }
 
 impl RouterIntake {
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         RouterIntake { in_streams: None }
     }
