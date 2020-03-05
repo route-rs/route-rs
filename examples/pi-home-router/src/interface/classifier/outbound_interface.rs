@@ -10,11 +10,6 @@ impl Classifier for ByOutboundInterface {
     type Class = Interface;
 
     fn classify(&self, packet: &Self::Packet) -> Self::Class {
-        match packet.outbound_interface {
-            Interface::Host => Interface::Host,
-            Interface::Lan => Interface::Lan,
-            Interface::Wan => Interface::Wan,
-            Interface::Unmarked => Interface::Unmarked,
-        }
+        packet.outbound_interface
     }
 }
