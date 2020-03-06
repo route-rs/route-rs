@@ -10,6 +10,9 @@ pub use self::ipv4::*;
 mod ipv6;
 pub use self::ipv6::*;
 
+mod arp;
+pub use self::arp::*;
+
 mod udp;
 pub use self::udp::*;
 
