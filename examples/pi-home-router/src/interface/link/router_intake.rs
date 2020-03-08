@@ -139,7 +139,7 @@ mod tests {
         ipv4_frame.set_ether_type(0x0800);
         let mut ipv6_frame = empty_frame.clone();
         ipv6_frame.set_ether_type(0x86DD);
-        let mut unsupported_frame = empty_frame.clone();
+        let mut unsupported_frame = empty_frame;
         unsupported_frame.set_ether_type(0x1337);
 
         let packets = vec![
@@ -152,7 +152,7 @@ mod tests {
 
         let host = immediate_stream(packets.clone());
         let lan = immediate_stream(packets.clone());
-        let wan = immediate_stream(packets.clone());
+        let wan = immediate_stream(packets);
         let streams = vec![host, lan, wan];
 
         let mut runtime = initialize_runtime();
