@@ -1,5 +1,18 @@
 //! In brief: The runtime is what takes the basket of computation required by the user, links it together into the desired
 //! graph, and preps it to be handed to the Tokio for running.
+#[macro_export]
+macro_rules! AutoEgressor {
+    // Base case: 1 egressor
+    ($vector:ident, $x:ident) => {
+        let $x = $vector.remove(0);
+    };
+    // More than 1 egressor
+    ($vector:ident, $x:ident, $($y:ident),+) => {
+        let $x = $vector.remove(0);
+        AutoEgressor!($vector, $($y), +)
+    }
+}
+
 #[macro_use]
 extern crate futures;
 extern crate crossbeam;
@@ -19,3 +32,4 @@ pub mod pipeline;
 
 /// Utilities for the Runtime. Mostly testing constructs.
 pub mod utils;
+

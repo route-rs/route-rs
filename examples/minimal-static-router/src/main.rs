@@ -4,6 +4,7 @@ use route_rs_runtime::link::{
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
 use route_rs_runtime::utils::{runner::runner, test::packet_generators::immediate_stream};
+use route_rs_runtime::AutoEgressor;
 
 mod classifiers;
 mod processors;
@@ -160,19 +161,20 @@ impl LinkBuilder<EthernetFrame, EthernetFrame> for Router {
                     }))
                     .build_link();
             all_runnables.append(&mut ipv6_subnet_router_runnables);
+            AutoEgressor!(ipv6_subnet_router_egressors, sub_a, sub_b, sub_c);
 
             let (_, mut ipv6_encap_interface0_egressors) = ProcessLink::new()
-                .ingressor(ipv6_subnet_router_egressors.remove(0))
+                .ingressor(sub_a)
                 .processor(processors::Ipv6Encap)
                 .build_link();
 
             let (_, mut ipv6_encap_interface1_egressors) = ProcessLink::new()
-                .ingressor(ipv6_subnet_router_egressors.remove(0))
+                .ingressor(sub_b)
                 .processor(processors::Ipv6Encap)
                 .build_link();
 
             let (_, mut ipv6_encap_interface2_egressors) = ProcessLink::new()
-                .ingressor(ipv6_subnet_router_egressors.remove(0))
+                .ingressor(sub_c)
                 .processor(processors::Ipv6Encap)
                 .build_link();
 
