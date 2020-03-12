@@ -22,52 +22,40 @@ impl<Packet: Sized + Send + Clone> MtoNLink<Packet> {
     }
 
     /// Changes join_queue_capcity, default value is 10.
-    pub fn join_queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn join_queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("join_queue_capacity: {}, must be > 0", queue_capacity)
         );
 
-        MtoNLink {
-            in_streams: self.in_streams,
-            join_queue_capacity: queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.join_queue_capacity = queue_capacity;
+        self
     }
 
     /// Changes tee_queue_capcity, default value is 10.
-    pub fn tee_queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn tee_queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("tee_queue_capacity: {}, must be > 0", queue_capacity)
         );
 
-        MtoNLink {
-            in_streams: self.in_streams,
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.fork_queue_capacity = queue_capacity;
+        self
     }
 
-    pub fn num_egressors(self, num_egressors: usize) -> Self {
+    pub fn num_egressors(mut self, num_egressors: usize) -> Self {
         assert!(
             num_egressors > 0,
             format!("num_egressors: {}, must be > 0", num_egressors)
         );
 
-        MtoNLink {
-            in_streams: self.in_streams,
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: Some(num_egressors),
-        }
+        self.num_egressors = Some(num_egressors);
+        self
     }
 }
 
 impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for MtoNLink<Packet> {
-    fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
+    fn ingressors(mut self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
             !in_streams.is_empty(),
             format!("Input streams: {} must be > 0", in_streams.len())
@@ -77,32 +65,19 @@ impl<Packet: Sized + Send + Clone + 'static> LinkBuilder<Packet, Packet> for Mto
             panic!("MtoNLink already has input streams")
         }
 
-        MtoNLink {
-            in_streams: Some(in_streams),
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.in_streams = Some(in_streams);
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<Packet>) -> Self {
         match self.in_streams {
-            None => MtoNLink {
-                in_streams: Some(vec![in_stream]),
-                join_queue_capacity: self.join_queue_capacity,
-                fork_queue_capacity: self.fork_queue_capacity,
-                num_egressors: self.num_egressors,
-            },
+            None => self.in_streams = Some(vec![in_stream]),
             Some(mut existing_streams) => {
                 existing_streams.push(in_stream);
-                MtoNLink {
-                    in_streams: Some(existing_streams),
-                    join_queue_capacity: self.join_queue_capacity,
-                    fork_queue_capacity: self.fork_queue_capacity,
-                    num_egressors: self.num_egressors,
-                }
+                self.in_streams = Some(existing_streams);
             }
         }
+        self
     }
 
     fn build_link(self) -> Link<Packet> {
