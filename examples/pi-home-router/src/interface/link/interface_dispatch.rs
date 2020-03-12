@@ -25,9 +25,9 @@ impl InterfaceDispatch {
 
 impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for InterfaceDispatch {
     fn ingressors(
-        self,
+        mut self,
         mut in_streams: Vec<PacketStream<InterfaceAnnotated<EthernetFrame>>>,
-    ) -> InterfaceDispatch {
+    ) -> Self {
         assert!(
             in_streams.len() == 1,
             "InterfaceDispatch only takes one input stream"
@@ -38,22 +38,17 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
         }
 
         let stream = in_streams.remove(0);
-        InterfaceDispatch {
-            in_stream: Some(stream),
-        }
+        self.in_stream = Some(stream);
+        self
     }
 
-    fn ingressor(
-        self,
-        in_stream: PacketStream<InterfaceAnnotated<EthernetFrame>>,
-    ) -> InterfaceDispatch {
+    fn ingressor(mut self, in_stream: PacketStream<InterfaceAnnotated<EthernetFrame>>) -> Self {
         if self.in_stream.is_some() {
             panic!("Double call of ingressors of InterfaceDeumx");
         }
 
-        InterfaceDispatch {
-            in_stream: Some(in_stream),
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<EthernetFrame> {
