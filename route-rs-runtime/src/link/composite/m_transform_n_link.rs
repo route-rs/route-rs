@@ -25,52 +25,37 @@ impl<P: Processor + Send> MtransformNLink<P> {
     }
 
     /// Changes join_queue_capcity, default value is 10.
-    pub fn join_queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn join_queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("join_queue_capacity: {} must be > 0", queue_capacity)
         );
 
-        MtransformNLink {
-            in_streams: self.in_streams,
-            processor: self.processor,
-            join_queue_capacity: queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.join_queue_capacity = queue_capacity;
+        self
     }
 
     /// Changes tee_queue_capcity, default value is 10.
-    pub fn fork_queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn fork_queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("fork_queue_capacity: {} must be > 0", queue_capacity)
         );
 
-        MtransformNLink {
-            in_streams: self.in_streams,
-            processor: self.processor,
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.fork_queue_capacity = queue_capacity;
+        self
     }
 
-    pub fn num_egressors(self, num_egressors: usize) -> Self {
+    pub fn num_egressors(mut self, num_egressors: usize) -> Self {
         assert_ne!(num_egressors, 0, "num_egressors must be > 0");
 
-        MtransformNLink {
-            in_streams: self.in_streams,
-            processor: self.processor,
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: Some(num_egressors),
-        }
+        self.num_egressors = Some(num_egressors);
+        self
     }
 }
 
 impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for MtransformNLink<P> {
-    fn ingressors(self, in_streams: Vec<PacketStream<P::Input>>) -> Self {
+    fn ingressors(mut self, in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert!(
             !in_streams.is_empty(),
             format!("Input streams: {} should be > 0", in_streams.len())
@@ -80,35 +65,19 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for Mtransf
             panic!("M transform N link already has input streams")
         }
 
-        MtransformNLink {
-            in_streams: Some(in_streams),
-            processor: self.processor,
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.in_streams = Some(in_streams);
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<P::Input>) -> Self {
         match self.in_streams {
-            None => MtransformNLink {
-                in_streams: Some(vec![in_stream]),
-                processor: self.processor,
-                join_queue_capacity: self.join_queue_capacity,
-                fork_queue_capacity: self.fork_queue_capacity,
-                num_egressors: self.num_egressors,
-            },
+            None => self.in_streams = Some(vec![in_stream]),
             Some(mut existing_streams) => {
                 existing_streams.push(in_stream);
-                MtransformNLink {
-                    in_streams: Some(existing_streams),
-                    processor: self.processor,
-                    join_queue_capacity: self.join_queue_capacity,
-                    fork_queue_capacity: self.fork_queue_capacity,
-                    num_egressors: self.num_egressors,
-                }
+                self.in_streams = Some(existing_streams);
             }
         }
+        self
     }
 
     fn build_link(self) -> Link<P::Output> {
@@ -142,14 +111,9 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for Mtransf
 }
 
 impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for MtransformNLink<P> {
-    fn processor(self, processor: P) -> Self {
-        MtransformNLink {
-            in_streams: self.in_streams,
-            processor: Some(processor),
-            join_queue_capacity: self.join_queue_capacity,
-            fork_queue_capacity: self.fork_queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+    fn processor(mut self, processor: P) -> Self {
+        self.processor = Some(processor);
+        self
     }
 }
 
