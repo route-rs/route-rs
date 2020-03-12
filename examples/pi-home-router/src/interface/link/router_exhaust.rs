@@ -28,34 +28,27 @@ impl RouterExhaust {
 
 impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, Vec<u8>> for RouterExhaust {
     fn ingressors(
-        self,
+        mut self,
         ingressors: Vec<PacketStream<InterfaceAnnotated<EthernetFrame>>>,
-    ) -> RouterExhaust {
+    ) -> Self {
         assert!(!ingressors.is_empty(), "Ingressor vector is empty");
         assert!(
             self.in_streams.is_none(),
             "RouterExhaust already has input_streams"
         );
-        RouterExhaust {
-            in_streams: Some(ingressors),
-        }
+        self.in_streams = Some(ingressors);
+        self
     }
 
-    fn ingressor(
-        self,
-        ingressor: PacketStream<InterfaceAnnotated<EthernetFrame>>,
-    ) -> RouterExhaust {
+    fn ingressor(mut self, ingressor: PacketStream<InterfaceAnnotated<EthernetFrame>>) -> Self {
         if self.in_streams.is_none() {
-            RouterExhaust {
-                in_streams: Some(vec![ingressor]),
-            }
+            self.in_streams = Some(vec![ingressor]);
         } else {
             let mut streams = self.in_streams.unwrap();
             streams.push(ingressor);
-            RouterExhaust {
-                in_streams: Some(streams),
-            }
+            self.in_streams = Some(streams);
         }
+        self
     }
 
     fn build_link(self) -> Link<Vec<u8>> {
