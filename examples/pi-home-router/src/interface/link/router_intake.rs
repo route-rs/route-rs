@@ -34,33 +34,29 @@ impl RouterIntake {
 }
 
 impl LinkBuilder<Vec<u8>, InterfaceAnnotated<EthernetFrame>> for RouterIntake {
-    fn ingressors(self, ingressors: Vec<PacketStream<Vec<u8>>>) -> RouterIntake {
+    fn ingressors(mut self, ingressors: Vec<PacketStream<Vec<u8>>>) -> Self {
         if self.in_streams.is_some() {
             panic!("RouterIntake: Double call of ingressors");
         }
         if ingressors.len() != 3 {
             panic!("RouterIntake requires 3 input streams, Host LAN WAN, in that order");
         }
-        RouterIntake {
-            in_streams: Some(ingressors),
-        }
+        self.in_streams = Some(ingressors);
+        self
     }
 
-    fn ingressor(self, ingressor: PacketStream<Vec<u8>>) -> RouterIntake {
+    fn ingressor(mut self, ingressor: PacketStream<Vec<u8>>) -> Self {
         match self.in_streams {
             Some(mut streams) => {
                 if streams.len() >= 3 {
                     panic!("RouterIntake requires 3 input streams, Host LAN WAN, in that order");
                 }
                 streams.push(ingressor);
-                RouterIntake {
-                    in_streams: Some(streams),
-                }
+                self.in_streams = Some(streams);
             }
-            None => RouterIntake {
-                in_streams: Some(vec![ingressor]),
-            },
+            None => self.in_streams = Some(vec![ingressor]),
         }
+        self
     }
 
     fn build_link(self) -> Link<InterfaceAnnotated<EthernetFrame>> {

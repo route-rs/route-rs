@@ -19,7 +19,7 @@ impl InterfaceCollect {
 }
 
 impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for InterfaceCollect {
-    fn ingressors(self, ingressors: Vec<PacketStream<EthernetFrame>>) -> InterfaceCollect {
+    fn ingressors(mut self, ingressors: Vec<PacketStream<EthernetFrame>>) -> Self {
         assert!(
             ingressors.len() == 3,
             "Link only supports 3 interfaces [Host: 0, Lan: 1, Wan: 2]"
@@ -28,24 +28,20 @@ impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for Interface
             panic!("Interface Mux: Double call of ingressors function");
         }
 
-        InterfaceCollect {
-            in_streams: Some(ingressors),
-        }
+        self.in_streams = Some(ingressors);
+        self
     }
 
-    fn ingressor(self, ingressor: PacketStream<EthernetFrame>) -> InterfaceCollect {
+    fn ingressor(mut self, ingressor: PacketStream<EthernetFrame>) -> Self {
         match self.in_streams {
             Some(mut streams) => {
                 assert!(streams.len() < 3, "Trying to add too many streams");
                 streams.push(ingressor);
-                InterfaceCollect {
-                    in_streams: Some(streams),
-                }
+                self.in_streams = Some(streams);
             }
-            None => InterfaceCollect {
-                in_streams: Some(vec![ingressor]),
-            },
+            None => self.in_streams = Some(vec![ingressor]),
         }
+        self
     }
 
     fn build_link(self) -> Link<InterfaceAnnotated<EthernetFrame>> {
