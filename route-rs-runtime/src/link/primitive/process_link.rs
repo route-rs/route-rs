@@ -26,7 +26,7 @@ impl<P: Processor> ProcessLink<P> {
 /// may only have one ingress and egress stream since it lacks some kind of queue
 /// storage.
 impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for ProcessLink<P> {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<P::Input>>) -> Self {
+    fn ingressors(mut self, mut in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
@@ -37,21 +37,17 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for Process
             panic!("ProcessLink may only take 1 input stream")
         }
 
-        ProcessLink {
-            in_stream: Some(in_streams.remove(0)),
-            processor: self.processor,
-        }
+        self.in_stream = Some(in_streams.remove(0));
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<P::Input>) -> Self {
         if self.in_stream.is_some() {
             panic!("ProcessLink may only take 1 input stream")
         }
 
-        ProcessLink {
-            in_stream: Some(in_stream),
-            processor: self.processor,
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<P::Output> {
@@ -67,11 +63,9 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for Process
 }
 
 impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for ProcessLink<P> {
-    fn processor(self, processor: P) -> Self {
-        ProcessLink {
-            in_stream: self.in_stream,
-            processor: Some(processor),
-        }
+    fn processor(mut self, processor: P) -> Self {
+        self.processor = Some(processor);
+        self
     }
 }
 

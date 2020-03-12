@@ -25,35 +25,29 @@ impl<Packet: Clone + Send> ForkLink<Packet> {
     }
 
     /// Changes queue_capacity, default value is 10.
-    pub fn queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("queue_capacity: {}, must be > 0", queue_capacity)
         );
 
-        ForkLink {
-            in_stream: self.in_stream,
-            queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.queue_capacity = queue_capacity;
+        self
     }
 
-    pub fn num_egressors(self, num_egressors: usize) -> Self {
+    pub fn num_egressors(mut self, num_egressors: usize) -> Self {
         assert!(
             num_egressors > 0,
             format!("num_egressors: {}, must be > 0", num_egressors)
         );
 
-        ForkLink {
-            in_stream: self.in_stream,
-            queue_capacity: self.queue_capacity,
-            num_egressors: Some(num_egressors),
-        }
+        self.num_egressors = Some(num_egressors);
+        self
     }
 }
 
 impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for ForkLink<Packet> {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
+    fn ingressors(mut self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
@@ -64,23 +58,17 @@ impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for ForkLink<Pa
             panic!("ForkLink may only take 1 input stream")
         }
 
-        ForkLink {
-            in_stream: Some(in_streams.remove(0)),
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.in_stream = Some(in_streams.remove(0));
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<Packet>) -> Self {
         if self.in_stream.is_some() {
             panic!("ForkLink may only take 1 input stream")
         }
 
-        ForkLink {
-            in_stream: Some(in_stream),
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<Packet> {
