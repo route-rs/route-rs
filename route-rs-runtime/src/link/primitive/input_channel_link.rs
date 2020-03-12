@@ -16,10 +16,9 @@ impl<Packet> InputChannelLink<Packet> {
         }
     }
 
-    pub fn channel(self, channel_receiver: crossbeam::Receiver<Packet>) -> Self {
-        InputChannelLink {
-            channel_receiver: Some(channel_receiver),
-        }
+    pub fn channel(mut self, channel_receiver: crossbeam::Receiver<Packet>) -> Self {
+        self.channel_receiver = Some(channel_receiver);
+        self
     }
 }
 

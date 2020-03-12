@@ -17,16 +17,14 @@ impl<Packet> OutputChannelLink<Packet> {
         }
     }
 
-    pub fn channel(self, channel_sender: crossbeam::Sender<Packet>) -> Self {
-        OutputChannelLink {
-            in_stream: self.in_stream,
-            channel_sender: Some(channel_sender),
-        }
+    pub fn channel(mut self, channel_sender: crossbeam::Sender<Packet>) -> Self {
+        self.channel_sender = Some(channel_sender);
+        self
     }
 }
 
 impl<Packet: Send + 'static> LinkBuilder<Packet, ()> for OutputChannelLink<Packet> {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
+    fn ingressors(mut self, mut in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
@@ -37,20 +35,16 @@ impl<Packet: Send + 'static> LinkBuilder<Packet, ()> for OutputChannelLink<Packe
             panic!("OutputChannelLink may only take 1 input stream");
         }
 
-        OutputChannelLink {
-            in_stream: Some(in_streams.remove(0)),
-            channel_sender: self.channel_sender,
-        }
+        self.in_stream = Some(in_streams.remove(0));
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<Packet>) -> Self {
         if self.in_stream.is_some() {
             panic!("OutputChannelLink may only take 1 input stream");
         }
-        OutputChannelLink {
-            in_stream: Some(in_stream),
-            channel_sender: self.channel_sender,
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<()> {
