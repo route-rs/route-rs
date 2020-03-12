@@ -28,23 +28,20 @@ impl<P: Processor> QueueLink<P> {
     }
 
     /// Changes queue_capacity, default value is 10.
-    pub fn queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("QueueLink queue capacity: {} must be > 0", queue_capacity)
         );
         assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        QueueLink {
-            in_stream: self.in_stream,
-            processor: self.processor,
-            queue_capacity,
-        }
+        self.queue_capacity = queue_capacity;
+        self
     }
 }
 
 impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for QueueLink<P> {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<P::Input>>) -> Self {
+    fn ingressors(mut self, mut in_streams: Vec<PacketStream<P::Input>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
@@ -55,23 +52,17 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for QueueLi
             panic!("QueueLink may only take 1 input stream")
         }
 
-        QueueLink {
-            in_stream: Some(in_streams.remove(0)),
-            processor: self.processor,
-            queue_capacity: self.queue_capacity,
-        }
+        self.in_stream = Some(in_streams.remove(0));
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<P::Input>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<P::Input>) -> Self {
         if self.in_stream.is_some() {
             panic!("QueueLink may only take 1 input stream")
         }
 
-        QueueLink {
-            in_stream: Some(in_stream),
-            processor: self.processor,
-            queue_capacity: self.queue_capacity,
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<P::Output> {
@@ -99,12 +90,9 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for QueueLi
 }
 
 impl<P: Processor + Send + 'static> ProcessLinkBuilder<P> for QueueLink<P> {
-    fn processor(self, processor: P) -> Self {
-        QueueLink {
-            in_stream: self.in_stream,
-            processor: Some(processor),
-            queue_capacity: self.queue_capacity,
-        }
+    fn processor(mut self, processor: P) -> Self {
+        self.processor = Some(processor);
+        self
     }
 }
 

@@ -23,21 +23,19 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
     }
 
     /// Changes queue_capacity, default value is 10.
-    pub fn queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("Queue capacity: {}, must be > 0", queue_capacity)
         );
 
-        JoinLink {
-            in_streams: self.in_streams,
-            queue_capacity,
-        }
+        self.queue_capacity = queue_capacity;
+        self
     }
 }
 
 impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Packet> {
-    fn ingressors(self, in_streams: Vec<PacketStream<Packet>>) -> Self {
+    fn ingressors(mut self, in_streams: Vec<PacketStream<Packet>>) -> Self {
         assert!(
             !in_streams.is_empty(),
             format!(
@@ -50,30 +48,20 @@ impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Pa
             panic!("Join link already has input streams")
         }
 
-        JoinLink {
-            in_streams: Some(in_streams),
-            queue_capacity: self.queue_capacity,
-        }
+        self.in_streams = Some(in_streams);
+        self
     }
 
     /// Appends the ingressor to the ingressors of the link.
-    fn ingressor(self, in_stream: PacketStream<Packet>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<Packet>) -> Self {
         match self.in_streams {
-            None => {
-                let in_streams = Some(vec![in_stream]);
-                JoinLink {
-                    in_streams,
-                    queue_capacity: self.queue_capacity,
-                }
-            }
+            None => self.in_streams = Some(vec![in_stream]),
             Some(mut in_streams) => {
                 in_streams.push(in_stream);
-                JoinLink {
-                    in_streams: Some(in_streams),
-                    queue_capacity: self.queue_capacity,
-                }
+                self.in_streams = Some(in_streams);
             }
         }
+        self
     }
 
     fn build_link(self) -> Link<Packet> {
