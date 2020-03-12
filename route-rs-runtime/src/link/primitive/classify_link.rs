@@ -32,57 +32,37 @@ impl<C: Classifier> ClassifyLink<C> {
         }
     }
 
-    pub fn classifier(self, classifier: C) -> Self {
-        ClassifyLink {
-            in_stream: self.in_stream,
-            classifier: Some(classifier),
-            dispatcher: self.dispatcher,
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+    pub fn classifier(mut self, classifier: C) -> Self {
+        self.classifier = Some(classifier);
+        self
     }
 
-    pub fn dispatcher(self, dispatcher: Box<Dispatcher<'static, C::Class>>) -> Self {
-        ClassifyLink {
-            in_stream: self.in_stream,
-            classifier: self.classifier,
-            dispatcher: Some(dispatcher),
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+    pub fn dispatcher(mut self, dispatcher: Box<Dispatcher<'static, C::Class>>) -> Self {
+        self.dispatcher = Some(dispatcher);
+        self
     }
 
-    pub fn queue_capacity(self, queue_capacity: usize) -> Self {
+    pub fn queue_capacity(mut self, queue_capacity: usize) -> Self {
         assert!(
             queue_capacity > 0,
             format!("Queue capacity: {}, must be > 0", queue_capacity)
         );
-        ClassifyLink {
-            in_stream: self.in_stream,
-            classifier: self.classifier,
-            dispatcher: self.dispatcher,
-            queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.queue_capacity = queue_capacity;
+        self
     }
 
-    pub fn num_egressors(self, num_egressors: usize) -> Self {
+    pub fn num_egressors(mut self, num_egressors: usize) -> Self {
         assert!(
             num_egressors > 0,
             format!("num_egressors: {}, must be > 0", num_egressors)
         );
-        ClassifyLink {
-            in_stream: self.in_stream,
-            classifier: self.classifier,
-            dispatcher: self.dispatcher,
-            queue_capacity: self.queue_capacity,
-            num_egressors: Some(num_egressors),
-        }
+        self.num_egressors = Some(num_egressors);
+        self
     }
 }
 
 impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for ClassifyLink<C> {
-    fn ingressors(self, mut in_streams: Vec<PacketStream<C::Packet>>) -> Self {
+    fn ingressors(mut self, mut in_streams: Vec<PacketStream<C::Packet>>) -> Self {
         assert_eq!(
             in_streams.len(),
             1,
@@ -93,27 +73,17 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
             panic!("ClassifyLink may only take 1 input stream")
         }
 
-        ClassifyLink {
-            in_stream: Some(in_streams.remove(0)),
-            classifier: self.classifier,
-            dispatcher: self.dispatcher,
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.in_stream = Some(in_streams.remove(0));
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<C::Packet>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<C::Packet>) -> Self {
         if self.in_stream.is_some() {
             panic!("ClassifyLink may only take 1 input stream")
         }
 
-        ClassifyLink {
-            in_stream: Some(in_stream),
-            classifier: self.classifier,
-            dispatcher: self.dispatcher,
-            queue_capacity: self.queue_capacity,
-            num_egressors: self.num_egressors,
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<C::Packet> {

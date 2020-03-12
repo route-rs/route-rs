@@ -53,26 +53,26 @@ impl FromPcap {
     pub fn new() -> Self {
         FromPcap::default()
     }
-    pub fn replay_mode(self, replay_mode: PcapReplayMode) -> Self {
-        FromPcap {
-            src_file: self.src_file,
-            replay_mode,
-        }
+
+    pub fn replay_mode(mut self, replay_mode: PcapReplayMode) -> Self {
+        self.replay_mode = replay_mode;
+        self
     }
-    pub fn src_file(self, src_file: String) -> Self {
-        FromPcap {
-            src_file: Some(src_file),
-            replay_mode: self.replay_mode,
-        }
+
+    pub fn src_file(mut self, src_file: String) -> Self {
+        self.src_file = Some(src_file);
+        self
     }
 }
 impl LinkBuilder<(), Vec<u8>> for FromPcap {
     fn ingressor(self, _in_stream: PacketStream<()>) -> Self {
         panic!("FromPcap takes NO input stream")
     }
+
     fn ingressors(self, _ingress_streams: Vec<PacketStream<()>>) -> Self {
         panic!("FromPcap takes NO input stream(s)")
     }
+
     fn build_link(self) -> Link<Vec<u8>> {
         if let Some(src_file) = self.src_file {
             let pcap_proc = FromPcapEggressor::new(src_file, self.replay_mode);
