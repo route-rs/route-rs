@@ -21,25 +21,19 @@ impl<I> DropLink<I> {
         }
     }
 
-    pub fn drop_chance(self, chance: f64) -> Self {
-        DropLink {
-            in_stream: self.in_stream,
-            drop_chance: Some(chance),
-            seed: self.seed,
-        }
+    pub fn drop_chance(mut self, chance: f64) -> Self {
+        self.drop_chance = Some(chance);
+        self
     }
 
-    pub fn seed(self, int_seed: u64) -> Self {
-        DropLink {
-            in_stream: self.in_stream,
-            drop_chance: self.drop_chance,
-            seed: Some(int_seed),
-        }
+    pub fn seed(mut self, int_seed: u64) -> Self {
+        self.seed = Some(int_seed);
+        self
     }
 }
 
 impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
-    fn ingressors(self, mut ingress_streams: Vec<PacketStream<I>>) -> Self {
+    fn ingressors(mut self, mut ingress_streams: Vec<PacketStream<I>>) -> Self {
         assert_eq!(
             ingress_streams.len(),
             1,
@@ -50,23 +44,17 @@ impl<I: Send + Clone + 'static> LinkBuilder<I, I> for DropLink<I> {
             panic!("DropLink can only take 1 input stream")
         }
 
-        DropLink {
-            in_stream: Some(ingress_streams.remove(0)),
-            drop_chance: self.drop_chance,
-            seed: self.seed,
-        }
+        self.in_stream = Some(ingress_streams.remove(0));
+        self
     }
 
-    fn ingressor(self, in_stream: PacketStream<I>) -> Self {
+    fn ingressor(mut self, in_stream: PacketStream<I>) -> Self {
         if self.in_stream.is_some() {
             panic!("DropLink can only take 1 input stream")
         }
 
-        DropLink {
-            in_stream: Some(in_stream),
-            drop_chance: self.drop_chance,
-            seed: self.seed,
-        }
+        self.in_stream = Some(in_stream);
+        self
     }
 
     fn build_link(self) -> Link<I> {
