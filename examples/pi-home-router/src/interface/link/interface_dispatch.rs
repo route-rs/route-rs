@@ -6,6 +6,7 @@ use route_rs_runtime::link::{
     primitive::{ClassifyLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
+use route_rs_runtime::unpack;
 
 /// InterfaceDispatch
 ///
@@ -52,7 +53,9 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
     }
 
     fn build_link(self) -> Link<EthernetFrame> {
-        let (runnables, mut ce) = ClassifyLink::new()
+        let mut runnables = vec![];
+        unpack!(
+            let (runnables, [ce_0, ce_1, ce_2]) = ClassifyLink::new()
             .ingressor(self.in_stream.unwrap())
             .classifier(ByOutboundInterface)
             .num_egressors(3)
@@ -63,27 +66,30 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
                 Interface::Unmarked => None,
             }))
             .build_link();
+        );
 
-        let (_, host_e) = ProcessLink::new()
-            .ingressor(ce.remove(0))
-            .processor(InterfaceAnnotationDecap)
-            .build_link();
+        unpack!(
+            let (_, [host_e]) = ProcessLink::new()
+                .ingressor(ce_0)
+                .processor(InterfaceAnnotationDecap)
+                .build_link();
+        );
 
-        let (_, mut lan_e) = ProcessLink::new()
-            .ingressor(ce.remove(0))
-            .processor(InterfaceAnnotationDecap)
-            .build_link();
+        unpack!(
+            let (_, [lan_e]) = ProcessLink::new()
+                .ingressor(ce_1)
+                .processor(InterfaceAnnotationDecap)
+                .build_link();
+        );
 
-        let (_, mut wan_e) = ProcessLink::new()
-            .ingressor(ce.remove(0))
-            .processor(InterfaceAnnotationDecap)
-            .build_link();
+        unpack!(
+            let (_, [wan_e]) = ProcessLink::new()
+                .ingressor(ce_2)
+                .processor(InterfaceAnnotationDecap)
+                .build_link();
+        );
 
-        let mut egressors = host_e;
-        egressors.append(&mut lan_e);
-        egressors.append(&mut wan_e);
-
-        (runnables, egressors)
+        (runnables, vec![host_e, lan_e, wan_e])
     }
 }
 

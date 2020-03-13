@@ -5,6 +5,7 @@ use route_rs_runtime::link::{
     primitive::{JoinLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
+use route_rs_runtime::unpack;
 
 /// InterfaceCollect: Link that our 3 input interfaces, Host, Lan and Wan, expected in that order.
 pub(crate) struct InterfaceCollect {
@@ -45,32 +46,42 @@ impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for Interface
     }
 
     fn build_link(self) -> Link<InterfaceAnnotated<EthernetFrame>> {
-        let mut tagger_streams = vec![];
         let mut streams = self.in_streams.unwrap();
 
-        let tagger = InterfaceAnnotationEncap::new(Interface::Host, Interface::Unmarked);
-        let (_, mut annotated_stream) = ProcessLink::new()
-            .processor(tagger)
-            .ingressor(streams.remove(0))
-            .build_link();
-        tagger_streams.append(&mut annotated_stream);
+        unpack!(
+            let (_, [host]) = ProcessLink::new()
+                .processor(InterfaceAnnotationEncap::new(
+                    Interface::Host,
+                    Interface::Unmarked
+                ))
+                .ingressor(streams.remove(0))
+                .build_link();
+        );
 
-        let tagger = InterfaceAnnotationEncap::new(Interface::Lan, Interface::Unmarked);
-        let (_, mut annotated_stream) = ProcessLink::new()
-            .processor(tagger)
-            .ingressor(streams.remove(1))
-            .build_link();
-        tagger_streams.append(&mut annotated_stream);
+        unpack!(
+            let (_, [lan]) = ProcessLink::new()
+                .processor(InterfaceAnnotationEncap::new(
+                    Interface::Lan,
+                    Interface::Unmarked
+                ))
+                .ingressor(streams.remove(1))
+                .build_link();
+        );
 
-        let tagger = InterfaceAnnotationEncap::new(Interface::Wan, Interface::Unmarked);
-        let (_, mut annotated_stream) = ProcessLink::new()
-            .processor(tagger)
-            .ingressor(streams.remove(0))
-            .build_link();
-        tagger_streams.append(&mut annotated_stream);
+        unpack!(
+            let (_, [wan]) = ProcessLink::new()
+                .processor(InterfaceAnnotationEncap::new(
+                    Interface::Wan,
+                    Interface::Unmarked
+                ))
+                .ingressor(streams.remove(0))
+                .build_link();
+        );
 
         // Join link has the only tokio runnables here, can just return it
-        JoinLink::new().ingressors(tagger_streams).build_link()
+        JoinLink::new()
+            .ingressors(vec![host, lan, wan])
+            .build_link()
     }
 }
 
