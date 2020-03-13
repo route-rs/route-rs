@@ -50,20 +50,23 @@ impl EthernetFrame {
         MacAddr::new(bytes)
     }
 
-    pub fn set_dest_mac(&mut self, mac: MacAddr) {
+    pub fn set_dest_mac(&mut self, mac: MacAddr) -> &mut Self {
         self.data[..6].copy_from_slice(&mac.bytes[..6]);
+        self
     }
 
-    pub fn set_src_mac(&mut self, mac: MacAddr) {
+    pub fn set_src_mac(&mut self, mac: MacAddr) -> &mut Self {
         self.data[6..12].copy_from_slice(&mac.bytes[..6]);
+        self
     }
 
     pub fn ether_type(&self) -> u16 {
         u16::from_be_bytes(self.data[12..=13].try_into().unwrap())
     }
 
-    pub fn set_ether_type(&mut self, ether_type: u16) {
+    pub fn set_ether_type(&mut self, ether_type: u16) -> &mut Self {
         self.data[12..=13].copy_from_slice(&ether_type.to_be_bytes());
+        self
     }
 
     // This gives you a cow of a slice of the payload.
@@ -71,11 +74,12 @@ impl EthernetFrame {
         Cow::from(&self.data[self.payload_offset..])
     }
 
-    pub fn set_payload(&mut self, payload: &[u8]) {
+    pub fn set_payload(&mut self, payload: &[u8]) -> &mut Self {
         let payload_len = payload.len() as u16;
         self.data.truncate(self.payload_offset);
         self.data.reserve_exact(payload_len as usize);
         self.data.extend(payload);
+        self
     }
 
     pub fn encap_ipv4(ipv4: Ipv4Packet) -> EthernetFrame {

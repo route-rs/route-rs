@@ -83,8 +83,9 @@ impl<'packet> UdpSegment {
         )
     }
 
-    pub fn set_src_port(&mut self, port: u16) {
+    pub fn set_src_port(&mut self, port: u16) -> &mut Self {
         self.data[self.layer4_offset..=self.layer4_offset + 1].copy_from_slice(&port.to_be_bytes());
+        self
     }
 
     pub fn dest_port(&self) -> u16 {
@@ -95,9 +96,10 @@ impl<'packet> UdpSegment {
         )
     }
 
-    pub fn set_dest_port(&mut self, port: u16) {
+    pub fn set_dest_port(&mut self, port: u16) -> &mut Self {
         self.data[self.layer4_offset + 2..=self.layer4_offset + 3]
             .copy_from_slice(&port.to_be_bytes());
+        self
     }
 
     pub fn length(&self) -> u16 {
@@ -118,9 +120,10 @@ impl<'packet> UdpSegment {
 
     /// Manually set the checksum of UDP packet, this should be improved later to
     /// be calculated automatically.
-    pub fn set_checksum(&mut self, checksum: u16) {
+    pub fn set_checksum(&mut self, checksum: u16) -> &mut Self {
         self.data[self.layer4_offset + 6..=self.layer4_offset + 7]
-            .copy_from_slice(&checksum.to_be_bytes())
+            .copy_from_slice(&checksum.to_be_bytes());
+        self
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
@@ -129,11 +132,12 @@ impl<'packet> UdpSegment {
 
     /// Set payload of UDP packet, does not change checksum.
     /// Don't forget to update the length field of the IP packet that contains this.
-    pub fn set_payload(&mut self, payload: &[u8]) {
+    pub fn set_payload(&mut self, payload: &[u8]) -> &mut Self {
         let payload_len = payload.len();
         self.data.truncate(self.payload_offset);
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
+        self
     }
 }
 
