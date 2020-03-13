@@ -6,6 +6,7 @@ use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::primitive::{ClassifyLink, ProcessLink};
 use route_rs_runtime::link::ProcessLinkBuilder;
 use route_rs_runtime::link::{Link, LinkBuilder, PacketStream};
+use route_rs_runtime::unpack;
 
 /// RouterIntake is a link that take in 3 streams from the interfaces of the PHR, combines them into
 /// a stream of packets. That stream is then divided into 3 output streams, by IP type. RouterIntake
@@ -74,36 +75,37 @@ impl LinkBuilder<Vec<u8>, InterfaceAnnotated<EthernetFrame>> for RouterIntake {
         let mut streams = self.in_streams.unwrap();
 
         let mut all_runnables = vec![];
-        let mut interfaces = vec![];
 
-        let (mut host_runnables, mut host_egressors) = ProcessLink::new()
-            .ingressor(streams.remove(0))
-            .processor(VecToEthernetFrame)
-            .build_link();
-        all_runnables.append(&mut host_runnables);
-        interfaces.append(&mut host_egressors);
+        unpack!(
+            let (all_runnables, [host_e]) = ProcessLink::new()
+                .ingressor(streams.remove(0))
+                .processor(VecToEthernetFrame)
+                .build_link();
+        );
 
-        let (mut lan_runnables, mut lan_egressors) = ProcessLink::new()
-            .ingressor(streams.remove(0))
-            .processor(VecToEthernetFrame)
-            .build_link();
-        all_runnables.append(&mut lan_runnables);
-        interfaces.append(&mut lan_egressors);
+        unpack!(
+            let (all_runnables, [lan_e]) = ProcessLink::new()
+                .ingressor(streams.remove(0))
+                .processor(VecToEthernetFrame)
+                .build_link();
+        );
 
-        let (mut wan_runnables, mut wan_egressors) = ProcessLink::new()
-            .ingressor(streams.remove(0))
-            .processor(VecToEthernetFrame)
-            .build_link();
-        all_runnables.append(&mut wan_runnables);
-        interfaces.append(&mut wan_egressors);
+        unpack!(
+            let (all_runnables, [wan_e]) = ProcessLink::new()
+                .ingressor(streams.remove(0))
+                .processor(VecToEthernetFrame)
+                .build_link();
+        );
 
         //---Collect from Interfaces---//
-        let (mut collect_runnables, collect_egressors) =
-            InterfaceCollect::new().ingressors(interfaces).build_link();
-        all_runnables.append(&mut collect_runnables);
+        unpack!(
+            let (all_runnables, collect_egressors) =
+            InterfaceCollect::new().ingressors(vec![host_e, lan_e, wan_e]).build_link();
+        );
 
         //---Sort into streams by EtherType---//
-        let (mut sort_runnables, sort_egressors) = ClassifyLink::new()
+        unpack!(
+            let (all_runnables, sort_egressors) = ClassifyLink::new()
             .ingressors(collect_egressors)
             .num_egressors(3)
             .classifier(ByEtherType {})
@@ -114,7 +116,7 @@ impl LinkBuilder<Vec<u8>, InterfaceAnnotated<EthernetFrame>> for RouterIntake {
                 EtherType::Unsupported => None,
             }))
             .build_link();
-        all_runnables.append(&mut sort_runnables);
+        );
 
         (all_runnables, sort_egressors)
     }
