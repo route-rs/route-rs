@@ -73,8 +73,9 @@ impl TcpSegment {
         )
     }
 
-    pub fn set_src_port(&mut self, port: u16) {
+    pub fn set_src_port(&mut self, port: u16) -> &mut Self {
         self.data[self.layer4_offset..=self.layer4_offset + 1].copy_from_slice(&port.to_be_bytes());
+        self
     }
 
     pub fn dest_port(&self) -> u16 {
@@ -85,9 +86,10 @@ impl TcpSegment {
         )
     }
 
-    pub fn set_dest_port(&mut self, port: u16) {
+    pub fn set_dest_port(&mut self, port: u16) -> &mut Self {
         self.data[self.layer4_offset + 2..=self.layer4_offset + 3]
             .copy_from_slice(&port.to_be_bytes());
+        self
     }
 
     pub fn sequence_number(&self) -> u32 {
@@ -98,9 +100,10 @@ impl TcpSegment {
         )
     }
 
-    pub fn set_sequence_number(&mut self, sequence_number: u32) {
+    pub fn set_sequence_number(&mut self, sequence_number: u32) -> &mut Self {
         self.data[self.layer4_offset + 4..=self.layer4_offset + 7]
             .copy_from_slice(&sequence_number.to_be_bytes());
+        self
     }
 
     pub fn acknowledgment_number(&self) -> u32 {
@@ -111,9 +114,10 @@ impl TcpSegment {
         )
     }
 
-    pub fn set_acknowledgment_number(&mut self, acknowledgment_number: u32) {
+    pub fn set_acknowledgment_number(&mut self, acknowledgment_number: u32) -> &mut Self {
         self.data[self.layer4_offset + 4..=self.layer4_offset + 7]
             .copy_from_slice(&acknowledgment_number.to_be_bytes());
+        self
     }
 
     pub fn data_offset(&self) -> u8 {
@@ -121,10 +125,11 @@ impl TcpSegment {
     }
 
     /// Data offset is the value wanted in BYTES
-    pub fn set_data_offset(&mut self, data_offset: usize) {
+    pub fn set_data_offset(&mut self, data_offset: usize) -> &mut Self {
         self.data[self.layer4_offset + 12] &= 0xF0;
         self.data[self.layer4_offset + 12] |= (((data_offset / 4) << 4) & 0xF0) as u8;
         self.payload_offset = data_offset;
+        self
     }
 
     /// Returns the 9 control bits as a u16, the 9 least significant bits
@@ -138,10 +143,11 @@ impl TcpSegment {
     }
 
     /// Set control bits based on 9 least significant bits of control_bits parameter
-    pub fn set_control_bits(&mut self, control_bits: u16) {
+    pub fn set_control_bits(&mut self, control_bits: u16) -> &mut Self {
         self.data[self.layer4_offset + 12] &= 0xFE;
         self.data[self.layer4_offset + 12] |= ((control_bits >> 8) & 0x01) as u8;
         self.data[self.layer4_offset + 13] = (control_bits & 0x00FF) as u8;
+        self
     }
 
     pub fn window_size(&self) -> u16 {
@@ -152,9 +158,10 @@ impl TcpSegment {
         )
     }
 
-    pub fn set_window_size(&mut self, window_size: u16) {
+    pub fn set_window_size(&mut self, window_size: u16) -> &mut Self {
         self.data[self.layer4_offset + 14..=self.layer4_offset + 15]
             .copy_from_slice(&window_size.to_be_bytes());
+        self
     }
 
     pub fn checksum(&self) -> u16 {
@@ -166,9 +173,10 @@ impl TcpSegment {
     }
 
     /// Manually set checksum with a provided 16 value
-    pub fn set_checksum(&mut self, checksum: u16) {
+    pub fn set_checksum(&mut self, checksum: u16) -> &mut Self {
         self.data[self.layer4_offset + 16..=self.layer4_offset + 17]
             .copy_from_slice(&checksum.to_be_bytes());
+        self
     }
 
     pub fn urgent_pointer(&self) -> u16 {
@@ -179,9 +187,10 @@ impl TcpSegment {
         )
     }
 
-    pub fn set_urgent_pointer(&mut self, urgent_pointer: u16) {
+    pub fn set_urgent_pointer(&mut self, urgent_pointer: u16) -> &mut Self {
         self.data[self.layer4_offset + 18..=self.layer4_offset + 19]
             .copy_from_slice(&urgent_pointer.to_be_bytes());
+        self
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
@@ -197,13 +206,14 @@ impl TcpSegment {
     /// sets the data_offset field of the packet, and the internal payload_offset
     /// field.
     /// To be valid, options must be padded by the user to 32bits
-    pub fn set_options(&mut self, options: &[u8]) {
+    pub fn set_options(&mut self, options: &[u8]) -> &mut Self {
         let payload = self.data.split_off(self.payload_offset);
         self.data.truncate(self.layer4_offset + 20);
         self.data.reserve_exact(payload.len() + options.len());
         self.data.extend(options);
         self.data.extend(payload);
         self.set_data_offset(options.len() + 20);
+        self
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
@@ -213,11 +223,12 @@ impl TcpSegment {
     /// Sets TCP payload, if you change the length of the payload, you should
     /// go and reset the length field in the relevant Ipv4 or Ipv6 field, lest you
     /// create an invalid packet.
-    pub fn set_payload(&mut self, payload: &[u8]) {
+    pub fn set_payload(&mut self, payload: &[u8]) -> &mut Self {
         let payload_len = payload.len();
         self.data.truncate(self.payload_offset);
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
+        self
     }
 
     //TODO: Create functions to calculate and set checksum.
