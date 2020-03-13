@@ -69,8 +69,9 @@ impl Ipv4Packet {
         Ipv4Addr::from(data)
     }
 
-    pub fn set_src_addr(&mut self, addr: Ipv4Addr) {
+    pub fn set_src_addr(&mut self, addr: Ipv4Addr) -> &mut Self {
         self.data[self.layer3_offset + 12..self.layer3_offset + 16].copy_from_slice(&addr.octets());
+        self
     }
 
     pub fn dest_addr(&self) -> Ipv4Addr {
@@ -80,8 +81,9 @@ impl Ipv4Packet {
         Ipv4Addr::from(data)
     }
 
-    pub fn set_dest_addr(&mut self, addr: Ipv4Addr) {
+    pub fn set_dest_addr(&mut self, addr: Ipv4Addr) -> &mut Self {
         self.data[self.layer3_offset + 16..self.layer3_offset + 20].copy_from_slice(&addr.octets());
+        self
     }
 
     pub fn ihl(&self) -> u8 {
@@ -90,17 +92,18 @@ impl Ipv4Packet {
 
     // Leave private, it refers to the length of the header, which is really the length of the
     // options field. Users wishing to set this should just use `set_options`
-    fn set_ihl(&mut self, header_length: usize) {
+    fn set_ihl(&mut self, header_length: usize) -> &mut Self {
         self.data[self.layer3_offset] &= 0xF0;
         self.data[self.layer3_offset] |= 0x0F & ((header_length / 4) as u8);
         self.payload_offset = header_length;
+        self
     }
 
     pub fn payload(&self) -> Cow<[u8]> {
         Cow::from(&self.data[self.payload_offset..])
     }
 
-    pub fn set_payload(&mut self, payload: &[u8]) {
+    pub fn set_payload(&mut self, payload: &[u8]) -> &mut Self {
         let payload_len = payload.len();
 
         self.data.truncate(self.payload_offset);
@@ -110,6 +113,7 @@ impl Ipv4Packet {
 
         self.data.reserve_exact(payload_len);
         self.data.extend(payload);
+        self
     }
 
     pub fn options(&self) -> Option<Cow<[u8]>> {
@@ -125,21 +129,23 @@ impl Ipv4Packet {
     /// sets the IHL field of the packet, and the internal payload_offset
     /// field.
     /// Note: The user should provide options that are padded to a 32bit length.
-    pub fn set_options(&mut self, options: &[u8]) {
+    pub fn set_options(&mut self, options: &[u8]) -> &mut Self {
         let payload = self.data.split_off(self.payload_offset);
         self.data.truncate(self.layer3_offset + 20);
         self.data.reserve_exact(payload.len() + options.len());
         self.data.extend(options);
         self.data.extend(payload);
         self.set_ihl(options.len() + 20);
+        self
     }
 
     pub fn protocol(&self) -> IpProtocol {
         IpProtocol::from(self.data[self.layer3_offset + 9])
     }
 
-    pub fn set_protocol(&mut self, protocol: u8) {
+    pub fn set_protocol(&mut self, protocol: u8) -> &mut Self {
         self.data[self.layer3_offset + 9] = protocol;
+        self
     }
 
     pub fn total_len(&self) -> u16 {
@@ -154,8 +160,9 @@ impl Ipv4Packet {
         self.data[self.layer3_offset + 8]
     }
 
-    pub fn set_ttl(&mut self, ttl: u8) {
+    pub fn set_ttl(&mut self, ttl: u8) -> &mut Self {
         self.data[self.layer3_offset + 8] = ttl;
+        self
     }
 
     pub fn checksum(&self) -> u16 {
@@ -171,9 +178,10 @@ impl Ipv4Packet {
     }
 
     /// Lower 6 bits define the dscp
-    pub fn set_dscp(&mut self, dcsp: u8) {
+    pub fn set_dscp(&mut self, dcsp: u8) -> &mut Self {
         self.data[self.layer3_offset + 1] &= 0x03;
         self.data[self.layer3_offset + 1] |= dcsp << 2;
+        self
     }
 
     pub fn ecn(&self) -> u8 {
@@ -181,9 +189,10 @@ impl Ipv4Packet {
     }
 
     /// Lower 2 bits define the ecn
-    pub fn set_ecn(&mut self, ecn: u8) {
+    pub fn set_ecn(&mut self, ecn: u8) -> &mut Self {
         self.data[self.layer3_offset + 1] &= 0xFC;
         self.data[self.layer3_offset + 1] |= ecn & 0x03;
+        self
     }
 
     pub fn indentification(&self) -> u16 {
@@ -194,9 +203,10 @@ impl Ipv4Packet {
         )
     }
 
-    pub fn set_identification(&mut self, indentification: u16) {
+    pub fn set_identification(&mut self, indentification: u16) -> &mut Self {
         self.data[self.layer3_offset + 4..=self.layer3_offset + 5]
             .copy_from_slice(&indentification.to_be_bytes());
+        self
     }
 
     pub fn fragment_offset(&self) -> u16 {
@@ -207,10 +217,11 @@ impl Ipv4Packet {
     }
 
     /// Bottom 13bits are fragment offset
-    pub fn set_fragment_offset(&mut self, fragment_offset: u16) {
+    pub fn set_fragment_offset(&mut self, fragment_offset: u16) -> &mut Self {
         self.data[self.layer3_offset + 6] &= 0xE0;
         self.data[self.layer3_offset + 6] |= (fragment_offset >> 8) as u8 & 0x1F;
         self.data[self.layer3_offset + 7] = (fragment_offset & 0x00FF) as u8;
+        self
     }
 
     /// Returns tuple of (Don't Fragment, More Fragments)
@@ -220,7 +231,7 @@ impl Ipv4Packet {
         (df, mf)
     }
 
-    pub fn set_flags(&mut self, df: bool, mf: bool) {
+    pub fn set_flags(&mut self, df: bool, mf: bool) -> &mut Self {
         let bits: u8;
         match (df, mf) {
             (false, false) => bits = 0,
@@ -230,6 +241,7 @@ impl Ipv4Packet {
         }
         self.data[self.layer3_offset + 6] &= 0xE0;
         self.data[self.layer3_offset + 6] |= bits << 5;
+        self
     }
 
     /// Verifies the IP header checksum, returns the value and also sets
