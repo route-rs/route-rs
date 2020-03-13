@@ -66,11 +66,12 @@ impl Ipv6Packet {
             + (self.data[self.layer3_offset + 1] & 0xF0 >> 4)
     }
 
-    pub fn set_traffic_class(&mut self, traffic_class: u8) {
+    pub fn set_traffic_class(&mut self, traffic_class: u8) -> &mut Self {
         self.data[self.layer3_offset] &= 0xF0;
         self.data[self.layer3_offset + 1] &= 0x0F;
         self.data[self.layer3_offset] |= traffic_class >> 4;
         self.data[self.layer3_offset + 1] |= traffic_class << 4;
+        self
     }
 
     /// Returns flow label as least significant 20 bits.
@@ -84,11 +85,12 @@ impl Ipv6Packet {
     }
 
     /// Sets flow label based on least significant 20 bits of flow_label parameter
-    pub fn set_flow_label(&mut self, flow_label: u32) {
+    pub fn set_flow_label(&mut self, flow_label: u32) -> &mut Self {
         self.data[self.layer3_offset + 1] &= 0xF0;
         self.data[self.layer3_offset + 1] |= ((flow_label & 0x000F_FFFF) >> 16) as u8;
         self.data[self.layer3_offset + 2..=self.layer3_offset + 3]
-            .copy_from_slice(&(flow_label as u16).to_be_bytes())
+            .copy_from_slice(&(flow_label as u16).to_be_bytes());
+        self
     }
 
     pub fn payload_length(&self) -> u16 {
@@ -103,16 +105,18 @@ impl Ipv6Packet {
         IpProtocol::from(self.data[self.layer3_offset + 6])
     }
 
-    pub fn set_next_header(&mut self, header: u8) {
+    pub fn set_next_header(&mut self, header: u8) -> &mut Self {
         self.data[self.layer3_offset + 6] = header;
+        self
     }
 
     pub fn hop_limit(&self) -> u8 {
         self.data[self.layer3_offset + 7]
     }
 
-    pub fn set_hop_limit(&mut self, hop_limit: u8) {
+    pub fn set_hop_limit(&mut self, hop_limit: u8) -> &mut Self {
         self.data[self.layer3_offset + 7] = hop_limit;
+        self
     }
 
     // Is there a bug here if there is no payload? wonder if
@@ -121,7 +125,7 @@ impl Ipv6Packet {
         Cow::from(&self.data[self.payload_offset..])
     }
 
-    pub fn set_payload(&mut self, payload: &[u8]) {
+    pub fn set_payload(&mut self, payload: &[u8]) -> &mut Self {
         let new_payload_len = payload.len();
         self.data.truncate(self.payload_offset);
 
@@ -131,6 +135,7 @@ impl Ipv6Packet {
         self.data.reserve_exact(new_payload_len);
         self.data.extend(payload);
         self.payload_offset = self.data.len() - payload.len();
+        self
     }
 
     pub fn src_addr(&self) -> Ipv6Addr {
@@ -147,12 +152,14 @@ impl Ipv6Packet {
         Ipv6Addr::from(data)
     }
 
-    pub fn set_src_addr(&mut self, addr: Ipv6Addr) {
+    pub fn set_src_addr(&mut self, addr: Ipv6Addr) -> &mut Self {
         self.data[self.layer3_offset + 8..self.layer3_offset + 24].copy_from_slice(&addr.octets());
+        self
     }
 
-    pub fn set_dest_addr(&mut self, addr: Ipv6Addr) {
+    pub fn set_dest_addr(&mut self, addr: Ipv6Addr) -> &mut Self {
         self.data[self.layer3_offset + 24..self.layer3_offset + 40].copy_from_slice(&addr.octets());
+        self
     }
 
     // TODO: Test the get and set for extension headers.
@@ -199,7 +206,11 @@ impl Ipv6Packet {
     /// IpProtocol of the payload.
     /// If the provided vector does not contain any headers, the header field is cleared, and the
     /// first_header field should be the IpProtocol of the payload.
-    pub fn set_extension_headers(&mut self, headers: Vec<&[u8]>, first_header: IpProtocol) {
+    pub fn set_extension_headers(
+        &mut self,
+        headers: Vec<&[u8]>,
+        first_header: IpProtocol,
+    ) -> &mut Self {
         let payload = self.data.split_off(self.payload_offset);
         self.data.truncate(self.layer3_offset + 40);
         for header in headers.iter() {
@@ -209,6 +220,7 @@ impl Ipv6Packet {
         if !headers.is_empty() {
             self.set_next_header(first_header as u8);
         }
+        self
     }
 
     /// Takes a UdpSegment, and returns an Ipv6Packet with the
