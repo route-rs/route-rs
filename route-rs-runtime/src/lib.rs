@@ -5,6 +5,38 @@ extern crate futures;
 extern crate crossbeam;
 extern crate tokio;
 
+#[macro_export]
+macro_rules! unpack {
+    (let ($runnables_collect:ident, [$($y:ident), +]) = $link:expr;) => {
+        let (mut runnables, mut egressors) = { $link };
+        $runnables_collect.append(&mut runnables);
+        unpack!(HELPER egressors, $($y), +);
+    };
+
+    (let (_, [$($y:ident), +]) = $link:expr;) => {
+        let (_, mut egressors) = { $link };
+        unpack!(HELPER egressors, $($y), +);
+    };
+
+    (let ($runnables_collect:ident, $egressors_collect:ident) = $link:expr;) => {
+        let (mut runnables, $egressors_collect) = { $link };
+        $runnables_collect.append(&mut runnables);
+    };
+
+    (let ($runnables_collect:ident, mut $egressors_collect:ident) = $link:expr;) => {
+        let (mut runnables, mut $egressors_collect) = { $link };
+        $runnables_collect.append(&mut runnables);
+    };
+
+    (HELPER $vector:ident, $e:ident ) => {
+        let $e = $vector.remove(0);
+    };
+    (HELPER $vector:ident, $e:ident, $($y:ident), +) => {
+        let $e = $vector.remove(0);
+        unpack!(HELPER $vector, $($y), +)
+    };
+}
+
 /// Implement the basic transformations for packets in the router.
 pub mod processor;
 
