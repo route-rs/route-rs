@@ -11,14 +11,14 @@ use std::sync::Arc;
 #[derive(Default)]
 pub struct JoinLink<Packet: Send + Clone> {
     in_streams: Option<Vec<PacketStream<Packet>>>,
-    queue_capacity: usize,
+    queue_capacity: Option<usize>,
 }
 
 impl<Packet: Send + Clone> JoinLink<Packet> {
     pub fn new() -> Self {
         JoinLink {
             in_streams: None,
-            queue_capacity: 10,
+            queue_capacity: None,
         }
     }
 
@@ -29,7 +29,7 @@ impl<Packet: Send + Clone> JoinLink<Packet> {
             format!("Queue capacity: {}, must be > 0", queue_capacity)
         );
 
-        self.queue_capacity = queue_capacity;
+        self.queue_capacity = Some(queue_capacity);
         self
     }
 }
@@ -75,8 +75,10 @@ impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for JoinLink<Pa
             let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
             for input_stream in input_streams {
-                let (to_egressor, from_ingressor) =
-                    crossbeam_channel::bounded::<Option<Packet>>(self.queue_capacity);
+                let (to_egressor, from_ingressor) = match self.queue_capacity {
+                    None => crossbeam_channel::unbounded::<Option<Packet>>(),
+                    Some(capacity) => crossbeam_channel::bounded::<Option<Packet>>(capacity),
+                };
                 let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
                 let ingressor =

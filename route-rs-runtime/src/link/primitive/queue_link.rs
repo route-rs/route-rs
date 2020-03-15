@@ -15,7 +15,7 @@ use std::sync::Arc;
 pub struct QueueLink<P: Processor> {
     in_stream: Option<PacketStream<P::Input>>,
     processor: Option<P>,
-    queue_capacity: usize,
+    queue_capacity: Option<usize>,
 }
 
 impl<P: Processor> QueueLink<P> {
@@ -23,7 +23,7 @@ impl<P: Processor> QueueLink<P> {
         QueueLink {
             in_stream: None,
             processor: None,
-            queue_capacity: 10,
+            queue_capacity: None,
         }
     }
 
@@ -33,9 +33,8 @@ impl<P: Processor> QueueLink<P> {
             queue_capacity > 0,
             format!("QueueLink queue capacity: {} must be > 0", queue_capacity)
         );
-        assert_ne!(queue_capacity, 0, "queue capacity must be non-zero");
 
-        self.queue_capacity = queue_capacity;
+        self.queue_capacity = Some(queue_capacity);
         self
     }
 }
@@ -71,8 +70,10 @@ impl<P: Processor + Send + 'static> LinkBuilder<P::Input, P::Output> for QueueLi
         } else if self.processor.is_none() {
             panic!("Cannot build link! Missing processor");
         } else {
-            let (to_egressor, from_ingressor) =
-                crossbeam_channel::bounded::<Option<P::Output>>(self.queue_capacity);
+            let (to_egressor, from_ingressor) = match self.queue_capacity {
+                None => crossbeam_channel::unbounded::<Option<P::Output>>(),
+                Some(capacity) => crossbeam_channel::bounded::<Option<P::Output>>(capacity),
+            };
             let task_park: Arc<AtomicCell<TaskParkState>> =
                 Arc::new(AtomicCell::new(TaskParkState::Empty));
 
