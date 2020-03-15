@@ -3,6 +3,9 @@ use std::fmt;
 
 /// Marker trait that struct is a 'packets' type
 pub trait Packet {}
+pub const IPV4_ETHER_TYPE: u16 = 0x0800;
+pub const IPV6_ETHER_TYPE: u16 = 0x86DD;
+pub const ARP_ETHER_TYPE: u16 = 0x0806;
 
 /// The common datatype that all packet structures share to repreasent their data
 pub type PacketData = Vec<u8>;
