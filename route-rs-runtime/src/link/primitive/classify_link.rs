@@ -17,7 +17,7 @@ pub struct ClassifyLink<C: Classifier> {
     in_stream: Option<PacketStream<C::Packet>>,
     classifier: Option<C>,
     dispatcher: Option<Box<Dispatcher<'static, C::Class>>>,
-    queue_capacity: usize,
+    queue_capacity: Option<usize>,
     num_egressors: Option<usize>,
 }
 
@@ -27,7 +27,7 @@ impl<C: Classifier> ClassifyLink<C> {
             in_stream: None,
             classifier: None,
             dispatcher: None,
-            queue_capacity: 10,
+            queue_capacity: None,
             num_egressors: None,
         }
     }
@@ -47,7 +47,7 @@ impl<C: Classifier> ClassifyLink<C> {
             queue_capacity > 0,
             format!("Queue capacity: {}, must be > 0", queue_capacity)
         );
-        self.queue_capacity = queue_capacity;
+        self.queue_capacity = Some(queue_capacity);
         self
     }
 
@@ -104,8 +104,10 @@ impl<C: Classifier + Send + 'static> LinkBuilder<C::Packet, C::Packet> for Class
             let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
             for _ in 0..self.num_egressors.unwrap() {
-                let (to_egressor, from_ingressor) =
-                    crossbeam_channel::bounded::<Option<C::Packet>>(self.queue_capacity);
+                let (to_egressor, from_ingressor) = match self.queue_capacity {
+                    None => crossbeam_channel::unbounded::<Option<C::Packet>>(),
+                    Some(capacity) => crossbeam_channel::bounded::<Option<C::Packet>>(capacity),
+                };
                 let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
                 let provider = QueueEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
