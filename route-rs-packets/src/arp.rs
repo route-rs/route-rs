@@ -1,5 +1,5 @@
-use crate::{EthernetFrame, MacAddr};
-use std::convert::TryInto;
+use crate::{EthernetFrame, MacAddr, ARP_ETHER_TYPE};
+use std::convert::{TryFrom, TryInto};
 use std::net::IpAddr;
 
 pub enum ArpOp {
@@ -11,11 +11,6 @@ pub enum ArpHardwareType {
     Ethernet = 1,
 }
 
-// TODO: should move to types.rs or ethernet.rs
-pub const IPV4_ETHER_TYPE: u16 = 0x0800;
-pub const IPV6_ETHER_TYPE: u16 = 0x86DD;
-pub const ARP_ETHER_TYPE: u16 = 0x0806;
-
 const HARDWARE_TYPE_RANGE: (usize, usize) = (0, 2);
 const PROTOCOL_TYPE_RANGE: (usize, usize) = (2, 4);
 const HARDWARE_ADDR_LEN_RANGE: (usize, usize) = (4, 5);
@@ -26,17 +21,16 @@ const OPCODE_RANGE: (usize, usize) = (6, 8);
 /// EthernetFrame wrapper with getters/setters for the packet structure described in RFC 826
 /// https://tools.ietf.org/html/rfc826
 ///
-// NOTE: Could be implemented in various ways, such as a specialized version of EthernetFrame that's
-// known to be an ARP frame. It could be implemented in a similar way that packets are promoted/demoted
-// with `TryFrom`.
 #[derive(Clone)]
 pub struct ArpFrame {
     frame: EthernetFrame,
 }
 
 impl ArpFrame {
-    // TODO: would like default args for Ethernet (6 bytes) and IPv4 (4 bytes)
-    // TODO: Should we accept a struct of options to initialize the ArpFrame with? Or use a builder pattern?
+    ///
+    /// Constructs a new, empty packet with a payload big enough for all ARP fields,
+    /// given some hardware/protocol address lengths.
+    ///
     pub fn new(hardware_addr_len: u8, protocol_addr_len: u8) -> Self {
         let payload_len = 8 + (2 * hardware_addr_len as usize) + (2 * protocol_addr_len as usize);
         let payload: Vec<u8> = vec![0; payload_len];
@@ -48,11 +42,6 @@ impl ArpFrame {
         arp_frame.set_hardware_addr_len(hardware_addr_len);
         arp_frame.set_protocol_addr_len(protocol_addr_len);
         arp_frame
-    }
-
-    pub fn from(frame: EthernetFrame) -> Self {
-        assert_eq!(frame.ether_type(), ARP_ETHER_TYPE);
-        ArpFrame { frame }
     }
 
     pub fn hardware_type(&self) -> u16 {
@@ -211,6 +200,38 @@ impl ArpFrame {
     }
 }
 
+impl TryFrom<EthernetFrame> for ArpFrame {
+    type Error = &'static str;
+
+    ///
+    /// Decorates the given EthernetFrame with ArpFrame getters/setters.
+    /// Validates
+    /// - The frame has an ARP ether type
+    /// - The frame has a reasonable payload size given the hardware/protocol address lengths
+    ///
+    fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
+        if frame.ether_type() != ARP_ETHER_TYPE {
+            return Err("Frame does not have ARP ether type.");
+        };
+
+        let arp_frame = ArpFrame { frame };
+        let payload_len = arp_frame.frame.payload().len();
+
+        if payload_len < 8 {
+            return Err("Frame payload is too small");
+        }
+
+        let hlen = arp_frame.hardware_addr_len() as usize;
+        let plen = arp_frame.protocol_addr_len() as usize;
+
+        if payload_len != (8 + (2 * hlen) + (2 * plen)) {
+            return Err("Frame payload doesn't match address length fields");
+        }
+
+        Ok(arp_frame)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn arp_frame_from_ethernet() {
+    fn arp_frame_from_ethernet() -> Result<(), String> {
         let arp_payload: Vec<u8> = vec![
             0x00, 0x01, 0x00, 0x01, 0x06, 0x04, 0x00, 0x01, 1, 2, 3, 4, 5, 6, 10, 0, 0, 1, 10, 9,
             8, 7, 6, 5, 0xff, 0xff, 0xff, 0xff,
@@ -239,7 +260,7 @@ mod tests {
         ethernet_frame.set_payload(&arp_payload);
         ethernet_frame.set_ether_type(ARP_ETHER_TYPE);
 
-        let arp_frame = ArpFrame::from(ethernet_frame);
+        let arp_frame = ArpFrame::try_from(ethernet_frame)?;
         assert_eq!(arp_frame.hardware_type(), 1);
         assert_eq!(arp_frame.protocol_type(), 1);
         assert_eq!(arp_frame.hardware_addr_len(), 6);
@@ -249,5 +270,6 @@ mod tests {
         assert_eq!(arp_frame.sender_protocol_addr(), [10, 0, 0, 1]);
         assert_eq!(arp_frame.target_hardware_addr(), [10, 9, 8, 7, 6, 5]);
         assert_eq!(arp_frame.target_protocol_addr(), [0xff, 0xff, 0xff, 0xff]);
+        Ok(())
     }
 }
