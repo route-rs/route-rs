@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[derive(Default)]
 pub struct ForkLink<Packet: Clone + Send> {
     in_stream: Option<PacketStream<Packet>>,
-    queue_capacity: usize,
+    queue_capacity: Option<usize>,
     num_egressors: Option<usize>,
 }
 
@@ -19,7 +19,7 @@ impl<Packet: Clone + Send> ForkLink<Packet> {
     pub fn new() -> Self {
         ForkLink {
             in_stream: None,
-            queue_capacity: 10,
+            queue_capacity: None,
             num_egressors: None,
         }
     }
@@ -31,7 +31,7 @@ impl<Packet: Clone + Send> ForkLink<Packet> {
             format!("queue_capacity: {}, must be > 0", queue_capacity)
         );
 
-        self.queue_capacity = queue_capacity;
+        self.queue_capacity = Some(queue_capacity);
         self
     }
 
@@ -85,8 +85,10 @@ impl<Packet: Send + Clone + 'static> LinkBuilder<Packet, Packet> for ForkLink<Pa
             let mut task_parks: Vec<Arc<AtomicCell<TaskParkState>>> = Vec::new();
 
             for _ in 0..self.num_egressors.unwrap() {
-                let (to_egressor, from_ingressor) =
-                    crossbeam_channel::bounded::<Option<Packet>>(self.queue_capacity);
+                let (to_egressor, from_ingressor) = match self.queue_capacity {
+                    None => crossbeam_channel::unbounded::<Option<Packet>>(),
+                    Some(capacity) => crossbeam_channel::bounded::<Option<Packet>>(capacity),
+                };
                 let task_park = Arc::new(AtomicCell::new(TaskParkState::Empty));
 
                 let egressor = QueueEgressor::new(from_ingressor.clone(), Arc::clone(&task_park));
