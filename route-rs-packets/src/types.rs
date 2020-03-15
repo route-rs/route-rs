@@ -1,6 +1,10 @@
 // Let's use this area for now to declare common structs, constants, and common helper functions.
 use std::fmt;
 
+pub const IPV4_ETHER_TYPE: u16 = 0x0800;
+pub const IPV6_ETHER_TYPE: u16 = 0x86DD;
+pub const ARP_ETHER_TYPE: u16 = 0x0806;
+
 /// The common datatype that all packet structures share to repreasent their data
 pub type PacketData = Vec<u8>;
 
