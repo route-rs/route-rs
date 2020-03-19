@@ -4,6 +4,7 @@ use crossbeam::atomic::AtomicCell;
 use crossbeam::crossbeam_channel;
 use crossbeam::crossbeam_channel::{Receiver, Sender};
 use futures::prelude::*;
+use futures::ready;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
 use std::sync::Arc;
