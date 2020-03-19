@@ -1,4 +1,5 @@
 use crate::link::{Link, LinkBuilder, PacketStream};
+use futures::ready;
 use futures::task::{Context, Poll};
 use futures::Stream;
 use pcap::{Capture, Offline};

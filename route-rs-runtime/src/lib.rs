@@ -1,9 +1,5 @@
 //! In brief: The runtime is what takes the basket of computation required by the user, links it together into the desired
 //! graph, and preps it to be handed to the Tokio for running.
-#[macro_use]
-extern crate futures;
-extern crate crossbeam;
-extern crate tokio;
 
 #[macro_export]
 macro_rules! unpack {
