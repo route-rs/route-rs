@@ -1,5 +1,6 @@
 use crate::link::{Link, LinkBuilder, PacketStream};
 use futures::prelude::*;
+use futures::ready;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
 

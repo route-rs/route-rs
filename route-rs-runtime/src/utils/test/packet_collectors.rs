@@ -1,6 +1,7 @@
 use crate::link::PacketStream;
 use crossbeam::crossbeam_channel::Sender;
 use futures::prelude::*;
+use futures::ready;
 use futures::task::{Context, Poll};
 use std::fmt::Debug;
 use std::pin::Pin;
