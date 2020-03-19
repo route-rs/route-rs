@@ -1,5 +1,6 @@
 use crate::link::PacketStream;
 use futures::prelude::*;
+use futures::ready;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
 use tokio::time::{interval, Duration, Interval};
