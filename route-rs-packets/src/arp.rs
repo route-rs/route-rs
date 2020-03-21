@@ -89,53 +89,53 @@ impl ArpFrame {
         self.arp_data(start, end)
     }
 
-    pub fn set_hardware_type(&mut self, htype: u16) {
+    pub fn set_hardware_type(&mut self, htype: u16) -> &mut Self {
         let (start, end) = HARDWARE_TYPE_RANGE;
-        self.set_arp_data(&htype.to_be_bytes(), start, end);
+        self.set_arp_data(&htype.to_be_bytes(), start, end)
     }
 
-    pub fn set_protocol_type(&mut self, ptype: u16) {
+    pub fn set_protocol_type(&mut self, ptype: u16) -> &mut Self {
         let (start, end) = PROTOCOL_TYPE_RANGE;
-        self.set_arp_data(&ptype.to_be_bytes(), start, end);
+        self.set_arp_data(&ptype.to_be_bytes(), start, end)
     }
 
-    pub fn set_hardware_addr_len(&mut self, len: u8) {
+    pub fn set_hardware_addr_len(&mut self, len: u8) -> &mut Self {
         let (start, end) = HARDWARE_ADDR_LEN_RANGE;
-        self.set_arp_data(&len.to_be_bytes(), start, end);
+        self.set_arp_data(&len.to_be_bytes(), start, end)
     }
 
-    pub fn set_protocol_addr_len(&mut self, len: u8) {
+    pub fn set_protocol_addr_len(&mut self, len: u8) -> &mut Self {
         let (start, end) = PROTOCOL_ADDR_LEN_RANGE;
-        self.set_arp_data(&len.to_be_bytes(), start, end);
+        self.set_arp_data(&len.to_be_bytes(), start, end)
     }
 
-    pub fn set_opcode(&mut self, code: u16) {
+    pub fn set_opcode(&mut self, code: u16) -> &mut Self {
         let (start, end) = OPCODE_RANGE;
-        self.set_arp_data(&code.to_be_bytes(), start, end);
+        self.set_arp_data(&code.to_be_bytes(), start, end)
     }
 
-    pub fn set_sender_hardware_addr(&mut self, addr: MacAddr) {
+    pub fn set_sender_hardware_addr(&mut self, addr: MacAddr) -> &mut Self {
         // NOTE: should we set len based on frame data, or param?
         let (start, end) = self.sender_hardware_addr_range();
-        self.set_arp_data(&addr.bytes, start, end);
+        self.set_arp_data(&addr.bytes, start, end)
     }
 
-    pub fn set_sender_protocol_addr(&mut self, ip_addr: IpAddr) {
+    pub fn set_sender_protocol_addr(&mut self, ip_addr: IpAddr) -> &mut Self {
         // NOTE: should we set len based on frame data, or param?
         let (start, _) = self.sender_protocol_addr_range();
-        self.set_ip_addr(ip_addr, start);
+        self.set_ip_addr(ip_addr, start)
     }
 
-    pub fn set_target_hardware_addr(&mut self, addr: MacAddr) {
+    pub fn set_target_hardware_addr(&mut self, addr: MacAddr) -> &mut Self {
         // NOTE: should we set len based on frame data, or param?
         let (start, end) = self.target_hardware_addr_range();
-        self.set_arp_data(&addr.bytes, start, end);
+        self.set_arp_data(&addr.bytes, start, end)
     }
 
-    pub fn set_target_protocol_addr(&mut self, ip_addr: IpAddr) {
+    pub fn set_target_protocol_addr(&mut self, ip_addr: IpAddr) -> &mut Self {
         // NOTE: should we set len based on frame data, or param?
         let (start, _) = self.target_protocol_addr_range();
-        self.set_ip_addr(ip_addr, start);
+        self.set_ip_addr(ip_addr, start)
     }
 
     // Move ownership of the frame back to the caller
@@ -152,19 +152,20 @@ impl ArpFrame {
         &self.frame.data[frame_offset_start..frame_offset_end]
     }
 
-    fn set_arp_data(&mut self, bytes: &[u8], start: usize, end: usize) {
+    fn set_arp_data(&mut self, bytes: &[u8], start: usize, end: usize) -> &mut Self {
         let frame_offset_start = self.frame.payload_offset + start;
         let frame_offset_end = self.frame.payload_offset + end;
 
         // TODO: I'd like to mutate`self.frame.payload()` here, but having ownership difficulties with Cow
         self.frame.data[frame_offset_start..frame_offset_end].copy_from_slice(bytes);
+        self
     }
 
-    fn set_ip_addr(&mut self, addr: IpAddr, start: usize) {
+    fn set_ip_addr(&mut self, addr: IpAddr, start: usize) -> &mut Self {
         match addr {
             IpAddr::V4(ipv4) => self.set_arp_data(&ipv4.octets(), start, start + 4),
             IpAddr::V6(ipv6) => self.set_arp_data(&ipv6.octets(), start, start + 16),
-        };
+        }
     }
 
     fn sender_hardware_addr_range(&self) -> (usize, usize) {
@@ -248,6 +249,21 @@ mod tests {
         assert_eq!(arp_frame.sender_protocol_addr(), [0, 0, 0, 0]);
         assert_eq!(arp_frame.target_hardware_addr(), [0, 0, 0, 0, 0, 0]);
         assert_eq!(arp_frame.target_protocol_addr(), [0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn chain_setters() {
+        let mut arp_frame = ArpFrame::new(6, 4);
+        arp_frame
+            .set_hardware_type(1)
+            .set_protocol_type(2)
+            .set_opcode(3);
+
+        assert_eq!(arp_frame.hardware_type(), 1);
+        assert_eq!(arp_frame.protocol_type(), 2);
+        assert_eq!(arp_frame.hardware_addr_len(), 6);
+        assert_eq!(arp_frame.protocol_addr_len(), 4);
+        assert_eq!(arp_frame.opcode(), 3);
     }
 
     #[test]
