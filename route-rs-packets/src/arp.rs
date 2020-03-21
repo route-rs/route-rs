@@ -212,7 +212,7 @@ impl TryFrom<EthernetFrame> for ArpFrame {
     ///
     fn try_from(frame: EthernetFrame) -> Result<Self, Self::Error> {
         if frame.ether_type() != ARP_ETHER_TYPE {
-            return Err("Frame does not have ARP ether type.");
+            return Err("Frame does not have ARP ether type");
         };
 
         let arp_frame = ArpFrame { frame };
@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn arp_frame_from_ethernet() -> Result<(), String> {
+    fn arp_frame_from_ethernet() -> Result<(), &'static str> {
         let arp_payload: Vec<u8> = vec![
             0x00, 0x01, 0x00, 0x01, 0x06, 0x04, 0x00, 0x01, 1, 2, 3, 4, 5, 6, 10, 0, 0, 1, 10, 9,
             8, 7, 6, 5, 0xff, 0xff, 0xff, 0xff,
@@ -287,5 +287,21 @@ mod tests {
         assert_eq!(arp_frame.target_hardware_addr(), [10, 9, 8, 7, 6, 5]);
         assert_eq!(arp_frame.target_protocol_addr(), [0xff, 0xff, 0xff, 0xff]);
         Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "Frame does not have ARP ether type")]
+    fn try_from_non_arp_ether_type() {
+        let mut ethernet_frame = EthernetFrame::empty();
+        ethernet_frame.set_ether_type(ARP_ETHER_TYPE + 1);
+        ArpFrame::try_from(ethernet_frame).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Frame payload is too small")]
+    fn try_from_small_frame() {
+        let mut ethernet_frame = EthernetFrame::empty();
+        ethernet_frame.set_ether_type(ARP_ETHER_TYPE);
+        ArpFrame::try_from(ethernet_frame).unwrap();
     }
 }
