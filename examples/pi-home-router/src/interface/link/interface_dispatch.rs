@@ -6,7 +6,7 @@ use route_rs_runtime::link::{
     primitive::{ClassifyLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
-use route_rs_runtime::unpack;
+use route_rs_runtime::unpack_link;
 
 /// InterfaceDispatch
 ///
@@ -54,8 +54,7 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
 
     fn build_link(self) -> Link<EthernetFrame> {
         let mut runnables = vec![];
-        unpack!(
-            let (runnables, [ce_0, ce_1, ce_2]) = ClassifyLink::new()
+        let classify_by_outbound = ClassifyLink::new()
             .ingressor(self.in_stream.unwrap())
             .classifier(ByOutboundInterface)
             .num_egressors(3)
@@ -66,28 +65,25 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, EthernetFrame> for Interface
                 Interface::Unmarked => None,
             }))
             .build_link();
-        );
+        unpack_link!(classify_by_outbound => runnables, [ce_0, ce_1, ce_2]);
 
-        unpack!(
-            let (_, [host_e]) = ProcessLink::new()
-                .ingressor(ce_0)
-                .processor(InterfaceAnnotationDecap::new())
-                .build_link();
-        );
+        let deannotate_host = ProcessLink::new()
+            .ingressor(ce_0)
+            .processor(InterfaceAnnotationDecap::new())
+            .build_link();
+        unpack_link!(deannotate_host => _, [host_e]);
 
-        unpack!(
-            let (_, [lan_e]) = ProcessLink::new()
-                .ingressor(ce_1)
-                .processor(InterfaceAnnotationDecap::new())
-                .build_link();
-        );
+        let deannotate_lan = ProcessLink::new()
+            .ingressor(ce_1)
+            .processor(InterfaceAnnotationDecap::new())
+            .build_link();
+        unpack_link!(deannotate_lan => _, [lan_e]);
 
-        unpack!(
-            let (_, [wan_e]) = ProcessLink::new()
-                .ingressor(ce_2)
-                .processor(InterfaceAnnotationDecap::new())
-                .build_link();
-        );
+        let deannotate_wan = ProcessLink::new()
+            .ingressor(ce_2)
+            .processor(InterfaceAnnotationDecap::new())
+            .build_link();
+        unpack_link!(deannotate_wan => _, [wan_e]);
 
         (runnables, vec![host_e, lan_e, wan_e])
     }

@@ -5,7 +5,7 @@ use route_rs_packets::EthernetFrame;
 use route_rs_runtime::link::primitive::{JoinLink, ProcessLink};
 use route_rs_runtime::link::ProcessLinkBuilder;
 use route_rs_runtime::link::{Link, LinkBuilder, PacketStream};
-use route_rs_runtime::unpack;
+use route_rs_runtime::unpack_link;
 
 /// RouterExhaust is a link that takes any number of input streams of
 /// InterfaceAnnotated<EthernetFrame>s, and splits them into 3 outbound raw
@@ -60,40 +60,35 @@ impl LinkBuilder<InterfaceAnnotated<EthernetFrame>, Vec<u8>> for RouterExhaust {
         let mut all_runnables = vec![];
 
         //---Join Inputs links---//
-        unpack!(
-            let (all_runnables, join_egressors) = JoinLink::new()
-                .ingressors(self.in_streams.unwrap())
-                .build_link();
-        );
+        let join_inputs = JoinLink::new()
+            .ingressors(self.in_streams.unwrap())
+            .build_link();
+        unpack_link!(join_inputs => all_runnables, join_egressors);
 
         //---Sort to Interface---//
-        unpack!(
-            let (all_runnables, [host_d, lan_d, wan_d]) = InterfaceDispatch::new()
-                .ingressors(join_egressors)
-                .build_link();
-        );
+        let sort_to_interface = InterfaceDispatch::new()
+            .ingressors(join_egressors)
+            .build_link();
+        unpack_link!(sort_to_interface => all_runnables, [host_d, lan_d, wan_d]);
 
         //---Create Raw streams---//
-        unpack!(
-            let (all_runnables, [host_egressor]) = ProcessLink::new()
-                .ingressor(host_d)
-                .processor(EthernetFrameToVec)
-                .build_link();
-        );
+        let host_to_bytes = ProcessLink::new()
+            .ingressor(host_d)
+            .processor(EthernetFrameToVec)
+            .build_link();
+        unpack_link!(host_to_bytes => all_runnables, [host_egressor]);
 
-        unpack!(
-            let (all_runnables, [lan_egressor]) = ProcessLink::new()
-                .ingressor(lan_d)
-                .processor(EthernetFrameToVec)
-                .build_link();
-        );
+        let lan_to_bytes = ProcessLink::new()
+            .ingressor(lan_d)
+            .processor(EthernetFrameToVec)
+            .build_link();
+        unpack_link!(lan_to_bytes => all_runnables, [lan_egressor]);
 
-        unpack!(
-            let (all_runnables, [wan_egressor]) = ProcessLink::new()
-                .ingressor(wan_d)
-                .processor(EthernetFrameToVec)
-                .build_link();
-        );
+        let wan_to_bytes = ProcessLink::new()
+            .ingressor(wan_d)
+            .processor(EthernetFrameToVec)
+            .build_link();
+        unpack_link!(wan_to_bytes => all_runnables, [wan_egressor]);
 
         (
             all_runnables,
