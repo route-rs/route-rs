@@ -15,9 +15,10 @@ allow = [
     "Unlicense",
 ]
 
-[[licenses.ignore]]
+[[licenses.clarify]]
 name = "crossbeam-channel"
-license_files = [
+expression = "BSD-2-Clause AND CC-BY-3.0 AND BSD-3-Clause AND MIT AND Apache-2.0"
+license-files = [
     # This is a concatenation of several different licenses for third party code included in
     # crossbeam-channel. Each of them is included in the list above.
    { path = "LICENSE-THIRD-PARTY", hash = 0xc6242648 }
