@@ -1,5 +1,7 @@
 use crate::interface::classifier::ByInboundInterface;
-use crate::interface::processor::{InterfaceAnnotationDecap, InterfaceAnnotationEncap};
+use crate::interface::processor::{
+    InterfaceAnnotationDecap, InterfaceAnnotationEncap, InterfaceAnnotationSetOutbound,
+};
 use crate::types::{Interface, InterfaceAnnotated};
 use cidr::Cidr;
 use cidr::Ipv4Cidr;
@@ -155,6 +157,13 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
             .build_link();
         unpack_link!(classify_by_dest_subnet_lan => all_runnables, [from_lan_to_host, from_lan_to_wan_annotated]);
 
+        // Tag the LAN to Host packets with to go out the Host
+        let lan_to_host_annotate = ProcessLink::new()
+            .ingressor(from_lan_to_host)
+            .processor(InterfaceAnnotationSetOutbound::new(Interface::Host))
+            .build_link();
+        unpack_link!(lan_to_host_annotate => all_runnables, [from_lan_to_host_annotated]);
+
         // Discard all packets from the WAN that aren't destined for my WAN IP. We only have one WAN
         // address, so anything else that comes from the WAN is an error by upstream. We don't care
         // about IPv4 broadcast packets because we aren't an IPv4 client in the WAN.
@@ -207,7 +216,7 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
         let final_join = JoinLink::new()
             .ingressors(vec![
                 from_host,
-                from_lan_to_host,
+                from_lan_to_host_annotated,
                 from_lan_to_wan_annotated,
                 from_nat_decap_annotated,
             ])
@@ -364,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn from_lan_to_me_isnt_dropped() {
+    fn from_lan_to_me_goes_to_host() {
         let mut from_lan_to_me_packet = Ipv4Packet::empty();
         from_lan_to_me_packet.set_dest_addr(MY_LAN_IP);
         let from_lan_to_me = InterfaceAnnotated {
@@ -381,10 +390,11 @@ mod tests {
         );
 
         assert_eq!(output_packets.len(), 1);
+        assert_eq!(output_packets[0].outbound_interface, Interface::Host);
     }
 
     #[test]
-    fn from_lan_to_bcast_isnt_dropped() {
+    fn from_lan_to_bcast_goes_to_host() {
         let mut from_lan_to_global_bcast_packet = Ipv4Packet::empty();
         from_lan_to_global_bcast_packet.set_dest_addr(Ipv4Addr::new(255, 255, 255, 255));
         let from_lan_to_global_bcast = InterfaceAnnotated {
@@ -409,6 +419,8 @@ mod tests {
         );
 
         assert_eq!(output_packets.len(), 2);
+        assert_eq!(output_packets[0].outbound_interface, Interface::Host);
+        assert_eq!(output_packets[1].outbound_interface, Interface::Host);
     }
 
     #[test]
