@@ -5,7 +5,7 @@ use route_rs_runtime::link::{
     primitive::{JoinLink, ProcessLink},
     Link, LinkBuilder, PacketStream, ProcessLinkBuilder,
 };
-use route_rs_runtime::unpack;
+use route_rs_runtime::unpack_link;
 
 /// InterfaceCollect: Link that our 3 input interfaces, Host, Lan and Wan, expected in that order.
 pub(crate) struct InterfaceCollect {
@@ -48,35 +48,32 @@ impl LinkBuilder<EthernetFrame, InterfaceAnnotated<EthernetFrame>> for Interface
     fn build_link(self) -> Link<InterfaceAnnotated<EthernetFrame>> {
         let mut streams = self.in_streams.unwrap();
 
-        unpack!(
-            let (_, [host]) = ProcessLink::new()
-                .processor(InterfaceAnnotationEncap::new(
-                    Interface::Host,
-                    Interface::Unmarked
-                ))
-                .ingressor(streams.remove(0))
-                .build_link();
-        );
+        let annotate_host = ProcessLink::new()
+            .processor(InterfaceAnnotationEncap::new(
+                Interface::Host,
+                Interface::Unmarked,
+            ))
+            .ingressor(streams.remove(0))
+            .build_link();
+        unpack_link!(annotate_host => _, [host]);
 
-        unpack!(
-            let (_, [lan]) = ProcessLink::new()
-                .processor(InterfaceAnnotationEncap::new(
-                    Interface::Lan,
-                    Interface::Unmarked
-                ))
-                .ingressor(streams.remove(1))
-                .build_link();
-        );
+        let annotate_lan = ProcessLink::new()
+            .processor(InterfaceAnnotationEncap::new(
+                Interface::Lan,
+                Interface::Unmarked,
+            ))
+            .ingressor(streams.remove(1))
+            .build_link();
+        unpack_link!(annotate_lan => _, [lan]);
 
-        unpack!(
-            let (_, [wan]) = ProcessLink::new()
-                .processor(InterfaceAnnotationEncap::new(
-                    Interface::Wan,
-                    Interface::Unmarked
-                ))
-                .ingressor(streams.remove(0))
-                .build_link();
-        );
+        let annotate_wan = ProcessLink::new()
+            .processor(InterfaceAnnotationEncap::new(
+                Interface::Wan,
+                Interface::Unmarked,
+            ))
+            .ingressor(streams.remove(0))
+            .build_link();
+        unpack_link!(annotate_wan => _, [wan]);
 
         // Join link has the only tokio runnables here, can just return it
         JoinLink::new()
