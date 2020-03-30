@@ -4,6 +4,9 @@ pub(crate) use self::annotation_decap::InterfaceAnnotationDecap;
 mod annotation_encap;
 pub(crate) use self::annotation_encap::InterfaceAnnotationEncap;
 
+mod annotation_set_inbound;
+pub(crate) use self::annotation_set_inbound::InterfaceAnnotationSetInbound;
+
 mod annotation_set_outbound;
 pub(crate) use self::annotation_set_outbound::InterfaceAnnotationSetOutbound;
 
