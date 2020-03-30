@@ -240,6 +240,30 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
             .build_link();
         unpack_link!(nat_decap_to_lan => all_runnables, [from_nat_decap_annotated]);
 
+        // However, if the traffic is actually for our LAN IP, we need to redirect it to the Host.
+        let classify_by_dest_subnet_nat = ClassifyLink::new()
+            .ingressor(from_nat_decap_annotated)
+            .classifier(ByDestSubnet::new(
+                maplit::hashmap! {
+                    Ipv4Cidr::new(self.lan_ip.unwrap(), 32).unwrap() => FromNatDestSubnet::MyLanIp,
+                },
+                FromNatDestSubnet::Other,
+            ))
+            .num_egressors(2)
+            .dispatcher(Box::new(|subnet| match subnet {
+                FromNatDestSubnet::MyLanIp => Some(0),
+                FromNatDestSubnet::Other => Some(1),
+            }))
+            .build_link();
+        unpack_link!(classify_by_dest_subnet_nat => all_runnables, [from_nat_to_host, from_nat_to_lan_annotated]);
+
+        // Tag the NAT to Host packets with to go out the Host
+        let nat_to_host_annotate = ProcessLink::new()
+            .ingressor(from_nat_to_host)
+            .processor(InterfaceAnnotationSetOutbound::new(Interface::Host))
+            .build_link();
+        unpack_link!(nat_to_host_annotate => all_runnables, [from_nat_to_host_annotated]);
+
         // Join everything so we have one outbound packet stream
         let final_join = JoinLink::new()
             .ingressors(vec![
@@ -247,7 +271,8 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
                 from_host_to_lan_annotated,
                 from_lan_to_host_annotated,
                 from_lan_to_wan_annotated,
-                from_nat_decap_annotated,
+                from_nat_to_lan_annotated,
+                from_nat_to_host_annotated,
             ])
             .build_link();
         unpack_link!(final_join => all_runnables, final_join_egressors);
@@ -274,6 +299,12 @@ enum FromLanDestSubnet {
 #[derive(Clone)]
 enum FromWanDestSubnet {
     MyWanIp,
+    Other,
+}
+
+#[derive(Clone)]
+enum FromNatDestSubnet {
+    MyLanIp,
     Other,
 }
 
@@ -388,6 +419,9 @@ mod tests {
             Interface::Lan
         );
     }
+
+    // TODO: Write test that NATed packets for the host are routed to Host
+    // Requires NAT sublink to be functional
 
     #[test]
     fn from_lan_to_lan_is_dropped() {
