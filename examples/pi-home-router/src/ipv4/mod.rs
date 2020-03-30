@@ -133,6 +133,34 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
             .build_link();
         unpack_link!(classify_by_inbound_interface => all_runnables, [from_host, from_lan, from_wan]);
 
+        // Packets from the Host either are bound for the LAN subnet (or LAN broadcast), else they
+        // go out to the WAN. Broadcast packets shouldn't be sent up to the WAN because it is a
+        // network boundary.
+        let classify_by_dest_subnet_host = ClassifyLink::new()
+            .ingressor(from_host)
+            .classifier(ByDestSubnet::new(
+                maplit::hashmap! {
+                    Ipv4Cidr::new(Ipv4Addr::new(255,255,255,255), 32).unwrap() => FromHostDestSubnet::Broadcast,
+                    self.lan_subnet.clone().unwrap() => FromHostDestSubnet::Lan,
+                },
+                FromHostDestSubnet::Other,
+            ))
+            .num_egressors(2)
+            .dispatcher(Box::new(|subnet| match subnet {
+                FromHostDestSubnet::Lan => Some(0),
+                FromHostDestSubnet::Broadcast => Some(0),
+                FromHostDestSubnet::Other => Some(1),
+            }))
+            .build_link();
+        unpack_link!(classify_by_dest_subnet_host => all_runnables, [from_host_to_lan, from_host_to_wan_annotated]);
+
+        // Tag the Host to LAN packets with to go out the LAN
+        let host_to_lan_annotate = ProcessLink::new()
+            .ingressor(from_host_to_lan)
+            .processor(InterfaceAnnotationSetOutbound::new(Interface::Lan))
+            .build_link();
+        unpack_link!(host_to_lan_annotate => all_runnables, [from_host_to_lan_annotated]);
+
         // Packets from the LAN are either bound for the Host (or LAN Broadcast), else they go out
         // to the WAN. If we receive packets bound for the LAN, we discard them because we don't
         // want to reflect traffic back into the LAN link.
@@ -215,7 +243,8 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
         // Join everything so we have one outbound packet stream
         let final_join = JoinLink::new()
             .ingressors(vec![
-                from_host,
+                from_host_to_wan_annotated,
+                from_host_to_lan_annotated,
                 from_lan_to_host_annotated,
                 from_lan_to_wan_annotated,
                 from_nat_decap_annotated,
@@ -225,6 +254,13 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
 
         (all_runnables, final_join_egressors)
     }
+}
+
+#[derive(Clone)]
+enum FromHostDestSubnet {
+    Lan,
+    Broadcast,
+    Other,
 }
 
 #[derive(Clone)]
@@ -250,6 +286,7 @@ mod tests {
     const MY_WAN_IP: Ipv4Addr = Ipv4Addr::new(192, 0, 2, 1);
     const OTHER_WAN_IP: Ipv4Addr = Ipv4Addr::new(192, 0, 2, 101);
     const MY_LAN_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 21, 67);
+    const OTHER_LAN_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 21, 111);
     // This is awkward because we can't call Cidr::new(...).unwrap() in a const expression
     const MY_LAN_SUBNET_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 21, 64);
     const MY_LAN_SUBNET_LEN: u8 = 26;
@@ -440,5 +477,75 @@ mod tests {
             Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap(),
         );
         assert_eq!(output_packets.len(), 1);
+    }
+
+    #[test]
+    fn from_host_to_wan_isnt_dropped() {
+        let mut from_host_to_wan_packet = Ipv4Packet::empty();
+        from_host_to_wan_packet.set_dest_addr(Ipv4Addr::new(192, 0, 2, 7));
+        let from_host_to_wan = InterfaceAnnotated {
+            packet: from_host_to_wan_packet,
+            inbound_interface: Interface::Host,
+            outbound_interface: Interface::Unmarked,
+        };
+
+        let output_packets = test_handleipv4_link(
+            vec![from_host_to_wan],
+            MY_WAN_IP,
+            MY_LAN_IP,
+            Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap(),
+        );
+        assert_eq!(output_packets.len(), 1);
+    }
+
+    #[test]
+    fn from_host_to_lan_goes_to_lan() {
+        let mut from_host_to_lan_packet = Ipv4Packet::empty();
+        from_host_to_lan_packet.set_dest_addr(OTHER_LAN_IP);
+        let from_host_to_lan = InterfaceAnnotated {
+            packet: from_host_to_lan_packet,
+            inbound_interface: Interface::Host,
+            outbound_interface: Interface::Unmarked,
+        };
+
+        let output_packets = test_handleipv4_link(
+            vec![from_host_to_lan],
+            MY_WAN_IP,
+            MY_LAN_IP,
+            Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap(),
+        );
+
+        assert_eq!(output_packets.len(), 1);
+        assert_eq!(output_packets[0].outbound_interface, Interface::Lan);
+    }
+
+    #[test]
+    fn from_host_to_bcast_goes_to_lan() {
+        let mut from_host_to_global_bcast_packet = Ipv4Packet::empty();
+        from_host_to_global_bcast_packet.set_dest_addr(Ipv4Addr::new(255, 255, 255, 255));
+        let from_host_to_global_bcast = InterfaceAnnotated {
+            packet: from_host_to_global_bcast_packet,
+            inbound_interface: Interface::Host,
+            outbound_interface: Interface::Unmarked,
+        };
+        let mut from_host_to_local_bcast_packet = Ipv4Packet::empty();
+        let lan_cidr: Ipv4Cidr = Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap();
+        from_host_to_local_bcast_packet.set_dest_addr(lan_cidr.last_address());
+        let from_host_to_local_bcast = InterfaceAnnotated {
+            packet: from_host_to_local_bcast_packet,
+            inbound_interface: Interface::Host,
+            outbound_interface: Interface::Unmarked,
+        };
+
+        let output_packets = test_handleipv4_link(
+            vec![from_host_to_global_bcast, from_host_to_local_bcast],
+            MY_WAN_IP,
+            MY_LAN_IP,
+            Cidr::new(MY_LAN_SUBNET_ADDR, MY_LAN_SUBNET_LEN).unwrap(),
+        );
+
+        assert_eq!(output_packets.len(), 2);
+        assert_eq!(output_packets[0].outbound_interface, Interface::Lan);
+        assert_eq!(output_packets[1].outbound_interface, Interface::Lan);
     }
 }
