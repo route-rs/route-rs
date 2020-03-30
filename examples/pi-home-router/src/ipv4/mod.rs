@@ -1,6 +1,7 @@
 use crate::interface::classifier::ByInboundInterface;
 use crate::interface::processor::{
-    InterfaceAnnotationDecap, InterfaceAnnotationEncap, InterfaceAnnotationSetOutbound,
+    InterfaceAnnotationDecap, InterfaceAnnotationEncap, InterfaceAnnotationSetInbound,
+    InterfaceAnnotationSetOutbound,
 };
 use crate::types::{Interface, InterfaceAnnotated};
 use cidr::Cidr;
@@ -14,6 +15,9 @@ use std::net::Ipv4Addr;
 
 mod classify_dest_subnet;
 use classify_dest_subnet::ByDestSubnet;
+
+mod classify_src_subnet;
+use classify_src_subnet::BySrcSubnet;
 
 pub(crate) struct HandleIpv4 {
     in_stream: Option<PacketStream<InterfaceAnnotated<Ipv4Packet>>>,
@@ -226,8 +230,7 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
         unpack_link!(nat_encap => all_runnables, [from_nat_encap]);
 
         // Since all NAT encapsulated traffic is from the LAN bound for the WAN, we can just
-        // regenerate the interface annotations here. Traffic from the Host is marked as LAN here,
-        // but that's not really inaccurate and we won't use this information later anyway.
+        // regenerate the interface annotations here.
         let nat_encap_to_wan = ProcessLink::new()
             .ingressor(from_nat_encap)
             .processor(InterfaceAnnotationEncap::new(
@@ -236,6 +239,30 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
             ))
             .build_link();
         unpack_link!(nat_encap_to_wan => all_runnables, [from_nat_encap_annotated]);
+
+        // However, if traffic actually came from our LAN IP, make sure we track it as from Host
+        let classify_by_src_subnet_nat = ClassifyLink::new()
+            .ingressor(from_nat_encap_annotated)
+            .classifier(BySrcSubnet::new(
+                maplit::hashmap! {
+                    Ipv4Cidr::new(self.lan_ip.unwrap(), 32).unwrap() => FromLanSrcSubnet::MyLanIp,
+                },
+                FromLanSrcSubnet::Other,
+            ))
+            .num_egressors(2)
+            .dispatcher(Box::new(|subnet| match subnet {
+                FromLanSrcSubnet::MyLanIp => Some(0),
+                FromLanSrcSubnet::Other => Some(1),
+            }))
+            .build_link();
+        unpack_link!(classify_by_src_subnet_nat => all_runnables, [from_host_through_nat, from_lan_through_nat_annotated]);
+
+        // Tag the NAT to Host packets with to go out the Host
+        let nat_from_host_annotate = ProcessLink::new()
+            .ingressor(from_host_through_nat)
+            .processor(InterfaceAnnotationSetInbound::new(Interface::Host))
+            .build_link();
+        unpack_link!(nat_from_host_annotate => all_runnables, [from_host_through_nat_annotated]);
 
         // Discard all packets from the WAN that aren't destined for my WAN IP. We only have one WAN
         // address, so anything else that comes from the WAN is an error by upstream. We don't care
@@ -313,7 +340,8 @@ impl LinkBuilder<InterfaceAnnotated<Ipv4Packet>, InterfaceAnnotated<Ipv4Packet>>
         let final_join = JoinLink::new()
             .ingressors(vec![
                 from_host_to_lan_annotated,
-                from_nat_encap_annotated,
+                from_host_through_nat_annotated,
+                from_lan_through_nat_annotated,
                 from_lan_to_host_annotated,
                 from_nat_to_lan_annotated,
                 from_nat_to_host_annotated,
@@ -337,6 +365,12 @@ enum FromLanDestSubnet {
     MyLanIp,
     Lan,
     Broadcast,
+    Other,
+}
+
+#[derive(Clone)]
+enum FromLanSrcSubnet {
+    MyLanIp,
     Other,
 }
 
