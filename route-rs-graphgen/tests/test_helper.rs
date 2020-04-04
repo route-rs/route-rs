@@ -8,10 +8,14 @@ pub enum GraphgenVersion {
 
 impl std::fmt::Display for GraphgenVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            GraphgenVersion::V1 => "v1",
-            GraphgenVersion::V2 => "v2",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                GraphgenVersion::V1 => "v1",
+                GraphgenVersion::V2 => "v2",
+            }
+        )
     }
 }
 

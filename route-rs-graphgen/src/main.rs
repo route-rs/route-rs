@@ -644,69 +644,70 @@ fn main() {
     let app = App::new("route-rs graphgen")
         .version("0.2.0")
         .about("Generates route-rs pipeline from a graph")
-        .subcommand(SubCommand::with_name("v1")
-            .about("Generate as Router struct")
-            .arg(
-                Arg::with_name("format")
-                    .short("f")
-                    .long("format")
-                    .value_name("FORMAT")
-                    .help("Specify input graph format")
-                    .takes_value(true)
-                    .possible_values(&["drawio"])
-                    .default_value("drawio"),
-            )
-            .arg(
-                Arg::with_name("graph")
-                    .short("g")
-                    .long("graph")
-                    .value_name("GRAPH_FILE")
-                    .takes_value(true)
-                    .required(true)
-                    .validator(|g| {
-                        if Path::new(&g).is_file() {
-                            Ok(())
-                        } else {
-                            Err(format!("Path {} is not a regular file", g))
-                        }
-                    }),
-            )
-            .arg(
-                Arg::with_name("output")
-                    .short("o")
-                    .long("output")
-                    .value_name("OUTPUT_FILE")
-                    .takes_value(true)
-                    .required(true)
-                    .validator(|g| {
-                        if Path::new(&g).parent().unwrap().is_dir() {
-                            Ok(())
-                        } else {
-                            Err(format!("Path {} is not a regular file", g))
-                        }
-                    }),
-            )
-            .arg(
-                Arg::with_name("rustfmt")
-                    .long("rustfmt")
-                    .help("Run rustfmt on output file"),
-            )
-            .arg(
-                Arg::with_name("local-modules")
-                    .short("m")
-                    .long("local-modules")
-                    .value_name("LOCAL_MODULES")
-                    .takes_value(true)
-                    .default_value("packets,processors"), // TODO: Validate that the modules exist in the target crate
-            )
-            .arg(
-                Arg::with_name("runtime-modules")
-                    .short("r")
-                    .long("runtime-modules")
-                    .value_name("RUNTIME_MODULES")
-                    .takes_value(true)
-                    .default_value(""), // TODO: Validate that the modules exist in our crate
-            )
+        .subcommand(
+            SubCommand::with_name("v1")
+                .about("Generate as Router struct")
+                .arg(
+                    Arg::with_name("format")
+                        .short("f")
+                        .long("format")
+                        .value_name("FORMAT")
+                        .help("Specify input graph format")
+                        .takes_value(true)
+                        .possible_values(&["drawio"])
+                        .default_value("drawio"),
+                )
+                .arg(
+                    Arg::with_name("graph")
+                        .short("g")
+                        .long("graph")
+                        .value_name("GRAPH_FILE")
+                        .takes_value(true)
+                        .required(true)
+                        .validator(|g| {
+                            if Path::new(&g).is_file() {
+                                Ok(())
+                            } else {
+                                Err(format!("Path {} is not a regular file", g))
+                            }
+                        }),
+                )
+                .arg(
+                    Arg::with_name("output")
+                        .short("o")
+                        .long("output")
+                        .value_name("OUTPUT_FILE")
+                        .takes_value(true)
+                        .required(true)
+                        .validator(|g| {
+                            if Path::new(&g).parent().unwrap().is_dir() {
+                                Ok(())
+                            } else {
+                                Err(format!("Path {} is not a regular file", g))
+                            }
+                        }),
+                )
+                .arg(
+                    Arg::with_name("rustfmt")
+                        .long("rustfmt")
+                        .help("Run rustfmt on output file"),
+                )
+                .arg(
+                    Arg::with_name("local-modules")
+                        .short("m")
+                        .long("local-modules")
+                        .value_name("LOCAL_MODULES")
+                        .takes_value(true)
+                        .default_value("packets,processors"), // TODO: Validate that the modules exist in the target crate
+                )
+                .arg(
+                    Arg::with_name("runtime-modules")
+                        .short("r")
+                        .long("runtime-modules")
+                        .value_name("RUNTIME_MODULES")
+                        .takes_value(true)
+                        .default_value(""), // TODO: Validate that the modules exist in our crate
+                ),
         )
         .subcommand(SubCommand::with_name("v2")
             .about("Generate as Links")
