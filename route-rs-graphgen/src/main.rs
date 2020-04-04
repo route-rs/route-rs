@@ -4,7 +4,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
 extern crate clap;
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg, ArgMatches, SubCommand};
 
 extern crate xml;
 use xml::reader::EventReader;
@@ -642,99 +642,114 @@ fn get_pathbuf_arg(arg_matches: &ArgMatches, name: &str) -> PathBuf {
 
 fn main() {
     let app = App::new("route-rs graphgen")
-        .version("0.1.0")
+        .version("0.2.0")
         .about("Generates route-rs pipeline from a graph")
-        .arg(
-            Arg::with_name("format")
-                .short("f")
-                .long("format")
-                .value_name("FORMAT")
-                .help("Specify input graph format")
-                .takes_value(true)
-                .possible_values(&["drawio"])
-                .default_value("drawio"),
+        .subcommand(SubCommand::with_name("v1")
+            .about("Generate as Router struct")
+            .arg(
+                Arg::with_name("format")
+                    .short("f")
+                    .long("format")
+                    .value_name("FORMAT")
+                    .help("Specify input graph format")
+                    .takes_value(true)
+                    .possible_values(&["drawio"])
+                    .default_value("drawio"),
+            )
+            .arg(
+                Arg::with_name("graph")
+                    .short("g")
+                    .long("graph")
+                    .value_name("GRAPH_FILE")
+                    .takes_value(true)
+                    .required(true)
+                    .validator(|g| {
+                        if Path::new(&g).is_file() {
+                            Ok(())
+                        } else {
+                            Err(format!("Path {} is not a regular file", g))
+                        }
+                    }),
+            )
+            .arg(
+                Arg::with_name("output")
+                    .short("o")
+                    .long("output")
+                    .value_name("OUTPUT_FILE")
+                    .takes_value(true)
+                    .required(true)
+                    .validator(|g| {
+                        if Path::new(&g).parent().unwrap().is_dir() {
+                            Ok(())
+                        } else {
+                            Err(format!("Path {} is not a regular file", g))
+                        }
+                    }),
+            )
+            .arg(
+                Arg::with_name("rustfmt")
+                    .long("rustfmt")
+                    .help("Run rustfmt on output file"),
+            )
+            .arg(
+                Arg::with_name("local-modules")
+                    .short("m")
+                    .long("local-modules")
+                    .value_name("LOCAL_MODULES")
+                    .takes_value(true)
+                    .default_value("packets,processors"), // TODO: Validate that the modules exist in the target crate
+            )
+            .arg(
+                Arg::with_name("runtime-modules")
+                    .short("r")
+                    .long("runtime-modules")
+                    .value_name("RUNTIME_MODULES")
+                    .takes_value(true)
+                    .default_value(""), // TODO: Validate that the modules exist in our crate
+            )
         )
-        .arg(
-            Arg::with_name("graph")
-                .short("g")
-                .long("graph")
-                .value_name("GRAPH_FILE")
-                .takes_value(true)
-                .required(true)
-                .validator(|g| {
-                    if Path::new(&g).is_file() {
-                        Ok(())
-                    } else {
-                        Err(format!("Path {} is not a regular file", g))
-                    }
-                }),
-        )
-        .arg(
-            Arg::with_name("output")
-                .short("o")
-                .long("output")
-                .value_name("OUTPUT_FILE")
-                .takes_value(true)
-                .required(true)
-                .validator(|g| {
-                    if Path::new(&g).parent().unwrap().is_dir() {
-                        Ok(())
-                    } else {
-                        Err(format!("Path {} is not a regular file", g))
-                    }
-                }),
-        )
-        .arg(
-            Arg::with_name("rustfmt")
-                .long("rustfmt")
-                .help("Run rustfmt on output file"),
-        )
-        .arg(
-            Arg::with_name("local-modules")
-                .short("m")
-                .long("local-modules")
-                .value_name("LOCAL_MODULES")
-                .takes_value(true)
-                .default_value("packets,processors"), // TODO: Validate that the modules exist in the target crate
-        )
-        .arg(
-            Arg::with_name("runtime-modules")
-                .short("r")
-                .long("runtime-modules")
-                .value_name("RUNTIME_MODULES")
-                .takes_value(true)
-                .default_value(""), // TODO: Validate that the modules exist in our crate
+        .subcommand(SubCommand::with_name("v2")
+            .about("Generate as Links")
         )
         .get_matches();
 
-    let graph_file_path = get_pathbuf_arg(&app, "graph");
-    let graph_file = File::open(&graph_file_path).unwrap();
-    let graph_xml = EventReader::new(BufReader::new(graph_file));
-    let graph = PipelineGraph::new(graph_xml);
+    match app.subcommand_name() {
+        Some("v1") => {
+            let sub_args = &app.subcommand_matches("v1").unwrap();
+            let graph_file_path = get_pathbuf_arg(&sub_args, "graph");
+            let graph_file = File::open(&graph_file_path).unwrap();
+            let graph_xml = EventReader::new(BufReader::new(graph_file));
+            let graph = PipelineGraph::new(graph_xml);
 
-    let local_modules: Vec<&str> = get_array_arg(&app, "local-modules");
-    let runtime_modules: Vec<&str> = get_array_arg(&app, "runtime-modules");
+            let local_modules: Vec<&str> = get_array_arg(&sub_args, "local-modules");
+            let runtime_modules: Vec<&str> = get_array_arg(&sub_args, "runtime-modules");
 
-    let ordered_nodes = graph.ordered_nodes();
-    let edges = graph.edges();
+            let ordered_nodes = graph.ordered_nodes();
+            let edges = graph.edges();
 
-    let output_file_path = get_pathbuf_arg(&app, "output");
-    let pipeline_source = generate_pipeline_source(
-        graph_file_path,
-        local_modules,
-        runtime_modules,
-        ordered_nodes,
-        edges,
-    );
-    let mut output_file = File::create(&output_file_path).unwrap();
-    output_file
-        .write_all(codegen::unmagic_newlines(pipeline_source).as_bytes())
-        .unwrap();
-    if app.is_present("rustfmt") {
-        let rustfmt = std::process::Command::new("rustfmt")
-            .args(&[output_file_path])
-            .args(&["--edition", "2018"])
-            .status();
-        assert!(rustfmt.unwrap().success())
+            let output_file_path = get_pathbuf_arg(&sub_args, "output");
+            let pipeline_source = generate_pipeline_source(
+                graph_file_path,
+                local_modules,
+                runtime_modules,
+                ordered_nodes,
+                edges,
+            );
+            let mut output_file = File::create(&output_file_path).unwrap();
+            output_file
+                .write_all(codegen::unmagic_newlines(pipeline_source).as_bytes())
+                .unwrap();
+            if app.is_present("rustfmt") {
+                let rustfmt = std::process::Command::new("rustfmt")
+                    .args(&[output_file_path])
+                    .args(&["--edition", "2018"])
+                    .status();
+                assert!(rustfmt.unwrap().success())
+            }
+        },
+        Some("v2") => {}
+        _ => panic!("mode v1 or v2 is required")
     }
+
+
 }
