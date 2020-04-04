@@ -10,6 +10,7 @@ extern crate xml;
 use xml::reader::EventReader;
 
 use crate::codegen::magic_newline_stmt;
+use crate::fs::{find_files_with_suffix, generate_files, GRAPH_SUFFIX};
 use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNodeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -17,6 +18,7 @@ use std::hash::Hash;
 use syn::export::ToTokens;
 
 mod codegen;
+mod fs;
 mod pipeline_graph;
 
 enum Link {
@@ -709,8 +711,24 @@ fn main() {
                         .default_value(""), // TODO: Validate that the modules exist in our crate
                 ),
         )
-        .subcommand(SubCommand::with_name("v2")
-            .about("Generate as Links")
+        .subcommand(
+            SubCommand::with_name("v2")
+                .about("Generate as Links")
+                .arg(
+                    Arg::with_name("src-dir")
+                        .short("s")
+                        .long("src-dir")
+                        .value_name("SRC_DIR")
+                        .takes_value(true)
+                        .default_value("."),
+                )
+                .arg(
+                    Arg::with_name("dst-dir")
+                        .short("d")
+                        .long("dst-dir")
+                        .value_name("DST_DIR")
+                        .takes_value(true),
+                ),
         )
         .get_matches();
 
@@ -747,10 +765,30 @@ fn main() {
                     .status();
                 assert!(rustfmt.unwrap().success())
             }
-        },
-        Some("v2") => {}
-        _ => panic!("mode v1 or v2 is required")
+        }
+        Some("v2") => {
+            let sub_args = &app.subcommand_matches("v2").unwrap();
+            let src_dir = get_pathbuf_arg(&sub_args, "src-dir");
+            assert!(src_dir.is_dir(), "Source location must be a directory");
+            let dst_dir = match &sub_args.value_of("dst-dir") {
+                None => src_dir.clone(),
+                Some(path_string) => Path::new(path_string).to_path_buf(),
+            };
+            assert!(dst_dir.is_dir(), "Destination location must be a directory");
+            println!("Source: {:?}", src_dir);
+            println!("Destination: {:?}", dst_dir);
+
+            let graphgen_sources: Vec<PathBuf> = find_files_with_suffix(&src_dir, GRAPH_SUFFIX)
+                .into_iter()
+                .map(|path| path.strip_prefix(&src_dir).unwrap().to_path_buf())
+                .collect();
+            println!("Found sources: {:?}", graphgen_sources);
+            let mapping = generate_files(&src_dir, &dst_dir, graphgen_sources);
+            println!("Generating links:");
+            for (src, dst) in mapping {
+                println!("  {} => {}", src.to_str().unwrap(), dst.to_str().unwrap());
+            }
+        }
+        _ => panic!("mode v1 or v2 is required"),
     }
-
-
 }
