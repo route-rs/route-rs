@@ -1,3 +1,5 @@
+use crate::test_helper::GraphgenVersion;
+
 #[allow(dead_code)]
 mod test_helper;
 
@@ -5,6 +7,7 @@ mod test_helper;
 #[ignore]
 fn trivial_identity() {
     let test_helper = test_helper::TestHelper::new(
+        GraphgenVersion::V1,
         "trivial-identity",
         vec![
             "--rustfmt",
@@ -22,7 +25,8 @@ fn trivial_identity() {
 #[test]
 #[ignore]
 fn dns_interceptor() {
-    let test_helper = test_helper::TestHelper::new("dns-interceptor", vec!["--rustfmt"]);
+    let test_helper =
+        test_helper::TestHelper::new(GraphgenVersion::V1, "dns-interceptor", vec!["--rustfmt"]);
 
     test_helper.run_graphgen();
     test_helper.run_diff();
