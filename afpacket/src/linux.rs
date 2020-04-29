@@ -5,13 +5,13 @@
 use libc;
 
 /// Indicates the frame has been truncated.
-pub(crate) const TP_STATUS_COPY: u32 = (1 << 1);
+pub(crate) const TP_STATUS_COPY: u32 = 1 << 1;
 /// Indicates there have been packet drops since last time.
-pub(crate) const TP_STATUS_LOSING: u32 = (1 << 2);
+pub(crate) const TP_STATUS_LOSING: u32 = 1 << 2;
 /// Use is determined by some weird kernel behaviour.
-pub(crate) const TP_STATUS_CSUMNOTREADY: u32 = (1 << 3);
+pub(crate) const TP_STATUS_CSUMNOTREADY: u32 = 1 << 3;
 /// Indicates that the transport header checksum has been validated by the kernel.
-pub(crate) const TP_STATUS_CSUM_VALID: u32 = (1 << 7);
+pub(crate) const TP_STATUS_CSUM_VALID: u32 = 1 << 7;
 
 pub(crate) const TP_STATUS_AVAILABLE: u32 = 0;
 pub(crate) const TP_STATUS_SEND_REQUEST: u32 = 1;
