@@ -1,6 +1,6 @@
 use crate::{EthernetFrame, MacAddr, ARP_ETHER_TYPE};
 use std::convert::{TryFrom, TryInto};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 
 pub enum ArpOp {
     Request = 1,
@@ -143,6 +143,25 @@ impl ArpFrame {
         self.frame
     }
 
+    /// Default-specific methods
+    pub fn sender_mac_addr(&self) -> Result<MacAddr, std::array::TryFromSliceError> {
+        self.bytes_func_to_mac(self.sender_hardware_addr())
+    }
+
+    pub fn sender_ipv4_addr(&self) -> Result<Ipv4Addr, std::array::TryFromSliceError> {
+        self.bytes_func_to_ipv4(self.sender_protocol_addr())
+    }
+
+    pub fn target_mac_addr(&self) -> Result<MacAddr, std::array::TryFromSliceError> {
+        self.bytes_func_to_mac(self.target_hardware_addr())
+    }
+
+    pub fn target_ipv4_addr(&self) -> Result<Ipv4Addr, std::array::TryFromSliceError> {
+        self.bytes_func_to_ipv4(self.target_protocol_addr())
+    }
+
+    /// Private Methods
+
     // Returns the bytes in the ethernet frame between start and end, exclusive
     fn arp_data(&self, start: usize, end: usize) -> &[u8] {
         let frame_offset_start = self.frame.payload_offset + start;
@@ -175,6 +194,7 @@ impl ArpFrame {
         let end = start + hlen;
         (start, end)
     }
+
     fn sender_protocol_addr_range(&self) -> (usize, usize) {
         let hlen = self.hardware_addr_len() as usize;
         let plen = self.protocol_addr_len() as usize;
@@ -183,6 +203,7 @@ impl ArpFrame {
         let end = start + plen;
         (start, end)
     }
+
     fn target_hardware_addr_range(&self) -> (usize, usize) {
         let hlen = self.hardware_addr_len() as usize;
         let plen = self.protocol_addr_len() as usize;
@@ -191,6 +212,7 @@ impl ArpFrame {
         let end = start + hlen;
         (start, end)
     }
+
     fn target_protocol_addr_range(&self) -> (usize, usize) {
         let hlen = self.hardware_addr_len() as usize;
         let plen = self.protocol_addr_len() as usize;
@@ -198,6 +220,22 @@ impl ArpFrame {
         let start = 8 + (2 * hlen) + plen;
         let end = start + plen;
         (start, end)
+    }
+
+    fn bytes_func_to_ipv4(&self, bytes: &[u8]) -> Result<Ipv4Addr, std::array::TryFromSliceError> {
+        let ipv4_bytes: [u8; 4] = bytes.try_into()?;
+        Ok(Ipv4Addr::from(ipv4_bytes))
+    }
+
+    fn bytes_func_to_mac(&self, bytes: &[u8]) -> Result<MacAddr, std::array::TryFromSliceError> {
+        let mac_bytes: [u8; 6] = bytes.try_into()?;
+        Ok(MacAddr::new(mac_bytes))
+    }
+}
+
+impl Default for ArpFrame {
+    fn default() -> Self {
+        ArpFrame::new(6, 4)
     }
 }
 
@@ -239,7 +277,7 @@ mod tests {
 
     #[test]
     fn generate_empty_arp_frame() {
-        let arp_frame = ArpFrame::new(6, 4);
+        let arp_frame = ArpFrame::default();
         assert_eq!(arp_frame.hardware_type(), 0);
         assert_eq!(arp_frame.protocol_type(), 0);
         assert_eq!(arp_frame.hardware_addr_len(), 6);
@@ -253,7 +291,7 @@ mod tests {
 
     #[test]
     fn chain_setters() {
-        let mut arp_frame = ArpFrame::new(6, 4);
+        let mut arp_frame = ArpFrame::default();
         arp_frame
             .set_hardware_type(1)
             .set_protocol_type(2)
