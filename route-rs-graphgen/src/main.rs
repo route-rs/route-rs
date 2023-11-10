@@ -10,15 +10,19 @@ extern crate xml;
 use xml::reader::EventReader;
 
 use crate::codegen::magic_newline_stmt;
-use crate::fs::{find_files_with_suffix, generate_files, GRAPH_SUFFIX};
+use crate::fs::{find_files_with_suffix, GRAPH_SUFFIX};
+use crate::generate::generate_files;
 use crate::pipeline_graph::{EdgeData, NodeData, NodeKind, PipelineGraph, XmlNodeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use syn::export::ToTokens;
 
+#[macro_use] mod ast;
 mod codegen;
 mod fs;
+mod generate;
+mod graph;
 mod pipeline_graph;
 
 enum Link {
@@ -784,9 +788,9 @@ fn main() {
                 .collect();
             println!("Found sources: {:?}", graphgen_sources);
             let mapping = generate_files(&src_dir, &dst_dir, graphgen_sources);
-            println!("Generating links:");
-            for (src, dst) in mapping {
-                println!("  {} => {}", src.to_str().unwrap(), dst.to_str().unwrap());
+
+            if mapping.iter().any({ |(_, result)| result.is_err() }) {
+                panic!("Errors in code generation");
             }
         }
         _ => panic!("mode v1 or v2 is required"),
