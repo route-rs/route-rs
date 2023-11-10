@@ -1,16 +1,35 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub enum GraphgenVersion {
+    V1,
+    V2,
+}
+
+impl std::fmt::Display for GraphgenVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                GraphgenVersion::V1 => "v1",
+                GraphgenVersion::V2 => "v2",
+            }
+        )
+    }
+}
+
 pub struct TestHelper {
     pub root: PathBuf,
     pub tmpdir: PathBuf,
     pub example_crate: String,
     pub test_name: String,
     pub extra_args: Vec<String>,
+    pub version: GraphgenVersion,
 }
 
 impl TestHelper {
-    pub fn new<S, T>(example_crate: S, extra_args: Vec<T>) -> Self
+    pub fn new<S, T>(version: GraphgenVersion, example_crate: S, extra_args: Vec<T>) -> Self
     where
         S: Into<String>,
         T: Into<String>,
@@ -34,6 +53,7 @@ impl TestHelper {
                 .into_iter()
                 .map(|s| s.into())
                 .collect::<Vec<String>>(),
+            version,
         }
         .initialize()
     }
@@ -84,6 +104,7 @@ impl TestHelper {
 
     pub fn run_graphgen(&self) {
         let graphgen_cmd = Command::new(self.graphgen_binary())
+            .args(&[self.version.to_string()])
             .args(&["--graph", self.graph_file().to_str().unwrap()])
             .args(&["--output", self.output_file().to_str().unwrap()])
             .args(&self.extra_args)
